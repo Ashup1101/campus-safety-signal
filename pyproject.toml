@@ -1,0 +1,42 @@
+[project]
+name = "campus-safety-signal"
+version = "0.1.0"
+description = "Location-aware campus safety signal for IU Bloomington"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = [
+    "mypy",
+    "pip-audit",
+    "pre-commit",
+    "pytest",
+    "ruff",
+]
+
+[build-system]
+requires = ["uv_build>=0.11.0,<0.12"]
+build-backend = "uv_build"
+
+[tool.uv.build-backend]
+module-name = "campus_safety"
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "B", "UP", "SIM", "S", "RUF"]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+strict = true
+files = ["src", "tests", "scripts"]
+mypy_path = "src:scripts"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["scripts"]
+addopts = "-ra --strict-markers"

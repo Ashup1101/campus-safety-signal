@@ -1,0 +1,42 @@
+# Markdown never enters git
+*.md
+*.MD
+
+# Local-only context, data, secrets
+.claude/
+.notes/
+data/
+.env
+.env.*
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+.coverage.*
+htmlcov/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# Models
+models/
+*.pt
+*.pth
+*.onnx
+*.safetensors
+*.gguf
+*.joblib
+*.pkl
+
+# OS / editors
+.DS_Store
+.vscode/
+.idea/
