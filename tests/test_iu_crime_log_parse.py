@@ -73,7 +73,7 @@ def test_identical_repeated_rows_merge_into_a_count() -> None:
 
 def test_repeated_offense_with_different_details_fails() -> None:
     rows = incident(disposition="OPEN CASE") + incident(disposition="SUSPECT ARRESTED")
-    with pytest.raises(ParseError, match="twice"):
+    with pytest.raises(ParseError, match="repeats"):
         parse_crime_log(page(section("Bloomington", rows)))
 
 

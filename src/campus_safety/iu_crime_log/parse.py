@@ -4,6 +4,9 @@ The page has one table per campus, under an h2 naming the campus and an h3 date 
 incident is four rows: Case Number/Date Reported, Date Time From/To, Location/Crime
 Description, Disposition. Any other shape raises ParseError, so a redesign fails loudly
 instead of quietly parsing to nothing.
+
+ParseError messages name row positions and field labels only, never cell contents: they reach
+logs, including public CI logs, and a cell can hold a sensitive offense.
 """
 
 import re
@@ -142,7 +145,7 @@ def parse_crime_log(html: str, campus: str = "Bloomington") -> CrimeLog:
         raise ParseError(f"{campus} table is truncated")
     window = _WINDOW.match(table.window)
     if window is None:
-        raise ParseError(f"{campus} date window {table.window!r} is not MM/DD/YYYY - MM/DD/YYYY")
+        raise ParseError(f"{campus} date window is not MM/DD/YYYY - MM/DD/YYYY")
     return CrimeLog(
         campus=campus,
         window_start=_parse_time(window[1], "%m/%d/%Y", "window start").date(),
@@ -161,8 +164,11 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
         group = rows[first : first + len(_LAYOUT)]
         for offset, (row, (left, right)) in enumerate(zip(group, _LAYOUT, strict=True)):
             if len(row) != 4 or row[0] != left or row[2] != right:
-                raise ParseError(f"table row {first + offset}: expected {left}/{right}, got {row}")
-        incident = _incident(group)
+                raise ParseError(
+                    f"table row {first + offset}: expected labels {left!r}/{right!r}"
+                    f" in a 4-cell row, got {len(row)} cells"
+                )
+        incident = _incident(group, first)
         key = (incident.case_number, incident.offense)
         seen = incidents.get(key)
         if seen is None:
@@ -172,23 +178,26 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
             total = seen.offense_count + incident.offense_count
             incidents[key] = replace(seen, offense_count=total)
         else:
-            raise ParseError(f"case {key[0]} lists {key[1]!r} twice with different details")
+            raise ParseError(
+                f"table row {first}: repeats an earlier Case Number + Crime Description"
+                " with different details"
+            )
     return tuple(incidents.values())
 
 
-def _incident(group: list[list[str]]) -> Incident:
+def _incident(group: list[list[str]], first: int) -> Incident:
     ids, times, place, outcome = group
     case_number, description = ids[1], place[3]
     if not case_number or not description:
-        raise ParseError(f"incident without a case number or offense: {group}")
+        raise ParseError(f"table row {first}: blank Case Number or Crime Description")
     offense, count = split_offense(description)
     return Incident(
         case_number=case_number,
         offense=offense,
         offense_count=count,
-        date_reported=_parse_time(ids[3], "%m/%d/%Y", f"case {case_number} date").date(),
-        occurred_from=_optional_time(times[1], f"case {case_number} from"),
-        occurred_to=_optional_time(times[3], f"case {case_number} to"),
+        date_reported=_parse_time(ids[3], "%m/%d/%Y", f"table row {first}: Date Reported").date(),
+        occurred_from=_optional_time(times[1], f"table row {first + 1}: Date Time From"),
+        occurred_to=_optional_time(times[3], f"table row {first + 1}: Date Time To"),
         location=place[1],
         disposition=outcome[1],
     )
@@ -202,4 +211,4 @@ def _parse_time(text: str, fmt: str, what: str) -> datetime:
     try:
         return datetime.strptime(text, fmt)
     except ValueError:
-        raise ParseError(f"{what} {text!r} does not match {fmt}") from None
+        raise ParseError(f"{what} does not match {fmt}") from None

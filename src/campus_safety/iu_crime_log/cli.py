@@ -17,6 +17,7 @@ from campus_safety.iu_crime_log import store
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 
+UNCLASSIFIED_FILE = Path("logs", "unclassified-offenses.txt")
 URL = (
     "https://protect.iu.edu/iu-police-department/campus-security-reports/crime-log/daily-logs.html"
 )
@@ -43,14 +44,14 @@ def run(data_dir: Path, min_interval: timedelta) -> int:
             snapshot=path.relative_to(data_dir).as_posix(),
             sha256=hashlib.sha256(page.body).hexdigest(),
         )
-    _report(crime_log)
+    _report(crime_log, data_dir / UNCLASSIFIED_FILE)
     log.info("run %d: %d new, %d changed", summary.run_id, summary.new, summary.changed)
     return 0
 
 
 def check() -> int:
     crime_log = _parse(fetch.polite_get(URL).body)
-    _report(crime_log)
+    _report(crime_log, None)
     if not crime_log.incidents:
         log.error("parsed zero incidents; the page layout may have changed")
         return 1
@@ -88,7 +89,8 @@ def _parse(body: bytes) -> CrimeLog:
     return parse_crime_log(body.decode("utf-8", errors="replace"))
 
 
-def _report(crime_log: CrimeLog) -> None:
+def _report(crime_log: CrimeLog, unclassified_file: Path | None) -> None:
+    """Log counts only. Offense labels can be sensitive, so they go to a local file, not the log."""
     incidents = crime_log.incidents
     log.info(
         "%s window %s to %s: %d incidents in %d cases",
@@ -98,9 +100,20 @@ def _report(crime_log: CrimeLog) -> None:
         len(incidents),
         len({incident.case_number for incident in incidents}),
     )
-    unclassified = sorted({i.offense for i in incidents if i.severity is Severity.UNCLASSIFIED})
-    if unclassified:
-        log.warning("unclassified offenses, add rules in classify.py: %s", "; ".join(unclassified))
+    unclassified = {i.offense for i in incidents if i.severity is Severity.UNCLASSIFIED}
+    if not unclassified:
+        return
+    if unclassified_file is None:
+        log.warning("%d unclassified offense labels; run locally to list them", len(unclassified))
+        return
+    unclassified_file.parent.mkdir(parents=True, exist_ok=True)
+    known = set(unclassified_file.read_text().splitlines()) if unclassified_file.exists() else set()
+    unclassified_file.write_text("".join(f"{label}\n" for label in sorted(known | unclassified)))
+    log.warning(
+        "%d unclassified offense labels; add rules in classify.py, see %s",
+        len(unclassified),
+        unclassified_file,
+    )
 
 
 def main(argv: Sequence[str] | None = None) -> int:
