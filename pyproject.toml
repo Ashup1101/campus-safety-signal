@@ -5,6 +5,9 @@ description = "Location-aware campus safety signal for IU Bloomington"
 requires-python = ">=3.12"
 dependencies = []
 
+[project.scripts]
+iu-crime-log = "campus_safety.iu_crime_log.cli:main"
+
 [dependency-groups]
 dev = [
     "mypy",
@@ -34,7 +37,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "S", "RUF"]
 [tool.mypy]
 strict = true
 files = ["src", "tests", "scripts"]
-mypy_path = "src:scripts"
+mypy_path = "src:scripts:tests"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

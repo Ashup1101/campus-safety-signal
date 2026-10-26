@@ -1,0 +1,27 @@
+name: crime-log-canary
+
+# Fetches the live IU crime log and parses it, storing and uploading nothing, so an HTML
+# change fails here instead of only in the local daily job's log.
+on:
+  schedule:
+    - cron: "17 15 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - src/campus_safety/fetch.py
+      - src/campus_safety/iu_crime_log/**
+      - .github/workflows/crime-log-canary.yml
+
+permissions:
+  contents: read
+
+jobs:
+  parse-live-page:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - run: uv run --locked --no-dev iu-crime-log check

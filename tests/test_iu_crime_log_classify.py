@@ -1,0 +1,184 @@
+import pytest
+
+from campus_safety.iu_crime_log.classify import (
+    LocationType,
+    Severity,
+    geocodable,
+    is_sensitive,
+    location_type,
+    severity,
+    split_offense,
+)
+
+# Every offense label in the live Bloomington log on 2026-10-26, suffixes stripped.
+LIVE_OFFENSES = [
+    "AGGRAVATED BATTERY",
+    "ALL OTHER CRIMINAL OFFENSES",
+    "ALL OTHER THEFT $750-$49,999",
+    "ALL OTHER THEFT LESS THAN $750",
+    "BATTERY AGAINST PUBLIC SAFETY OFFICIAL",
+    "BATTERY BY BODILY WASTE WITHOUT INJURY",
+    "BATTERY NO INJURY",
+    "BATTERY WITH MINOR INJURY",
+    "BATTERY WITH MODERATE INJURY",
+    "BURGLARY",
+    "CONFINEMENT",
+    "CONTRIBUTING TO THE DELINQUENCY OF A MINOR",
+    "COOKING FIRE",
+    "COUNTERFEITING",
+    "CRIMINAL MISCHIEF LOSS $750-$49,999",
+    "CRIMINAL MISCHIEF LOSS LESS THAN $750",
+    "CRIMINAL RECKLESSNESS",
+    "CRIMINAL STALKING",
+    "CRIMINAL TRESPASS",
+    "DEALING IN COCAINE OR NARCOTIC DRUG",
+    "DEALING MARIJUANA/HASHISH/SALVIA- MISDEMEANOR",
+    "DISORDERLY CONDUCT",
+    "DISTRIBUTION OF AN INTIMATE IMAGE",
+    "DOMESTIC BATTERY NO OR MINOR BODILY INJURY",
+    "DRIVING WHILE SUSPENDED RESULTING IN INJURY",
+    "DRIVING WHILE SUSPENDED- PRIOR SUSPENSION",
+    "FALSE GOVERNMENT ISSUED IDENTIFICATION",
+    "FALSE IDENTITY STATEMENT NO IDENTITY THEFT",
+    "FALSE REPORTING/FALSE INFORMING",
+    "FORGERY",
+    "FRAUD",
+    "FRAUD - CREDIT CARD",
+    "HARASSMENT",
+    "HAZING - CLERY",
+    "HAZING- SUBSTANTIAL RISK OF BODILY INJURY",
+    "IDENTITY DECEPTION",
+    "ILLEGAL CONSUMPTION/POSSESSION OF ALCOHOL BY MINOR",
+    "INTIMIDATION",
+    "INTIMIDATION - EXTORTION OR BLACKMAIL",
+    "LEAVING THE SCENE OF A AN INJURY CRASH",
+    "LEAVING THE SCENE OF A PROPERTY DAMAGE CRASH",
+    "OBSTRUCTION OF JUSTICE",
+    "ODOR OF MARIJUANA",
+    "OPERATING WHILE INTOXICATED",
+    "OPERATING WHILE INTOXICATED - .08",
+    "OPERATING WHILE INTOXICATED - .15",
+    "OPERATING WHILE INTOXICATED - ENDANGERMENT",
+    "OPERATING WHILE INTOXICATED WITH PRIOR CONVICTION",
+    "OPERATING WITHOUT EVER OBTAINING LICENSE",
+    "POSSESS COCAINE OR NARCOTIC DRUG",
+    "POSSESSION MARIJUANA/HASH OIL/HASHISH/SALVIA",
+    "POSSESSION OF A HYPODERMIC SYRINGE OR NEEDLE",
+    "POSSESSION OF A LEGEND DRUG OR PRECURSOR",
+    "POSSESSION OF METHAMPHETAMINE",
+    "POSSESSION OF PARAPHERNALIA",
+    "POSSESSION OF PARAPHERNALIA W/PRIOR CONVICTION",
+    "POSSESSION SCHEDULE I, II, III, IV, V",
+    "PROVIDING ALCOHOL TO A MINOR",
+    "PUBLIC INTOXICATION BY ALCOHOL",
+    "PUBLIC NUDITY",
+    "RAPE - INTERCOURSE",
+    "RAPE - SEXUAL ASSAULT WITH AN OBJECT",
+    "RECKLESS DRIVING",
+    "RESIDENTIAL ENTRY WITH NO FELONY THEFT INTENT",
+    "RESISTING LAW ENFORCEMENT",
+    "RIOTING",
+    "ROBBERY",
+    "SEXUAL ASSUALT KIT RECEIVED",
+    "SEXUAL BATTERY",
+    "SHOPLIFTING LESS THAN $750",
+    "STALKING - CLERY",
+    "STRANGULATION",
+    "THEFT FROM BUILDING $750-$49,999",
+    "THEFT FROM BUILDING LESS THAN $750",
+    "THEFT FROM COIN OPERATED MACHINE LESS THAN $750",
+    "THEFT FROM MOTOR VEHICLE $750-$49,999",
+    "THEFT FROM MOTOR VEHICLE LESS THAN $750",
+    "THEFT OF MV PARTS/ACCESSORIES $750-$49,999",
+    "THEFT OF MV PARTS/ACCESSORIES LESS THAN $750",
+    "UNLAWFUL ENTRY OF MOTOR VEHICLE",
+    "VEHICLE THEFT",
+]
+
+SENSITIVE = {
+    "CRIMINAL STALKING",
+    "DISTRIBUTION OF AN INTIMATE IMAGE",
+    "DOMESTIC BATTERY NO OR MINOR BODILY INJURY",
+    "PUBLIC NUDITY",
+    "RAPE - INTERCOURSE",
+    "RAPE - SEXUAL ASSAULT WITH AN OBJECT",
+    "SEXUAL ASSUALT KIT RECEIVED",
+    "SEXUAL BATTERY",
+    "STALKING - CLERY",
+    "STRANGULATION",
+}
+
+
+@pytest.mark.parametrize(
+    ("text", "expected"),
+    [
+        ("ALCOHOL BY MINOR X21", ("ALCOHOL BY MINOR", 21)),
+        ("STALKING - CLERY X3", ("STALKING - CLERY", 3)),
+        ("SCHEDULE I, II, III, IV, V", ("SCHEDULE I, II, III, IV, V", 1)),
+        ("TAXI", ("TAXI", 1)),
+    ],
+)
+def test_split_offense(text: str, expected: tuple[str, int]) -> None:
+    assert split_offense(text) == expected
+
+
+@pytest.mark.parametrize("offense", LIVE_OFFENSES)
+def test_every_live_offense_has_a_tier(offense: str) -> None:
+    assert severity(offense) is not Severity.UNCLASSIFIED
+
+
+@pytest.mark.parametrize(
+    ("offense", "tier"),
+    [
+        ("AGGRAVATED BATTERY", Severity.HIGH),
+        ("BATTERY WITH MODERATE INJURY", Severity.HIGH),
+        ("ROBBERY", Severity.HIGH),
+        ("CARRYING A HANDGUN WITHOUT A LICENSE", Severity.HIGH),
+        ("BATTERY WITH MINOR INJURY", Severity.MEDIUM),
+        ("VEHICLE THEFT", Severity.MEDIUM),
+        ("OPERATING WHILE INTOXICATED - .08", Severity.MEDIUM),
+        ("DEALING IN COCAINE OR NARCOTIC DRUG", Severity.MEDIUM),
+        ("DRIVING WHILE SUSPENDED RESULTING IN INJURY", Severity.MEDIUM),
+        ("FALSE IDENTITY STATEMENT NO IDENTITY THEFT", Severity.LOW),
+        ("PUBLIC INTOXICATION BY ALCOHOL", Severity.LOW),
+        ("POSSESS COCAINE OR NARCOTIC DRUG", Severity.LOW),
+        ("LEAVING THE SCENE OF A PROPERTY DAMAGE CRASH", Severity.LOW),
+        ("SOMETHING IU HAS NEVER LOGGED", Severity.UNCLASSIFIED),
+    ],
+)
+def test_severity_tiers(offense: str, tier: Severity) -> None:
+    assert severity(offense) is tier
+
+
+@pytest.mark.parametrize("offense", LIVE_OFFENSES)
+def test_sensitive_offenses(offense: str) -> None:
+    assert is_sensitive(offense) == (offense in SENSITIVE)
+
+
+@pytest.mark.parametrize(
+    ("location", "kind"),
+    [
+        ("TETER QUAD", LocationType.PLACE),
+        ("ATHLETIC/RED LOT", LocationType.PLACE),
+        ("13TH STREET PARKING LOT", LocationType.PLACE),
+        ("10TH & BYPASS MALL", LocationType.PLACE),
+        ("46 BYPASS/NORTH OF 17TH STREET", LocationType.STREET_SEGMENT),
+        ("3RD STREET/WEST OF EAGLESON", LocationType.STREET_SEGMENT),
+        ("EAGLESON AVE NORTH OF 10TH ST", LocationType.STREET_SEGMENT),
+        ("500 BLK E KIRKWOOD", LocationType.BLOCK),
+        ("114 S INDIANA AVE", LocationType.ADDRESS),
+        ("502 E. KIRKWOOD", LocationType.ADDRESS),
+        ("1200 SAMPLE ST", LocationType.ADDRESS),
+        ("ALL OTHER CAMPUS BUILDINGS - BLOOMINGTON", LocationType.CATCH_ALL),
+        ("ALL OTHER FRATERNITY/SORO", LocationType.CATCH_ALL),
+        ("", LocationType.UNKNOWN),
+    ],
+)
+def test_location_type(location: str, kind: LocationType) -> None:
+    assert location_type(location) is kind
+
+
+def test_catch_alls_are_not_geocodable() -> None:
+    assert not geocodable(LocationType.CATCH_ALL)
+    assert not geocodable(LocationType.UNKNOWN)
+    assert geocodable(LocationType.PLACE)
