@@ -34,7 +34,7 @@ select = ["E", "W", "F", "I", "B", "UP", "SIM", "S", "RUF"]
 [tool.mypy]
 strict = true
 files = ["src", "tests", "scripts"]
-mypy_path = "src:scripts"
+mypy_path = "src:scripts:tests"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
