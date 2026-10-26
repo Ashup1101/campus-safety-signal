@@ -19,6 +19,29 @@ def test_rejects_attribution(line: str) -> None:
     assert find_violations(f"feat: add scraper\n\n{line}\n")
 
 
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Co-authored-by: Ashleshupganlawar <68706281+Ashleshupganlawar@users.noreply.github.com>",
+        "Co-authored-by: Ashlesh <68706281+Ashup1101@users.noreply.github.com>",
+    ],
+)
+def test_accepts_owner_coauthor_from_squash_merge(line: str) -> None:
+    assert find_violations(f"test: cover checker (#1)\n\n{line}\n") == []
+
+
+@pytest.mark.parametrize(
+    "line",
+    [
+        "Co-authored-by: Claude <209825114+claude[bot]@users.noreply.github.com>",
+        "Co-authored-by: Other <12345+Ashup1101@users.noreply.github.com>",
+        "Co-authored-by: X <68706281+x@users.noreply.github.com> and noreply@anthropic.com",
+    ],
+)
+def test_rejects_coauthor_that_is_not_owner(line: str) -> None:
+    assert find_violations(f"feat: add scraper\n\n{line}\n")
+
+
 def test_accepts_plain_conventional_commit() -> None:
     assert find_violations("feat(ingest): add crime log scraper\n\nIdempotent upsert.\n") == []
 
