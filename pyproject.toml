@@ -3,18 +3,27 @@ name = "campus-safety-signal"
 version = "0.1.0"
 description = "Location-aware campus safety signal for IU Bloomington"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "boto3>=1.43.112",
+]
 
 [project.scripts]
 iu-crime-log = "campus_safety.iu_crime_log.cli:main"
 
 [dependency-groups]
 dev = [
+    { include-group = "transform" },
+    "moto[s3]>=5.2.4",
     "mypy",
     "pip-audit",
     "pre-commit",
     "pytest",
     "ruff",
+    "types-boto3[s3]>=1.43.112",
+]
+transform = [
+    "dbt-duckdb>=1.11.0",
+    "duckdb>=1.5.6",
 ]
 
 [build-system]
@@ -23,6 +32,12 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-name = "campus_safety"
+
+# Only resolve releases at least two weeks old, as with pinned GitHub Actions. Packages that
+# pip-audit flags are exempt so a security fix never waits out the cooldown.
+[tool.uv]
+exclude-newer = "14 days"
+exclude-newer-package = { certifi = "0 days", filelock = "0 days", virtualenv = "0 days" }
 
 [tool.ruff]
 line-length = 100
