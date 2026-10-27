@@ -67,6 +67,12 @@ def run_transform(work_dir: Path, cache_dir: Path) -> int:
                 )
             ),
         )
+    if summary.calibration_files or summary.calibration_errors:
+        log.info(
+            "calibration: %d files staged, %d unreadable",
+            summary.calibration_files,
+            summary.calibration_errors,
+        )
     if summary.unclassified:
         labels_file = work_dir.parent / "logs" / "unclassified-offenses.txt"
         record_unclassified(labels_file, summary.unclassified)
