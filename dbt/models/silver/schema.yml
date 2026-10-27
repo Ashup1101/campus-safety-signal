@@ -38,7 +38,7 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: [high, medium, low, unclassified]
+                values: [high, medium, low, service, unclassified]
       - name: count
         data_type: integer
       - name: date_reported

@@ -14,6 +14,7 @@ class Severity(StrEnum):
     HIGH = "high"  # violence, weapons, sexual violence
     MEDIUM = "medium"  # other offenses against people, property, impaired or reckless driving
     LOW = "low"  # alcohol, drugs, fraud, regulatory
+    SERVICE = "service"  # non-criminal calls in the legacy CAD logs: assists, notices, accidents
     UNCLASSIFIED = "unclassified"
 
 
@@ -43,23 +44,39 @@ _SEVERITY_RULES = tuple(
         (
             r"BATTERY|ASSAULT|STALK|INTIMIDATION|HARASS|THREAT|BURGLARY|RESIDENTIAL ENTRY|THEFT"
             r"|SHOPLIFT|MISCHIEF|VANDAL|UNLAWFUL ENTRY|TRESPASS|RECKLESS|HAZING|INTOXICATED"
-            r"|INJURY|DEALING|INTIMATE IMAGE|VOYEUR|INDECENT|EXPOSURE|CHILD|EXTORTION",
+            r"|INJURY|DEALING|INTIMATE IMAGE|VOYEUR|INDECENT|EXPOSURE|CHILD|EXTORTION"
+            # legacy (2011-2017) labels
+            r"|FORCIBLE ENTRY|LARCENY|POCKET-PICKING|CONVERSION|DAMAGED PROPERTY|FROM BUILDING"
+            r"|DATING VIOLENCE|DOMESTIC|UNDER THE INFLUENCE|PEEPING|\bSEX OFF|INVASION OF PRIVACY",
             Severity.MEDIUM,
         ),
         (
             r"ALCOHOL|INTOXICATION|LIQUOR|MARIJUANA|COCAINE|NARCOTIC|METHAMPHETAMINE|DRUG"
             r"|PARAPHERNALIA|SYRINGE|SCHEDULE|SUSPENDED|LICENSE|DISORDERLY|RESISTING|OBSTRUCTION"
-            r"|PROPERTY DAMAGE CRASH|\bFIRE\b|NUDITY|DELINQUENCY|ALL OTHER CRIMINAL OFFENSES",
+            r"|PROPERTY DAMAGE CRASH|\bFIRE\b|NUDITY|DELINQUENCY|ALL OTHER CRIMINAL OFFENSES"
+            # legacy (2011-2017) labels
+            r"|CONSUMPTION|POSSESSION|STOLEN PROPERTY|BRIBERY|IMPERSONAT|TOXIC VAPORS|PROSTITUTION"
+            r"|INDECENCY|SMOKING|SPEED CONTEST|STOP ARM|FINANCIAL RESPONSIBILITY|HIT & RUN"
+            r"|DISTURBANCE|NOISE|LOUD PARTY|ALL OTHER OFFENSES|^ALL OTHER-|TRAFFIC VIOLATOR",
             Severity.LOW,
+        ),
+        # Last, so "DUI // MEDICAL ASSIST" is a crime first and a service call never wins a tie.
+        (
+            r"(?i)ASSIST|WELFARE|LOST PROPERTY|SUSPICIOUS PERSON|WARRANT|SUMMONS|LEGAL NOTICE"
+            r"|COURT SERVICE|MISSING PERSON|SUICIDE|NON-CRIMINAL|ADMINISTRATIVE|INVESTIGATING"
+            r"|ACCIDENT|PROPERTY DAMAGE ONLY|VEHICLE STOP",
+            Severity.SERVICE,
         ),
     )
 )
 
 # Kept out of every alert path: sexual offenses, and domestic, dating, stalking, and child
-# cases, where even a time and place can identify the victim.
+# cases, where even a time and place can identify the victim; also suicide attempts and
+# missing persons (health and welfare, not public threats).
 _SENSITIVE = re.compile(
     r"RAPE|\bSEX|SODOMY|FONDLING|INCEST|VOYEUR|INTIMATE IMAGE|NUDITY|INDECENT|EXPOSURE"
     r"|STALK|DOMESTIC|\bDATING VIOLENCE|STRANGULATION|INVASION OF PRIVACY|PROTECTIVE ORDER|CHILD"
+    r"|PEEPING|PROSTITUTION|INDECEN|SUICIDE|MISSING PERSON"
 )
 
 _CATCH_ALL = re.compile(r"^ALL OTHER\b")
