@@ -112,7 +112,7 @@ def check_robots(url: str) -> None:
         raise RobotsDisallowedError(f"robots.txt disallows {url}")
 
 
-def polite_get(url: str) -> Page:
+def polite_get(url: str, max_bytes: int = MAX_BYTES) -> Page:
     check_robots(url)
-    status, body = _get(url, MAX_BYTES)
+    status, body = _get(url, max_bytes)
     return Page(url=url, body=body, fetched_at=datetime.now(UTC), status=status)

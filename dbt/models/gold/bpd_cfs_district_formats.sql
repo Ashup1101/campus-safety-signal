@@ -6,4 +6,4 @@ select
     count(distinct district) as districts
 from {{ ref('stg_bpd__latest_calls') }}
 group by 1
-order by rows desc
+order by rows desc, pattern

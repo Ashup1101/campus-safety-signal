@@ -7,14 +7,14 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-13T02:42:14.820564Z"
+exclude-newer = "2026-10-13T03:04:58.693777Z"
 exclude-newer-span = "P14D"
 
 [options.exclude-newer-package]
-certifi = { timestamp = "2026-10-27T02:42:14.82057Z", span = "PT0S" }
-filelock = { timestamp = "2026-10-27T02:42:14.820573Z", span = "PT0S" }
-pypdf = { timestamp = "2026-10-27T02:42:14.820574Z", span = "PT0S" }
-virtualenv = { timestamp = "2026-10-27T02:42:14.820574Z", span = "PT0S" }
+certifi = { timestamp = "2026-10-27T03:04:58.693784Z", span = "PT0S" }
+filelock = { timestamp = "2026-10-27T03:04:58.693788Z", span = "PT0S" }
+pypdf = { timestamp = "2026-10-27T03:04:58.693789Z", span = "PT0S" }
+virtualenv = { timestamp = "2026-10-27T03:04:58.693789Z", span = "PT0S" }
 
 [[package]]
 name = "agate"
@@ -209,11 +209,14 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "types-boto3", extra = ["s3"] },
+    { name = "types-xlrd" },
+    { name = "xlrd" },
 ]
 transform = [
     { name = "dbt-duckdb" },
     { name = "duckdb" },
     { name = "pypdf" },
+    { name = "xlrd" },
 ]
 
 [package.metadata]
@@ -231,11 +234,14 @@ dev = [
     { name = "pytest" },
     { name = "ruff" },
     { name = "types-boto3", extras = ["s3"], specifier = ">=1.43.112" },
+    { name = "types-xlrd", specifier = ">=2.0.0.20260518" },
+    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 transform = [
     { name = "dbt-duckdb", specifier = ">=1.11.0" },
     { name = "duckdb", specifier = ">=1.5.6" },
     { name = "pypdf", specifier = ">=6.20.1" },
+    { name = "xlrd", specifier = ">=2.0.2" },
 ]
 
 [[package]]
@@ -2295,6 +2301,15 @@ wheels = [
 ]
 
 [[package]]
+name = "types-xlrd"
+version = "2.0.0.20260518"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/2e/a8/2e0cff3a842f4f32dc5b1bec6e29fd13fc64124f7ea92368c2997e62738d/types_xlrd-2.0.0.20260518.tar.gz", hash = "sha256:238031699230d0bc3dbcf3b67fc440e6c3b56cccae82a512ad1b748e1a2eaf91", size = 14017, upload-time = "2026-05-18T06:04:27.086Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/61/f4/927ae5a8ba20f996ab26e83166207176ef19cf029d9a6b50150713725a42/types_xlrd-2.0.0.20260518-py3-none-any.whl", hash = "sha256:710c97c0a2dae288504a7c7037397b7a639563681b53890529c2342dd5194b42", size = 16891, upload-time = "2026-05-18T06:04:26.259Z" },
+]
+
+[[package]]
 name = "typing-extensions"
 version = "4.16.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2359,6 +2374,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/a4/34/4dd12fc8bb7d61c91467ec3efe415ffa7d5456f799954b40c5bbaeae470e/werkzeug-3.1.9.tar.gz", hash = "sha256:55ca7c70a75689be937aa27f8ff4b018f06ff4838fc73045560bf0f5a1291060", size = 940188, upload-time = "2026-09-27T18:33:41.637Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/a1/38/df03f564f43cec2684823f3cccae1a652ee7face1cbaa76fb223096e64d7/werkzeug-3.1.9-py3-none-any.whl", hash = "sha256:6392e50c78460ba618e5b21f08a71f59c99ce99cdc6cf6e3dd7e6ccca8754fab", size = 228700, upload-time = "2026-09-27T18:33:39.685Z" },
+]
+
+[[package]]
+name = "xlrd"
+version = "2.0.2"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/5a/377161c2d3538d1990d7af382c79f3b2372e880b65de21b01b1a2b78691e/xlrd-2.0.2.tar.gz", hash = "sha256:08b5e25de58f21ce71dc7db3b3b8106c1fa776f3024c54e45b45b374e89234c9", size = 100167, upload-time = "2025-06-14T08:46:39.039Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/1a/62/c8d562e7766786ba6587d09c5a8ba9f718ed3fa8af7f4553e8f91c36f302/xlrd-2.0.2-py2.py3-none-any.whl", hash = "sha256:ea762c3d29f4cca48d82df517b6d89fbce4db3107f9d78713e48cd321d5c9aa9", size = 96555, upload-time = "2025-06-14T08:46:37.766Z" },
 ]
 
 [[package]]

@@ -92,12 +92,11 @@ def test_transform_builds_calls_and_audit(portal: list[str], tmp_path: Path) -> 
     assert audit == (5, 4, 1, 1, 1, 1, 3, 2, 1, datetime(2026, 1, 3, 9, 0))
     assert gold(work, "SELECT day FROM gold.bpd_cfs_missing_days") == [(date(2026, 1, 2),)]
     assert gold(work, "SELECT * FROM gold.bpd_cfs_rows_per_year") == [(2026, 4)]
-    assert gold(work, "SELECT pattern, rows, districts FROM gold.bpd_cfs_district_formats") == [
-        ("AA999", 2, 1),
-        ("AA9", 2, 1),
-        ("<AAAA>", 1, 0),
-    ]
-    assert gold(work, "SELECT nature, rows FROM gold.bpd_cfs_nature_counts") == [
+    formats = (
+        "SELECT pattern, rows, districts FROM gold.bpd_cfs_district_formats ORDER BY 2 DESC, 1"
+    )
+    assert gold(work, formats) == [("AA9", 2, 1), ("AA999", 2, 1), ("<AAAA>", 1, 0)]
+    assert gold(work, "SELECT nature, rows FROM gold.bpd_cfs_nature_counts ORDER BY 2 DESC") == [
         ("TRAFFIC STOP", 3),
         ("ALARM", 2),
     ]
