@@ -37,6 +37,7 @@ class Page:
     url: str
     body: bytes
     fetched_at: datetime
+    status: int = 200
 
 
 def decode_body(raw: bytes, content_encoding: str, max_bytes: int = MAX_BYTES) -> bytes:
@@ -59,6 +60,10 @@ def decode_body(raw: bytes, content_encoding: str, max_bytes: int = MAX_BYTES) -
 
 
 def get(url: str, max_bytes: int = MAX_BYTES) -> bytes:
+    return _get(url, max_bytes)[1]
+
+
+def _get(url: str, max_bytes: int) -> tuple[int, bytes]:
     if urlsplit(url).scheme != "https":
         raise FetchError(f"refusing non-https URL {url!r}")
     # https is enforced above, so no file:// or other handlers are reachable.
@@ -70,13 +75,14 @@ def get(url: str, max_bytes: int = MAX_BYTES) -> bytes:
                 raise FetchError(f"{url} redirected off https to {response.geturl()}")
             raw = response.read(max_bytes + 1)
             encoding = response.headers.get("Content-Encoding", "")
+            status = response.status
     except urllib.error.HTTPError as e:
         raise HTTPStatusError(url, e.code) from e
     except (OSError, http.client.HTTPException) as e:
         raise FetchError(f"GET {url} failed: {e}") from e
     if len(raw) > max_bytes:
         raise FetchError(f"GET {url} body exceeds {max_bytes} bytes")
-    return decode_body(raw, encoding, max_bytes)
+    return status, decode_body(raw, encoding, max_bytes)
 
 
 def robots_allows(robots_txt: str, url: str) -> bool:
@@ -102,5 +108,5 @@ def check_robots(url: str) -> None:
 
 def polite_get(url: str) -> Page:
     check_robots(url)
-    body = get(url)
-    return Page(url=url, body=body, fetched_at=datetime.now(UTC))
+    status, body = _get(url, MAX_BYTES)
+    return Page(url=url, body=body, fetched_at=datetime.now(UTC), status=status)
