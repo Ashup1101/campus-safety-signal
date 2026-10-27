@@ -45,13 +45,10 @@ check: lint typecheck test audit infra-check
 transform:
 	LAKE_URI='$(LAKE_URI)' $(AWS_ENV) uv run lake transform
 
-# Additive copy of local-only state to BACKUP_DIR from .env; nothing in the backup is deleted.
-# Reads the one key instead of sourcing .env, so unquoted paths with spaces work.
+# Local-only notes (CLAUDE.md, .notes/) to s3://<bucket>/_private/notes/; S3 versioning keeps
+# every earlier copy. The lake itself is already versioned in S3.
 backup:
-	@dir="$$(sed -n 's/^BACKUP_DIR=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")"; \
-	case "$$dir" in "~"/*) dir="$$HOME/$${dir#\~/}" ;; esac; \
-	test -n "$$dir" || { echo "set BACKUP_DIR=/path/to/backup in .env" >&2; exit 1; }; \
-	mkdir -p "$$dir" && rsync -a data .notes "$$dir"/ && echo "copied data/ and .notes/ to $$dir"
+	LAKE_URI='$(LAKE_URI)' $(AWS_ENV) uv run lake backup-notes
 
 # Daily LaunchAgent for `iu-crime-log run` (macOS).
 schedule:
