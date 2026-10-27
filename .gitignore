@@ -27,7 +27,7 @@ htmlcov/
 .ipynb_checkpoints/
 
 # Models
-models/
+/models/
 *.pt
 *.pth
 *.onnx
@@ -47,3 +47,8 @@ infra/tfplan
 .DS_Store
 .vscode/
 .idea/
+
+# dbt artifacts (transform writes them under data/warehouse/, these catch manual runs)
+dbt/target/
+dbt/logs/
+dbt/dbt_packages/

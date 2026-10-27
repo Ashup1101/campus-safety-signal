@@ -1,8 +1,13 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply
+	infra-check infra-plan infra-apply transform
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
+
+# The lake: a file:// lake under data/ until .env sets LAKE_URI=s3://<bucket>/lake.
+LAKE_URI := $(or $(call env,LAKE_URI),file://$(CURDIR)/data/lake)
+AWS_ENV := $(if $(call env,AWS_PROFILE),AWS_PROFILE='$(call env,AWS_PROFILE)') \
+	$(if $(call env,AWS_REGION),AWS_REGION='$(call env,AWS_REGION)')
 
 # Pinned Terraform, checksum-verified, kept under .tools/ (gitignored); same binary as CI.
 TF_VERSION := 1.16.5
@@ -35,6 +40,10 @@ audit:
 		| uv run pip-audit --require-hashes --disable-pip -r /dev/stdin
 
 check: lint typecheck test audit infra-check
+
+# Replay all of bronze into silver: parse, dbt build (tests + contract), publish.
+transform:
+	LAKE_URI='$(LAKE_URI)' $(AWS_ENV) uv run lake transform
 
 # Additive copy of local-only state to BACKUP_DIR from .env; nothing in the backup is deleted.
 # Reads the one key instead of sourcing .env, so unquoted paths with spaces work.

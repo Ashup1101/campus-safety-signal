@@ -33,6 +33,7 @@ class ParseError(ValueError):
 class Incident:
     case_number: str
     offense: str  # count suffix stripped, so "X2" -> "X3" updates a row instead of adding one
+    offense_raw: str  # cleaned page text, suffix included
     offense_count: int
     date_reported: date
     occurred_from: datetime | None  # local time; may be months before date_reported
@@ -194,6 +195,7 @@ def _incident(group: list[list[str]], first: int) -> Incident:
     return Incident(
         case_number=case_number,
         offense=offense,
+        offense_raw=description,
         offense_count=count,
         date_reported=_parse_time(ids[3], "%m/%d/%Y", f"table row {first}: Date Reported").date(),
         occurred_from=_optional_time(times[1], f"table row {first + 1}: Date Time From"),
