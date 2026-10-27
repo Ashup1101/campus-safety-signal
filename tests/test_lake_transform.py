@@ -1,13 +1,14 @@
 """End to end: synthetic bronze snapshots -> silver observations -> dbt -> published silver."""
 
 from collections.abc import Iterator
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
 
 import boto3
 import duckdb
 import pytest
 from crime_log_html import incident, page, section
+from legacy_pdf import REPORT, make_pdf
 from moto import mock_aws
 
 from campus_safety.lake import bronze
@@ -158,7 +159,7 @@ def test_transform_is_repeatable(tmp_path: Path) -> None:
 
 
 def test_transform_needs_bronze(tmp_path: Path) -> None:
-    with pytest.raises(TransformError, match="no bronze"):
+    with pytest.raises(TransformError, match="no crime log snapshots"):
         transform(FileLake(tmp_path / "lake"), tmp_path / "work")
 
 
@@ -179,3 +180,44 @@ def test_transform_against_s3(s3: S3Lake, tmp_path: Path) -> None:
     assert (summary.incidents, summary.history_rows) == (4, 6)
     assert "silver/incidents.parquet" in s3.keys("silver/")
     assert (tmp_path / "cache" / "bronze" / "iu_crime_log").is_dir()
+
+
+def test_archive_backfill_merges_with_live_capture(tmp_path: Path) -> None:
+    lake = FileLake(tmp_path / "lake")
+    live = bloomington(incident(case="900001", disposition="SUSPECT ARRESTED"))
+    archived = bloomington(incident(case="900001"))
+    snapshot(lake, 0, live)
+    for run_id, body, ext, captured in (
+        ("wb-1", archived.encode(), "html", datetime(2025, 3, 1, tzinfo=UTC)),
+        ("wb-2", make_pdf(REPORT), "pdf", datetime(2017, 1, 5, tzinfo=UTC)),
+        ("wb-3", b"<!DOCTYPE html>archive error", "pdf", datetime(2017, 1, 6, tzinfo=UTC)),
+    ):
+        bronze.write(
+            lake,
+            source="iu_crime_log_wayback",
+            body=body,
+            url=f"https://web.archive.org/web/{run_id}",
+            fetched_at=DAY_1,
+            http_status=200,
+            run_id=run_id,
+            ext=ext,
+            captured_at=captured,
+        )
+    summary = transform(lake, tmp_path / "work")
+    assert (summary.snapshots, summary.parse_errors, summary.incidents) == (4, 1, 3)
+
+    silver = tmp_path / "lake" / "silver"
+    history = rows(
+        silver / "iu_crime_log_incident_history.parquet",
+        "SELECT dataset, disposition, observed_at::date FROM $t"
+        " WHERE case_number = '900001' ORDER BY observed_at",
+    )
+    assert history == [
+        ("iu_crime_log_wayback", "OPEN CASE", date(2025, 3, 1)),
+        ("iu_crime_log", "SUSPECT ARRESTED", DAY_1.date()),
+    ]
+    sources = rows(
+        silver / "incident_sources.parquet",
+        "SELECT dataset, count(*) FROM $t GROUP BY 1 ORDER BY 1",
+    )
+    assert sources == [("iu_crime_log", 1), ("iu_crime_log_wayback", 3)]

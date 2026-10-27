@@ -160,7 +160,7 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
         return ()
     if not rows or len(rows) % len(_LAYOUT):
         raise ParseError(f"{len(rows)} table rows do not split into 4-row incidents")
-    incidents: dict[tuple[str, str], Incident] = {}
+    found: list[tuple[str, Incident]] = []
     for first in range(0, len(rows), len(_LAYOUT)):
         group = rows[first : first + len(_LAYOUT)]
         for offset, (row, (left, right)) in enumerate(zip(group, _LAYOUT, strict=True)):
@@ -169,7 +169,15 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
                     f"table row {first + offset}: expected labels {left!r}/{right!r}"
                     f" in a 4-cell row, got {len(row)} cells"
                 )
-        incident = _incident(group, first)
+        found.append((f"table row {first}", _incident(group, first)))
+    return merge_repeats(found)
+
+
+def merge_repeats(found: list[tuple[str, Incident]]) -> tuple[Incident, ...]:
+    """Key incidents by case number + offense. Identical repeats add to the count; a repeat
+    with different details raises, naming only its position."""
+    incidents: dict[tuple[str, str], Incident] = {}
+    for position, incident in found:
         key = (incident.case_number, incident.offense)
         seen = incidents.get(key)
         if seen is None:
@@ -180,8 +188,7 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
             incidents[key] = replace(seen, offense_count=total)
         else:
             raise ParseError(
-                f"table row {first}: repeats an earlier Case Number + Crime Description"
-                " with different details"
+                f"{position}: repeats an earlier case number + offense with different details"
             )
     return tuple(incidents.values())
 

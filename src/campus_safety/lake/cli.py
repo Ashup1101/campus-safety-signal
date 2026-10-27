@@ -18,6 +18,7 @@ log = logging.getLogger("lake")
 
 def run_transform(work_dir: Path, cache_dir: Path) -> int:
     # Imported here: duckdb and dbt live in the transform group, not in the ingest install.
+    from campus_safety.iu_crime_log.classify import record_unclassified
     from campus_safety.lake.transform import TransformError, transform
 
     lake = open_lake(os.environ.get("LAKE_URI"), cache_dir)
@@ -34,6 +35,12 @@ def run_transform(work_dir: Path, cache_dir: Path) -> int:
         summary.cases,
         summary.history_rows,
     )
+    if summary.unclassified:
+        labels_file = work_dir.parent / "logs" / "unclassified-offenses.txt"
+        record_unclassified(labels_file, summary.unclassified)
+        log.warning(
+            "%d unclassified offense labels, see %s", len(summary.unclassified), labels_file
+        )
     return 0
 
 
