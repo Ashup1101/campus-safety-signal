@@ -30,6 +30,11 @@ def main(argv: Sequence[str] | None = None) -> int:
         "--doe-years", type=years, default=years("2014-2025"), help="survey years, e.g. 2014-2025"
     )
     pull.add_argument(
+        "--sources",
+        default="doe,bps",
+        help="comma-separated: doe (Clery data files), bps (meeting packets); default both",
+    )
+    pull.add_argument(
         "--bps-years",
         type=years,
         default=years(f"2021-{this_year}"),
@@ -40,11 +45,23 @@ def main(argv: Sequence[str] | None = None) -> int:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         lake = open_lake(os.environ.get("LAKE_URI"))
-        run_id = bronze.new_run_id()
-        zips = doe.pull(lake, run_id, args.doe_years)
-        packets = bps.pull(lake, run_id, args.bps_years)
-    except (fetch.FetchError, LakeConfigError, ClientError, BotoCoreError, ValueError) as e:
+    except LakeConfigError as e:
         log.error("%s", e)
         return 1
-    log.info("stored %d Clery data files and %d new meeting packets", zips, packets)
-    return 0
+    run_id = bronze.new_run_id()
+    pulls = {
+        "doe": lambda: doe.pull(lake, run_id, args.doe_years),
+        "bps": lambda: bps.pull(lake, run_id, args.bps_years),
+    }
+    names = args.sources.split(",")
+    if unknown := sorted(set(names) - pulls.keys()):
+        parser.error(f"unknown sources: {', '.join(unknown)}")
+    failed = 0
+    # Each source runs on its own: a site that bans us (robots.txt) must not stop the others.
+    for name in names:
+        try:
+            log.info("%s: stored %d files", name, pulls[name]())
+        except (fetch.FetchError, ClientError, BotoCoreError, ValueError) as e:
+            log.error("%s: %s", name, e)
+            failed += 1
+    return 1 if failed else 0
