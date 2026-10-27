@@ -11,7 +11,7 @@ from legacy_pdf import make_pdf
 
 from campus_safety import fetch
 from campus_safety.bpd_cfs import pull as bpd_pull
-from campus_safety.calibration import bps, doe
+from campus_safety.calibration import bps, cli, doe
 from campus_safety.calibration.cli import years
 from campus_safety.lake import bronze
 from campus_safety.lake.storage import FileLake
@@ -175,3 +175,25 @@ def test_doe_pull_stores_listed_survey_zips(
     (stored,) = bronze.manifests(lake, doe.SOURCE)
     assert stored.url == doe.file_url("Crime2024EXCEL.zip")
     assert stored.run_id == "cal-2024"
+
+
+def test_a_banned_source_does_not_stop_the_others(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    def banned(*args: object, **kwargs: object) -> int:
+        raise fetch.RobotsDisallowedError("https://ope.example.gov/robots.txt returned HTTP 403")
+
+    ran: list[str] = []
+
+    def packets(*args: object, **kwargs: object) -> int:
+        ran.append("bps")
+        return 3
+
+    monkeypatch.setattr(doe, "pull", banned)
+    monkeypatch.setattr(bps, "pull", packets)
+    monkeypatch.setenv("LAKE_URI", (tmp_path / "lake").as_uri())
+    assert cli.main(["pull"]) == 1
+    assert ran == ["bps"]
+    assert "doe: https://ope.example.gov/robots.txt returned HTTP 403" in caplog.text
+    with pytest.raises(SystemExit):
+        cli.main(["pull", "--sources", "doe,nope"])
