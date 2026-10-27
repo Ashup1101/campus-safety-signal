@@ -9,7 +9,7 @@ from urllib.parse import urlsplit
 
 from botocore.exceptions import BotoCoreError, ClientError
 
-from campus_safety.lake.storage import LakeConfigError, S3Lake, open_lake
+from campus_safety.lake.storage import LakeConfigError, ObjectExistsError, S3Lake, open_lake
 
 NOTES = (Path("CLAUDE.md"), Path(".notes"))
 
@@ -74,6 +74,25 @@ def print_coverage(work_dir: Path) -> int:
     return 0
 
 
+def copy_bronze(source_uri: str) -> int:
+    """Copy every bronze object from another lake (e.g. the local file:// one) into LAKE_URI.
+
+    Keys and bytes are unchanged, so manifests keep their original fetch and capture times;
+    writes are create-only, so re-running copies only what is missing.
+    """
+    source = open_lake(source_uri)
+    target = open_lake(os.environ.get("LAKE_URI"))
+    copied = present = 0
+    for key in source.keys("bronze/"):
+        try:
+            target.create(key, source.get(key))
+            copied += 1
+        except ObjectExistsError:
+            present += 1
+    log.info("copied %d bronze objects to %s, %d already there", copied, target.uri, present)
+    return 0
+
+
 def backup_notes(paths: Sequence[Path]) -> int:
     """Copy the local-only notes to s3://<lake bucket>/_private/notes/; versioning keeps history."""
     parts = urlsplit(os.environ.get("LAKE_URI", ""))
@@ -99,6 +118,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("transform", help="parse all bronze, dbt build, publish silver")
     commands.add_parser("coverage", help="print covered date ranges and gaps (last transform)")
+    copy_parser = commands.add_parser("copy-bronze", help="copy bronze from another lake URI")
+    copy_parser.add_argument("source_uri", help="e.g. file:///abs/path/data/lake")
     commands.add_parser("backup-notes", help="copy CLAUDE.md and .notes/ to the lake bucket")
     args = parser.parse_args(argv)
 
@@ -108,6 +129,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return backup_notes(NOTES)
         if args.command == "coverage":
             return print_coverage(args.work_dir)
+        if args.command == "copy-bronze":
+            return copy_bronze(args.source_uri)
         return run_transform(args.work_dir, args.cache_dir)
     except (LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)

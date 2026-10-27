@@ -1,10 +1,13 @@
+from datetime import UTC, datetime
 from pathlib import Path
 
 import boto3
 import pytest
 from moto import mock_aws
 
+from campus_safety.lake import bronze
 from campus_safety.lake.cli import main
+from campus_safety.lake.storage import FileLake, S3Lake
 
 
 def test_backup_notes_copies_claude_md_and_notes(
@@ -35,3 +38,31 @@ def test_backup_notes_copies_claude_md_and_notes(
 def test_backup_notes_needs_an_s3_lake(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     monkeypatch.setenv("LAKE_URI", (tmp_path / "lake").as_uri())
     assert main(["backup-notes"]) == 1
+
+
+def test_copy_bronze_from_file_lake_to_s3(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    for name in ("AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN"):
+        monkeypatch.setenv(name, "testing")
+    monkeypatch.setenv("AWS_DEFAULT_REGION", "us-east-1")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    local = FileLake(tmp_path / "lake")
+    local.put("silver/skip.parquet", b"derived, not copied")
+    written = bronze.write(
+        local,
+        source="iu_crime_log_wayback",
+        body=b"<html>archived</html>",
+        url="https://web.archive.org/web/1id_/x",
+        fetched_at=datetime(2026, 10, 26, tzinfo=UTC),
+        http_status=200,
+        run_id="wb-1",
+        ext="html",
+        captured_at=datetime(2025, 1, 1, tzinfo=UTC),
+    )
+    monkeypatch.setenv("LAKE_URI", "s3://lake-test/lake")
+    with mock_aws():
+        boto3.client("s3", region_name="us-east-1").create_bucket(Bucket="lake-test")
+        assert main(["copy-bronze", local.uri]) == 0
+        assert main(["copy-bronze", local.uri]) == 0
+        s3 = S3Lake("lake-test", "lake")
+        assert s3.keys("") == local.keys("bronze/")
+        assert bronze.manifests(s3, "iu_crime_log_wayback") == [written]
