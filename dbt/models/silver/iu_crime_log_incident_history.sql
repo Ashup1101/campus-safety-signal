@@ -11,15 +11,16 @@ with compared as (
         lag(location) over w as prev_location,
         lag(disposition) over w as prev_disposition
     from {{ ref('stg_iu_crime_log__observations') }}
-    window w as (partition by case_number, offense order by ingested_at, run_id)
+    window w as (partition by case_number, offense order by observed_at, run_id)
 )
 
 select
     case_number,
     offense,
+    dataset,
     source_ref,
     run_id,
-    ingested_at as observed_at,
+    observed_at,
     offense_count,
     date_reported,
     occurred_from,

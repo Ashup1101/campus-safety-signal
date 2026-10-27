@@ -13,9 +13,11 @@ from campus_safety.lake.bronze import Manifest
 SOURCE = "iu_crime_log"
 
 OBSERVATIONS = (
+    ("dataset", "VARCHAR"),  # bronze source: iu_crime_log, iu_crime_log_wayback
     ("source_ref", "VARCHAR"),  # bronze key of the snapshot
     ("run_id", "VARCHAR"),
-    ("ingested_at", "TIMESTAMP"),  # UTC fetch time of the snapshot
+    ("ingested_at", "TIMESTAMP"),  # UTC, when we fetched it
+    ("observed_at", "TIMESTAMP"),  # UTC, when the page showed this (archive capture or fetch)
     ("campus", "VARCHAR"),
     ("case_number", "VARCHAR"),
     ("offense", "VARCHAR"),
@@ -33,9 +35,11 @@ OBSERVATIONS = (
 )
 
 RUNS = (
+    ("dataset", "VARCHAR"),
     ("source_ref", "VARCHAR"),
     ("run_id", "VARCHAR"),
     ("ingested_at", "TIMESTAMP"),
+    ("observed_at", "TIMESTAMP"),
     ("sha256", "VARCHAR"),
     ("http_status", "INTEGER"),
     ("parse_error", "VARCHAR"),  # null when the page parsed; redacted ParseError text otherwise
@@ -53,9 +57,11 @@ def _utc(at: datetime) -> datetime:
 def observation_rows(log: CrimeLog, manifest: Manifest) -> list[tuple[object, ...]]:
     return [
         (
+            manifest.source,
             manifest.key,
             manifest.run_id,
             _utc(manifest.fetched_at),
+            _utc(manifest.observed_at),
             log.campus,
             incident.case_number,
             incident.offense,
@@ -77,9 +83,11 @@ def observation_rows(log: CrimeLog, manifest: Manifest) -> list[tuple[object, ..
 
 def run_row(manifest: Manifest, log: CrimeLog | None, error: str | None) -> tuple[object, ...]:
     return (
+        manifest.source,
         manifest.key,
         manifest.run_id,
         _utc(manifest.fetched_at),
+        _utc(manifest.observed_at),
         manifest.sha256,
         manifest.http_status,
         error,

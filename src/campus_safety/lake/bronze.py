@@ -34,15 +34,32 @@ class Manifest:
     sha256: str  # of the uncompressed body
     http_status: int
     run_id: str
+    captured_at: datetime | None = None  # archive sources: when the archive saw the page
+
+    @property
+    def observed_at(self) -> datetime:
+        """When the content was live: the archive capture time, else our fetch time."""
+        return self.captured_at or self.fetched_at
 
     def to_json(self) -> bytes:
-        fields = {**asdict(self), "fetched_at": self.fetched_at.isoformat()}
+        fields = {
+            **asdict(self),
+            "fetched_at": self.fetched_at.isoformat(),
+            "captured_at": self.captured_at.isoformat() if self.captured_at else None,
+        }
         return json.dumps(fields, indent=2, sort_keys=True).encode()
 
     @classmethod
     def from_json(cls, data: bytes) -> "Manifest":
         fields = json.loads(data)
-        return cls(**{**fields, "fetched_at": datetime.fromisoformat(fields["fetched_at"])})
+        captured = fields.get("captured_at")
+        return cls(
+            **{
+                **fields,
+                "fetched_at": datetime.fromisoformat(fields["fetched_at"]),
+                "captured_at": datetime.fromisoformat(captured) if captured else None,
+            }
+        )
 
 
 def new_run_id() -> str:
@@ -73,6 +90,7 @@ def write(
     http_status: int,
     run_id: str,
     ext: str,
+    captured_at: datetime | None = None,
 ) -> Manifest:
     if not _RUN_ID.match(run_id):
         raise ValueError(f"run id must match {_RUN_ID.pattern}: {run_id!r}")
@@ -85,6 +103,7 @@ def write(
         sha256=hashlib.sha256(body).hexdigest(),
         http_status=http_status,
         run_id=run_id,
+        captured_at=captured_at.astimezone(UTC) if captured_at else None,
     )
     lake.create(key, gzip.compress(body, mtime=0))
     lake.create(manifest_key(key), manifest.to_json())

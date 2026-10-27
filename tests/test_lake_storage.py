@@ -150,3 +150,22 @@ def test_run_ids_must_be_key_safe(monkeypatch: pytest.MonkeyPatch, run_id: str) 
             bronze.new_run_id()
     else:
         assert bronze.new_run_id().startswith("local-")
+
+
+def test_archive_manifest_keeps_capture_time(lake: Lake) -> None:
+    captured = datetime(2025, 3, 1, 9, 30, tzinfo=UTC)
+    manifest = bronze.write(
+        lake,
+        source="s_wayback",
+        body=b"old",
+        url="https://web.archive.org/web/20250301093000id_/https://x",
+        fetched_at=FETCHED,
+        http_status=200,
+        run_id="r1",
+        ext="html",
+        captured_at=captured,
+    )
+    (loaded,) = bronze.manifests(lake, "s_wayback")
+    assert loaded == manifest
+    assert loaded.observed_at == captured
+    assert loaded.key.startswith("bronze/s_wayback/ingest_date=2026-10-26/")

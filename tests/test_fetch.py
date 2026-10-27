@@ -13,6 +13,13 @@ from campus_safety.fetch import (
 )
 
 LOG_URL = "https://protect.example.edu/police/crime-log/daily-logs.html"
+
+
+@pytest.fixture(autouse=True)
+def fresh_robots_cache() -> None:
+    fetch._robots_txt.cache_clear()
+
+
 ROBOTS = """
 User-agent: AdsBot-Google
 Allow: /campaigns/
@@ -95,3 +102,20 @@ def test_check_robots_fetches_site_root_robots(monkeypatch: pytest.MonkeyPatch) 
     with pytest.raises(RobotsDisallowedError):
         check_robots(LOG_URL)
     assert requested == ["https://protect.example.edu/robots.txt"]
+
+
+def test_robots_txt_is_fetched_once_per_host(monkeypatch: pytest.MonkeyPatch) -> None:
+    requested: list[str] = []
+
+    def fake_get(url: str, max_bytes: int = fetch.MAX_BYTES) -> bytes:
+        requested.append(url)
+        return ROBOTS.encode()
+
+    monkeypatch.setattr(fetch, "get", fake_get)
+    check_robots(LOG_URL)
+    check_robots("https://protect.example.edu/police/other.html")
+    check_robots("https://web.example.org/web/1id_/x")
+    assert requested == [
+        "https://protect.example.edu/robots.txt",
+        "https://web.example.org/robots.txt",
+    ]
