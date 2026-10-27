@@ -3,9 +3,9 @@
 Two layouts, one PDF per day:
 - 2015-2017 "daily crime log report": a block per entry of "label: value" lines; case reports
   carry a report number, CAD events an event number and their own labels.
-- 2011-2013 "Student Right To Know CAD Daily Log": text extraction yields each entry's labels
-  first, then its values in a fixed order. An entry without a report number is a CAD event;
-  its event number stands in as the case number.
+- 2011-2013 "Student Right To Know CAD Daily Log": a four-row form per entry, read in pypdf's
+  layout mode so each label stays on the row with its value (plain extraction scrambles them).
+  An entry without a report number is a CAD event; its event number stands in as the case number.
 Both map onto today's Incident. Anything else raises ParseError, naming positions only.
 """
 
@@ -25,12 +25,14 @@ from campus_safety.iu_crime_log.parse import (
 MAX_PAGES = 60
 _STAMP = re.compile(r"(\d{2}/\d{2}/\d{2}) - [A-Z]{3} at (\d{2}:\d{2})", re.I)
 _PAGE_HEADER = re.compile(
-    r"^(Indiana University, Bloomington|Police Department|daily crime log report"
+    r"^(Indiana University, Bloomington|Police Department|daily crime (report( log)?|log( report)?)"
     r"|Student Right To Know CAD Daily Log|from \S.* to \S.*|Page \d+ of \d+"
     r"|\d+ Incidents Listed\.?|\d+ Page No\. .*)$",
     re.I,
 )
-_CAMPUS_SUFFIX = re.compile(r"\s+-\s+(On|Off|Non)[ -]?Campus$", re.I)
+_CAMPUS_SUFFIX = re.compile(
+    r"\s+-\s+((On|Off|Non)[ -]?Campus|Non[ -]?campus property|Public property)$", re.I
+)
 
 # 2015-2017 layout
 _REPORT_WINDOW = re.compile(r"^from (\d{2}/\d{2}/\d{4}) \d{2}:\d{2} ?to (\d{2}/\d{2}/\d{4})", re.I)
@@ -49,26 +51,31 @@ _WRAPPABLE = (
     "disposition",
 )
 
-# 2011-2013 layout
-_CAD_WINDOW = re.compile(r"^From (\w{3} \d{2}, \d{4}) to (\w{3} \d{2}, \d{4})", re.I)
-_CAD_LABELS = {
-    "Date Reported:",
-    "Incident :",
-    "Disposition:",
-    "Event #:",
-    "Report #:",
-    "Location :",
+# 2011-2013 layout, as rows in layout-mode text
+_CAD_WINDOW = re.compile(
+    r"^From (\w{3} \d{2}, \d{4})(?: \d{2}:\d{2})? to (\w{3} \d{2}, \d{4})", re.I
+)
+# Label case and the occurred row's colon vary between years.
+_CAD_ROWS = {
+    "reported": re.compile(
+        r"^Date Reported:\s*(.*?)\s*Location ?:\s*(.*?)\s*Event #:\s*(\S*)$", re.I
+    ),
+    "occurred": re.compile(r"^Date and Time Occurred From - Occurred To:?\s*(.*)$", re.I),
+    "incident": re.compile(r"^Incident ?:\s*(.*?)\s*Report #:\s*(\S*)$", re.I),
+    "disposition": re.compile(r"^Disposition:\s*(.*)$", re.I),
 }
-_CAD_OCCURRED = "Date and Time Occurred From - Occurred To"
-_CAD_PLACE = re.compile(r"^(.*?)\s*(\d{2}-\d{2}-\d{2}-\d{6})(?:\s*Location :)?$")
+_CAD_FOOTER = re.compile(r"^(\d+|Print Date and Time at|\d+ Page No\..*|Page No\..*)$", re.I)
 
 
-def extract_text(body: bytes) -> str:
-    return pdf.extract_text(body, MAX_PAGES)
+def extract_text(body: bytes, layout: bool = False) -> str:
+    return pdf.extract_text(body, MAX_PAGES, layout=layout)
 
 
 def parse_legacy_pdf(body: bytes) -> CrimeLog:
-    return parse_legacy_text(extract_text(body))
+    text = extract_text(body)
+    if "student right to know" in text[:400].lower():
+        return parse_legacy_text(extract_text(body, layout=True))
+    return parse_legacy_text(text)
 
 
 def parse_legacy_text(text: str) -> CrimeLog:
@@ -76,7 +83,9 @@ def parse_legacy_text(text: str) -> CrimeLog:
     head = " ".join(lines[:8]).lower()
     if "student right to know" in head:
         return _parse_cad(lines)
-    if "daily crime log report" in head:
+    # Titled "Daily Crime Log", "Daily Crime Log Report", "Daily Crime Report (Log)" over the years.
+    # Arrest and media logs (which name people) are different documents and stay unparsed.
+    if re.search(r"daily crime (report|log)", head):
         return _parse_report(lines)
     raise ParseError("unknown legacy layout")
 
@@ -176,37 +185,50 @@ def _parse_report(lines: list[str]) -> CrimeLog:
 
 def _parse_cad(lines: list[str]) -> CrimeLog:
     start, end = _window(lines, _CAD_WINDOW, "%b %d, %Y")
-    entries: list[list[str]] = []
-    for line in lines:
-        if line == "Date Reported:":
-            entries.append([])
-        elif entries and line not in _CAD_LABELS and not _PAGE_HEADER.match(line):
-            entries[-1].append(line)
+    entries: list[dict[str, list[str]]] = []
+    last: str | None = None
+    for number, line in enumerate(lines):
+        if _PAGE_HEADER.match(line) or _CAD_FOOTER.match(line):
+            continue
+        row = next(
+            ((name, m) for name, m in ((n, p.match(line)) for n, p in _CAD_ROWS.items()) if m), None
+        )
+        if row is not None:
+            name, match = row
+            if name == "reported":
+                entries.append({})
+            if not entries:
+                raise ParseError(f"line {number}: row before the first Date Reported")
+            entries[-1][name] = list(match.groups())
+            last = name
+        elif entries and last in ("reported", "incident", "disposition"):
+            # A wrapped value: location continues the Date Reported row; the others their own row.
+            field = entries[-1][last]
+            index = 1 if last == "reported" else 0
+            field[index] = f"{field[index]} {line}".strip()
+        else:
+            raise ParseError(f"line {number}: not a row label or a wrapped value")
     found = []
     for position, entry in enumerate(entries):
         where = f"entry {position}"
-        occurred = [line for line in entry if line.startswith(_CAD_OCCURRED)]
-        values = [line for line in entry if not line.startswith(_CAD_OCCURRED)]
-        if len(occurred) != 1 or len(values) not in (4, 5):
-            raise ParseError(f"{where}: expected 4 or 5 values and one occurred line")
-        place = _CAD_PLACE.match(values[3])
-        if place is None:
-            raise ParseError(f"{where}: location line has no CAD event number")
-        report = values[4] if len(values) == 5 else ""
+        if set(entry) != set(_CAD_ROWS):
+            raise ParseError(f"{where}: missing one of the four rows")
+        reported, location, event = entry["reported"]
+        incident, report = entry["incident"]
         if report and not report.isdigit():
             raise ParseError(f"{where}: report number is not numeric")
-        times = _STAMP.findall(occurred[0])
+        times = _STAMP.findall(entry["occurred"][0])
         if len(times) not in (0, 2):
-            raise ParseError(f"{where}: occurred line needs both ends or neither")
+            raise ParseError(f"{where}: occurred row needs both ends or neither")
         ends = [_stamp(f"{day} - XXX at {hour}", f"{where} occurred") for day, hour in times]
         found.append(
             _incident(
                 where,
-                report or place[2],
-                _stamp(values[0], f"{where} date reported"),
-                values[1],
-                place[1],
-                values[2],
+                report or event,
+                _stamp(reported, f"{where} date reported"),
+                incident,
+                location,
+                entry["disposition"][0],
                 (ends[0], ends[1]) if ends else (None, None),
             )
         )
