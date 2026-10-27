@@ -119,3 +119,8 @@ models:
       - unique:
           arguments:
             column_name: "case_number || '|' || offense || '|' || run_id"
+
+  - name: bpd_calls_for_service
+    columns:
+      - name: case_number
+        data_tests: [unique, not_null]
