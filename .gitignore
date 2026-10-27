@@ -36,6 +36,13 @@ models/
 *.joblib
 *.pkl
 
+# Terraform: local state and plans never leave this machine
+.tools/
+infra/.terraform/
+infra/*.tfstate
+infra/*.tfstate.*
+infra/tfplan
+
 # OS / editors
 .DS_Store
 .vscode/
