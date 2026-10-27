@@ -62,6 +62,7 @@ def test_count_suffix_and_unicode_dash_are_normalized() -> None:
     row = incident(offense="RAPE \u2013 SEXUAL ASSAULT WITH AN OBJECT X2")
     (only,) = parse_crime_log(page(section("Bloomington", row))).incidents
     assert (only.offense, only.offense_count) == ("RAPE - SEXUAL ASSAULT WITH AN OBJECT", 2)
+    assert only.offense_raw == "RAPE - SEXUAL ASSAULT WITH AN OBJECT X2"
     assert only.sensitive
 
 

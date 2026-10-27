@@ -1,0 +1,117 @@
+version: 2
+
+models:
+  - name: incidents
+    description: Conformed incidents (silver.incidents). Contract enforced; see CLAUDE.md.
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: incident_id
+        data_type: varchar
+        data_tests: [unique, not_null]
+      - name: source
+        data_type: varchar
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [official, news, synthetic]
+      - name: source_ref
+        data_type: varchar
+        data_tests: [not_null]
+      - name: source_record_id
+        data_type: varchar
+        data_tests: [not_null]
+      - name: run_id
+        data_type: varchar
+        data_tests: [not_null]
+      - name: ingested_at
+        data_type: timestamp
+        data_tests: [not_null]
+      - name: incident_type
+        data_type: varchar
+      - name: offense_raw
+        data_type: varchar
+      - name: severity_tier
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [high, medium, low, unclassified]
+      - name: count
+        data_type: integer
+      - name: date_reported
+        data_type: date
+      - name: occurred_from
+        data_type: timestamp
+      - name: occurred_to
+        data_type: timestamp
+      - name: time_precision
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [exact, range, date]
+      - name: location_text
+        data_type: varchar
+      - name: location_type
+        data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [place, address, block, street_segment, catch_all, unknown]
+      - name: business_name
+        data_type: varchar
+      - name: lat
+        data_type: double
+      - name: lon
+        data_type: double
+      - name: geocode_quality
+        data_type: varchar
+      - name: zone_id
+        data_type: varchar
+      - name: disposition
+        data_type: varchar
+      - name: is_sensitive
+        data_type: boolean
+        data_tests: [not_null]
+      - name: injuries
+        data_type: integer
+      - name: deaths
+        data_type: integer
+      - name: weapon_involved
+        data_type: boolean
+      - name: summary
+        data_type: varchar
+      - name: confidence
+        data_type: double
+      - name: gap_id
+        data_type: varchar
+      - name: seed
+        data_type: bigint
+
+  - name: incident_sources
+    columns:
+      - name: incident_id
+        data_tests:
+          - not_null
+          - relationships:
+              arguments:
+                to: ref('incidents')
+                field: incident_id
+
+  - name: iu_crime_log_incidents
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "case_number || '|' || offense"
+    columns:
+      - name: first_seen
+        data_tests: [not_null]
+
+  - name: iu_crime_log_incident_history
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "case_number || '|' || offense || '|' || run_id"

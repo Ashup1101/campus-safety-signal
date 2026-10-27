@@ -1,0 +1,10 @@
+version: 2
+
+sources:
+  - name: lake_staging
+    description: Per-snapshot Parquet written by campus_safety.lake.transform.
+    meta:
+      external_location: "read_parquet('{{ env_var('LAKE_STAGING_DIR') }}/{name}/*.parquet')"
+    tables:
+      - name: iu_crime_log_observations
+      - name: iu_crime_log_runs
