@@ -11,6 +11,12 @@ FORBIDDEN = re.compile(
     re.IGNORECASE,
 )
 SCISSORS = "# ------------------------ >8 ------------------------"
+# GitHub's squash merge credits PR authors whose email differs from the merger's, and the
+# owner commits under two noreply aliases of one id. Only that id's trailer is allowed.
+OWNER_COAUTHOR = re.compile(
+    r"^co-authored-by:[^<>\n]*<68706281\+[\w-]+@users\.noreply\.github\.com>[ \t\r]*$",
+    re.IGNORECASE | re.MULTILINE,
+)
 
 
 def strip_git_comments(text: str) -> str:
@@ -21,6 +27,7 @@ def strip_git_comments(text: str) -> str:
 
 
 def find_violations(text: str) -> list[str]:
+    text = OWNER_COAUTHOR.sub("", text)
     return sorted({m.group(0).lower() for m in FORBIDDEN.finditer(text)})
 
 
