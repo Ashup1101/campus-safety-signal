@@ -33,8 +33,23 @@ def test_cad_layout_with_and_without_report_numbers() -> None:
     assert rape.location == "400 BLK N SAMPLE"
     assert rape.occurred_from == datetime(2013, 2, 3, 0, 0)
     assert drunk.case_number == "13-02-04-000041"  # CAD event: no report number
-    assert drunk.location == "SAMPLE UNION"
-    assert (drunk.occurred_from, drunk.occurred_to) == (None, None)  # 01/01/00 means unknown
+    assert drunk.location == "SAMPLE MEMORIAL UNION"  # wrapped onto a second line
+    assert drunk.disposition == "FAILED TO LOCATE"
+    assert (drunk.occurred_from, drunk.occurred_to) == (None, None)
+
+
+@pytest.mark.parametrize(
+    "title",
+    ["Daily Crime Log", "Daily Crime Report", "Daily Crime Report Log", "DAILY CRIME LOG REPORT"],
+)
+def test_report_titles_over_the_years(title: str) -> None:
+    lines = [REPORT[0], REPORT[1], title, *REPORT[3:]]
+    assert len(parse_legacy_text("\n".join(lines)).incidents) == 2
+
+
+def test_arrest_logs_are_not_parsed() -> None:
+    with pytest.raises(ParseError, match="unknown legacy layout"):
+        parse_legacy_text("Adult Arrest Log\nAgency :\nAdult Arrest Log UCR Identifier :")
 
 
 def test_pdf_round_trip() -> None:
@@ -61,17 +76,17 @@ MARK = "ZQXJ"
         ["Some Other Report", f"{MARK} 1"],
         [*REPORT[:4], f"stray {MARK} line", *REPORT[4:]],
         [*REPORT[:4], f"date reported: {MARK} report #: 1", f"incident/offenses: {MARK}"],
-        [*CAD[:15], f"{MARK} EXTRA VALUE", *CAD[15:]],
-        [*CAD[:12], f"{MARK} HALL NO EVENT", *CAD[13:]],
-        [*CAD[:13], f"{MARK}9", *CAD[14:]],
+        [*CAD[:6], f"Stray {MARK} after the occurred row", *CAD[6:]],
+        [*CAD[:4], *CAD[5:]],
+        [*CAD[:6], f"Incident : {MARK} Report #: {MARK}9", *CAD[7:]],
         [CAD[0], f"From {MARK} to {MARK}", *CAD[2:]],
     ],
     ids=[
         "unknown layout",
         "stray line",
         "bad date",
-        "extra value",
-        "missing event number",
+        "stray CAD line",
+        "row before Date Reported",
         "non-numeric report",
         "bad window",
     ],
