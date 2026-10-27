@@ -17,6 +17,7 @@ from pathlib import Path
 from botocore.exceptions import BotoCoreError, ClientError
 
 from campus_safety import fetch
+from campus_safety.iu_crime_log import backfill
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 from campus_safety.iu_crime_log.silver import SOURCE
@@ -82,6 +83,18 @@ def import_snapshots(lake: Lake, data_dir: Path) -> int:
     return 0
 
 
+def backfill_wayback(lake: Lake, delay: float, limit: int | None) -> int:
+    summary = backfill.backfill(lake, delay=delay, limit=limit)
+    log.info(
+        "wayback: %d captures listed, %d fetched, %d already in bronze, %d failed",
+        summary.listed,
+        summary.fetched,
+        summary.present,
+        summary.failed,
+    )
+    return 0
+
+
 def _parse(body: bytes) -> CrimeLog:
     return parse_crime_log(body.decode("utf-8", errors="replace"))
 
@@ -136,6 +149,13 @@ def main(argv: Sequence[str] | None = None) -> int:
     )
     commands.add_parser("check", help="fetch and parse the live page, store nothing")
     commands.add_parser("import-snapshots", help="copy pre-lake data/raw snapshots into bronze")
+    wayback_parser = commands.add_parser(
+        "backfill-wayback", help="fetch archived captures and legacy PDFs into bronze"
+    )
+    wayback_parser.add_argument(
+        "--delay", type=float, default=4.0, help="seconds between requests (default: 4)"
+    )
+    wayback_parser.add_argument("--limit", type=int, help="fetch at most this many captures")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
@@ -145,6 +165,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         lake = open_lake(os.environ.get("LAKE_URI"))
         if args.command == "run":
             return run(lake, args.data_dir, timedelta(hours=args.min_interval_hours))
+        if args.command == "backfill-wayback":
+            return backfill_wayback(lake, args.delay, args.limit)
         return import_snapshots(lake, args.data_dir)
     except (fetch.FetchError, ParseError, LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)

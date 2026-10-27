@@ -25,6 +25,7 @@ dev = [
 transform = [
     "dbt-duckdb>=1.11.0",
     "duckdb>=1.5.6",
+    "pypdf>=6.20.1",
 ]
 
 [build-system]
@@ -38,7 +39,7 @@ module-name = "campus_safety"
 # pip-audit flags are exempt so a security fix never waits out the cooldown.
 [tool.uv]
 exclude-newer = "14 days"
-exclude-newer-package = { certifi = "0 days", filelock = "0 days", virtualenv = "0 days" }
+exclude-newer-package = { certifi = "0 days", filelock = "0 days", pypdf = "0 days", virtualenv = "0 days" }
 
 [tool.ruff]
 line-length = 100
