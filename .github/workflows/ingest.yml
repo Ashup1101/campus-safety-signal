@@ -1,0 +1,48 @@
+name: ingest
+
+# Daily capture of the IU crime log into S3 bronze, then a parse as validation (fails on parse
+# errors or zero incidents). The job runs in the "ingest" environment, which deploys only from
+# main; the AWS role trusts only that environment and may only PutObject under
+# bronze/iu_crime_log/. Logs print counts only, never records.
+#
+# Risk: GitHub disables scheduled workflows after 60 days without repository activity (it emails
+# a warning first). Re-enable from the Actions tab. The launchd job on the owner's Mac is the
+# backup and skips itself when this job already captured within 12 hours.
+on:
+  schedule:
+    - cron: "17 14 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ingest
+  cancel-in-progress: false
+
+jobs:
+  iu-crime-log:
+    runs-on: ubuntu-24.04
+    environment: ingest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+        with:
+          role-to-assume: ${{ vars.AWS_ROLE_ARN }}
+          aws-region: ${{ vars.AWS_REGION }}
+          role-session-name: ingest-${{ github.run_id }}
+      # The role cannot list bronze, so the 12-hour guard is off (--min-interval-hours 0).
+      - name: Fetch to bronze, then validate
+        env:
+          LAKE_URI: ${{ vars.LAKE_URI }}
+          RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
+        run: >-
+          uv run --locked --no-dev iu-crime-log --data-dir "$RUNNER_TEMP/data"
+          run --min-interval-hours 0
