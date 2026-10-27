@@ -109,6 +109,50 @@ SENSITIVE = {
 }
 
 
+LEGACY_OFFENSES = {
+    "ATTEMPTED FORCIBLE ENTRY": Severity.MEDIUM,
+    "LARCENY- FROM BUILDING": Severity.MEDIUM,
+    "POCKET-PICKING": Severity.MEDIUM,
+    "DOMESTIC VIOLENCE - CLERY": Severity.MEDIUM,
+    "DRIVING UNDER THE INFLUENCE // MEDICAL ASSIST": Severity.MEDIUM,
+    "SEX OFF/NON-FORCIBLE - PEEPING": Severity.MEDIUM,
+    "ILLEGAL POSSESSION/CONSUMPTION // WELFARE CHECK": Severity.LOW,
+    "RECEIVING/POSSESSING STOLEN PROPERTY": Severity.LOW,
+    "HIT & RUN, PROPERTY DAMAGE ONLY": Severity.LOW,
+    "DISTURBANCES - OTHER DISTURBANCES": Severity.LOW,
+    "ALL OTHER OFFENSES - ALL OTHER-SMOKING": Severity.LOW,
+    "PROSTITUTION AND COMMERICALIZED VICE": Severity.LOW,
+    "HABITUAL TRAFFIC VIOLATOR": Severity.LOW,
+    "MEDICAL ASSIST": Severity.SERVICE,
+    "COURT SERVICE - WARRANT, SUMMONS, SUBPOENA, ETC": Severity.SERVICE,
+    "TRAFFIC ACCIDENTS - PROPERTY DAMAGE ONLY": Severity.SERVICE,
+    "MISSING PERSON(NOT 29 OR 303B)": Severity.SERVICE,
+    "Administrative entries and notes.": Severity.SERVICE,
+}
+
+
+@pytest.mark.parametrize(("offense", "tier"), LEGACY_OFFENSES.items())
+def test_legacy_offense_tiers(offense: str, tier: Severity) -> None:
+    assert severity(offense) is tier
+
+
+@pytest.mark.parametrize(
+    ("offense", "sensitive"),
+    [
+        ("SEX OFF/NON-FORCIBLE - PEEPING", True),
+        ("DATING VIOLENCE - CLERY", True),
+        ("PUBLIC INDECENCY", True),
+        ("SUICIDE ATTEMPT", True),
+        ("MISSING PERSON(NOT 29 OR 303B)", True),
+        ("PROSTITUTION AND COMMERICALIZED VICE", True),
+        ("MEDICAL ASSIST", False),
+        ("LARCENY- FROM BUILDING", False),
+    ],
+)
+def test_legacy_sensitive_offenses(offense: str, sensitive: bool) -> None:
+    assert is_sensitive(offense) is sensitive
+
+
 @pytest.mark.parametrize(
     ("text", "expected"),
     [
