@@ -48,6 +48,25 @@ def run_transform(work_dir: Path, cache_dir: Path) -> int:
             len(gaps),
             sum(row[4] for row in gaps),
         )
+    if summary.bpd_audit:
+        audit = dict(summary.bpd_audit)
+        log.info(
+            "bpd audit: %s rows, %s case numbers (%s duplicate rows), calls %s to %s,"
+            " %s missing days, %s same-minute repeats, portal refreshed %s",
+            *(
+                audit[key]
+                for key in (
+                    "rows",
+                    "case_numbers",
+                    "duplicate_case_rows",
+                    "first_call",
+                    "last_call",
+                    "missing_days",
+                    "same_minute_nature_district_rows",
+                    "portal_refreshed_at",
+                )
+            ),
+        )
     if summary.unclassified:
         labels_file = work_dir.parent / "logs" / "unclassified-offenses.txt"
         record_unclassified(labels_file, summary.unclassified)

@@ -11,3 +11,10 @@ models:
                 values: [covered, gap]
       - name: days
         data_tests: [not_null]
+
+  - name: bpd_cfs_audit
+    description: One-row audit of the newest BPD calls-for-service pull.
+  - name: bpd_cfs_missing_days
+    columns:
+      - name: day
+        data_tests: [unique]

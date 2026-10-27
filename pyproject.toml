@@ -9,6 +9,7 @@ dependencies = [
 
 [project.scripts]
 iu-crime-log = "campus_safety.iu_crime_log.cli:main"
+bpd-cfs = "campus_safety.bpd_cfs.cli:main"
 lake = "campus_safety.lake.cli:main"
 
 [dependency-groups]

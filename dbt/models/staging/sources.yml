@@ -8,3 +8,5 @@ sources:
     tables:
       - name: iu_crime_log_observations
       - name: iu_crime_log_runs
+      - name: bpd_cfs_observations
+      - name: bpd_cfs_metadata

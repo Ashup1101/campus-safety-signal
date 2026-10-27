@@ -1,8 +1,10 @@
-"""`make transform`: replay all of bronze into silver, end to end.
+"""`make transform`: replay all of bronze into silver and gold, end to end.
 
-1. Parse every bronze snapshot into staging Parquet (observations + one run row each).
-2. dbt build in a local DuckDB warehouse: conform, derive history, enforce the contract, test.
-3. Publish the staging files and silver tables under the lake's silver/ prefix.
+1. Stage every bronze object as Parquet: crime log snapshots (observations + one run row each),
+   BPD call pages (observations) and their pull metadata.
+2. dbt build in a local DuckDB warehouse: conform, derive history, enforce the contract, test,
+   and build the gold reports (coverage, BPD audit).
+3. Publish the staged files and the silver and gold tables to the lake.
 """
 
 import os
@@ -12,22 +14,37 @@ from pathlib import Path
 
 import duckdb
 
+from campus_safety.bpd_cfs import pull as bpd_pull
+from campus_safety.bpd_cfs import silver as bpd_silver
 from campus_safety.iu_crime_log import backfill, silver
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 from campus_safety.lake import bronze
-from campus_safety.lake.parquet import write_parquet
+from campus_safety.lake.parquet import Columns, write_parquet
 from campus_safety.lake.storage import Lake
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
 CRIME_LOG_DATASETS = (silver.SOURCE, backfill.SOURCE)
+STAGED_SCHEMAS: dict[str, Columns] = {
+    "iu_crime_log_observations": silver.OBSERVATIONS,
+    "iu_crime_log_runs": silver.RUNS,
+    "bpd_cfs_observations": bpd_silver.OBSERVATIONS,
+    "bpd_cfs_metadata": bpd_silver.METADATA,
+}
 PUBLISHED = (
     ("silver", "incidents"),
     ("silver", "incident_sources"),
     ("silver", "iu_crime_log_incidents"),
     ("silver", "iu_crime_log_incident_history"),
+    ("silver", "bpd_calls_for_service"),
     ("gold", "iu_crime_log_coverage"),
+    ("gold", "bpd_cfs_audit"),
+    ("gold", "bpd_cfs_rows_per_year"),
+    ("gold", "bpd_cfs_nature_counts"),
+    ("gold", "bpd_cfs_district_formats"),
+    ("gold", "bpd_cfs_missing_days"),
+    ("gold", "bpd_cfs_refresh_history"),
 )
 
 
@@ -44,6 +61,16 @@ class TransformSummary:
     history_rows: int
     unclassified: frozenset[str]  # offense labels no severity rule matched; never logged
     coverage: tuple[tuple[str, str, str, str, int], ...] = ()  # dataset, kind, start, end, days
+    bpd_pages: int = 0
+    bpd_audit: tuple[tuple[str, object], ...] = ()  # column, value from gold.bpd_cfs_audit
+
+
+@dataclass
+class _Staged:
+    published: list[tuple[str, Path]]
+    snapshots: int = 0
+    parse_errors: int = 0
+    bpd_pages: int = 0
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -52,18 +79,19 @@ def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
     return parse_crime_log(body.decode("utf-8", errors="replace"))
 
 
-def transform(lake: Lake, work_dir: Path) -> TransformSummary:
+def _lake_key(table: str, manifest: bronze.Manifest) -> tuple[str, str]:
+    """Staging file name and published silver key for one bronze object."""
+    folder, _, name = manifest.key.rpartition("/")
+    dataset, partition = folder.split("/")[1], folder.rpartition("/")[2]
+    stem = name.split(".", 1)[0]
+    return f"{dataset}_{stem}.parquet", f"silver/{table}/{dataset}/{partition}/{stem}.parquet"
+
+
+def _stage_crime_log(lake: Lake, staging: Path, staged: _Staged) -> set[str]:
     manifests = sorted(
         (m for dataset in CRIME_LOG_DATASETS for m in bronze.manifests(lake, dataset)),
         key=lambda m: (m.observed_at, m.key),
     )
-    if not manifests:
-        raise TransformError(f"no crime log snapshots in bronze at {lake.uri}")
-    staging = work_dir / "staging"
-    shutil.rmtree(staging, ignore_errors=True)
-
-    published: list[tuple[str, Path]] = []
-    parse_errors = 0
     unclassified: set[str] = set()
     for manifest in manifests:
         log: CrimeLog | None = None
@@ -75,19 +103,46 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
             }
         except ParseError as e:
             error = str(e)
-            parse_errors += 1
-        folder, _, name = manifest.key.rpartition("/")
-        dataset, partition = folder.split("/")[1], folder.rpartition("/")[2]
-        stem = name.split(".", 1)[0]
+            staged.parse_errors += 1
         observations = silver.observation_rows(log, manifest) if log else []
-        tables = (
-            ("iu_crime_log_observations", silver.OBSERVATIONS, observations),
-            ("iu_crime_log_runs", silver.RUNS, [silver.run_row(manifest, log, error)]),
-        )
-        for table, columns, rows in tables:
-            path = staging / table / f"{dataset}_{stem}.parquet"
-            write_parquet(path, columns, rows)
-            published.append((f"silver/{table}/{dataset}/{partition}/{stem}.parquet", path))
+        for table, rows in (
+            ("iu_crime_log_observations", observations),
+            ("iu_crime_log_runs", [silver.run_row(manifest, log, error)]),
+        ):
+            name, key = _lake_key(table, manifest)
+            write_parquet(staging / table / name, STAGED_SCHEMAS[table], rows)
+            staged.published.append((key, staging / table / name))
+    staged.snapshots += len(manifests)
+    return unclassified
+
+
+def _stage_bpd(lake: Lake, staging: Path, staged: _Staged) -> None:
+    for manifest in bronze.manifests(lake, bpd_pull.SOURCE):
+        name, key = _lake_key("bpd_cfs_observations", manifest)
+        path = staging / "bpd_cfs_observations" / name
+        bpd_silver.stage_page(manifest, bronze.read(lake, manifest), staging / "raw", path)
+        staged.published.append((key, path))
+        staged.bpd_pages += 1
+    for manifest in bronze.manifests(lake, bpd_pull.METADATA_SOURCE):
+        name, key = _lake_key("bpd_cfs_metadata", manifest)
+        path = staging / "bpd_cfs_metadata" / name
+        row = bpd_silver.metadata_row(manifest, bronze.read(lake, manifest))
+        write_parquet(path, bpd_silver.METADATA, [row])
+        staged.published.append((key, path))
+
+
+def transform(lake: Lake, work_dir: Path) -> TransformSummary:
+    staging = work_dir / "staging"
+    shutil.rmtree(staging, ignore_errors=True)
+    staged = _Staged(published=[])
+    unclassified = _stage_crime_log(lake, staging, staged)
+    _stage_bpd(lake, staging, staged)
+    if not staged.snapshots and not staged.bpd_pages:
+        raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
+    for table, columns in STAGED_SCHEMAS.items():
+        # dbt reads each table as a glob; an empty file keeps a not-yet-pulled source valid.
+        if not (staging / table).is_dir():
+            write_parquet(staging / table / "empty.parquet", columns, [])
 
     warehouse = work_dir / "warehouse.duckdb"
     _dbt_build(work_dir, staging, warehouse)
@@ -98,7 +153,7 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
         for layer, table in PUBLISHED:
             path = exports / f"{layer}_{table}.parquet"
             con.execute(f"COPY {layer}.{table} TO $path (FORMAT parquet)", {"path": str(path)})
-            published.append((f"{layer}/{table}.parquet", path))
+            staged.published.append((f"{layer}/{table}.parquet", path))
         incidents, cases = _one(
             con, "SELECT count(*), count(DISTINCT case_number) FROM silver.iu_crime_log_incidents"
         )
@@ -109,17 +164,22 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
                 "SELECT * FROM gold.iu_crime_log_coverage ORDER BY dataset, range_start"
             ).fetchall()
         ]
+        audit = con.execute("SELECT * FROM gold.bpd_cfs_audit")
+        names = [str(column[0]) for column in audit.description]
+        bpd_audit = tuple(zip(names, audit.fetchone() or (), strict=False))
 
-    for key, path in published:
+    for key, path in staged.published:
         lake.put(key, path.read_bytes())
     return TransformSummary(
-        len(manifests),
-        parse_errors,
+        staged.snapshots,
+        staged.parse_errors,
         incidents,
         cases,
         history_rows,
         frozenset(unclassified),
         tuple(coverage),
+        staged.bpd_pages,
+        bpd_audit if staged.bpd_pages else (),
     )
 
 
