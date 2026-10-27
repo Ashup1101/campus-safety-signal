@@ -92,6 +92,10 @@ models:
         data_type: bigint
 
   - name: incident_sources
+    data_tests:
+      - unique:
+          arguments:
+            column_name: "incident_id || '|' || dataset"
     columns:
       - name: incident_id
         data_tests:

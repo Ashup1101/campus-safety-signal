@@ -8,8 +8,8 @@ seen as (
     select
         case_number,
         offense,
-        min(ingested_at) as first_seen,
-        max(ingested_at) as last_seen,
+        min(observed_at) as first_seen,
+        max(observed_at) as last_seen,
         count(*) as sightings
     from observations
     group by case_number, offense
@@ -19,7 +19,7 @@ latest as (
     select *
     from observations
     qualify row_number() over (
-        partition by case_number, offense order by ingested_at desc, run_id desc
+        partition by case_number, offense order by observed_at desc, run_id desc
     ) = 1
 )
 

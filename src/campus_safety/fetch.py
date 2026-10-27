@@ -7,6 +7,7 @@ import urllib.robotparser
 import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from functools import cache
 from urllib.parse import urlsplit, urlunsplit
 
 from campus_safety import __version__
@@ -91,18 +92,23 @@ def robots_allows(robots_txt: str, url: str) -> bool:
     return rules.can_fetch(USER_AGENT, url)
 
 
-def check_robots(url: str) -> None:
-    parts = urlsplit(url)
-    robots_url = urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", ""))
+@cache
+def _robots_txt(robots_url: str) -> str | None:
+    """robots.txt for a host, once per process; None means none exists (everything allowed)."""
     try:
-        robots_txt = get(robots_url).decode("utf-8", errors="replace")
+        return get(robots_url).decode("utf-8", errors="replace")
     except HTTPStatusError as e:
         # RFC 9309: a missing robots.txt allows everything. Like CPython's robotparser, treat
         # 401/403 as a ban; 5xx means unreachable, which also bans.
         if 400 <= e.status < 500 and e.status not in (401, 403):
-            return
+            return None
         raise RobotsDisallowedError(f"{robots_url} returned HTTP {e.status}") from e
-    if not robots_allows(robots_txt, url):
+
+
+def check_robots(url: str) -> None:
+    parts = urlsplit(url)
+    robots_txt = _robots_txt(urlunsplit((parts.scheme, parts.netloc, "/robots.txt", "", "")))
+    if robots_txt is not None and not robots_allows(robots_txt, url):
         raise RobotsDisallowedError(f"robots.txt disallows {url}")
 
 
