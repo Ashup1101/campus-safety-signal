@@ -9,13 +9,10 @@ Two layouts, one PDF per day:
 Both map onto today's Incident. Anything else raises ParseError, naming positions only.
 """
 
-import io
 import re
 from datetime import date, datetime
 
-from pypdf import PdfReader
-from pypdf.errors import PyPdfError
-
+from campus_safety import pdf
 from campus_safety.iu_crime_log.classify import split_offense
 from campus_safety.iu_crime_log.parse import (
     CrimeLog,
@@ -67,15 +64,7 @@ _CAD_PLACE = re.compile(r"^(.*?)\s*(\d{2}-\d{2}-\d{2}-\d{6})(?:\s*Location :)?$"
 
 
 def extract_text(body: bytes) -> str:
-    if b"%PDF" not in body[:1024]:
-        raise ParseError("not a PDF; the archive may have stored an error page")
-    try:
-        reader = PdfReader(io.BytesIO(body), strict=False)
-        if len(reader.pages) > MAX_PAGES:
-            raise ParseError(f"PDF has more than {MAX_PAGES} pages")
-        return "\n".join(page.extract_text() or "" for page in reader.pages)
-    except PyPdfError as e:
-        raise ParseError(f"unreadable PDF ({type(e).__name__})") from None
+    return pdf.extract_text(body, MAX_PAGES)
 
 
 def parse_legacy_pdf(body: bytes) -> CrimeLog:

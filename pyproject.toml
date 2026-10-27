@@ -10,6 +10,7 @@ dependencies = [
 [project.scripts]
 iu-crime-log = "campus_safety.iu_crime_log.cli:main"
 bpd-cfs = "campus_safety.bpd_cfs.cli:main"
+calibration = "campus_safety.calibration.cli:main"
 lake = "campus_safety.lake.cli:main"
 
 [dependency-groups]
@@ -22,11 +23,13 @@ dev = [
     "pytest",
     "ruff",
     "types-boto3[s3]>=1.43.112",
+    "types-xlrd>=2.0.0.20260518",
 ]
 transform = [
     "dbt-duckdb>=1.11.0",
     "duckdb>=1.5.6",
     "pypdf>=6.20.1",
+    "xlrd>=2.0.2",
 ]
 
 [build-system]

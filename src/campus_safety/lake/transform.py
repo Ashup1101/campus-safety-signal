@@ -16,6 +16,7 @@ import duckdb
 
 from campus_safety.bpd_cfs import pull as bpd_pull
 from campus_safety.bpd_cfs import silver as bpd_silver
+from campus_safety.calibration import bps, doe
 from campus_safety.iu_crime_log import backfill, silver
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
@@ -31,6 +32,8 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     "iu_crime_log_runs": silver.RUNS,
     "bpd_cfs_observations": bpd_silver.OBSERVATIONS,
     "bpd_cfs_metadata": bpd_silver.METADATA,
+    "calibration_clery_rows": doe.ROWS,
+    "calibration_bpd_metric_rows": bps.ROWS,
 }
 PUBLISHED = (
     ("silver", "incidents"),
@@ -38,6 +41,8 @@ PUBLISHED = (
     ("silver", "iu_crime_log_incidents"),
     ("silver", "iu_crime_log_incident_history"),
     ("silver", "bpd_calls_for_service"),
+    ("silver", "calibration_clery"),
+    ("silver", "calibration_bpd_monthly"),
     ("gold", "iu_crime_log_coverage"),
     ("gold", "bpd_cfs_audit"),
     ("gold", "bpd_cfs_rows_per_year"),
@@ -45,6 +50,7 @@ PUBLISHED = (
     ("gold", "bpd_cfs_district_formats"),
     ("gold", "bpd_cfs_missing_days"),
     ("gold", "bpd_cfs_refresh_history"),
+    ("gold", "calibration_bpd_cfs_check"),
 )
 
 
@@ -63,6 +69,8 @@ class TransformSummary:
     coverage: tuple[tuple[str, str, str, str, int], ...] = ()  # dataset, kind, start, end, days
     bpd_pages: int = 0
     bpd_audit: tuple[tuple[str, object], ...] = ()  # column, value from gold.bpd_cfs_audit
+    calibration_files: int = 0
+    calibration_errors: int = 0
 
 
 @dataclass
@@ -71,6 +79,8 @@ class _Staged:
     snapshots: int = 0
     parse_errors: int = 0
     bpd_pages: int = 0
+    calibration_files: int = 0
+    calibration_errors: int = 0
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -131,12 +141,30 @@ def _stage_bpd(lake: Lake, staging: Path, staged: _Staged) -> None:
         staged.published.append((key, path))
 
 
+def _stage_calibration(lake: Lake, staging: Path, staged: _Staged) -> None:
+    for source, table, parse in (
+        (doe.SOURCE, "calibration_clery_rows", doe.rows),
+        (bps.SOURCE, "calibration_bpd_metric_rows", bps.rows),
+    ):
+        for manifest in bronze.manifests(lake, source):
+            try:
+                rows = parse(manifest, bronze.read(lake, manifest))
+            except (ParseError, ValueError):
+                staged.calibration_errors += 1
+                continue
+            name, key = _lake_key(table, manifest)
+            write_parquet(staging / table / name, STAGED_SCHEMAS[table], rows)
+            staged.published.append((key, staging / table / name))
+            staged.calibration_files += 1
+
+
 def transform(lake: Lake, work_dir: Path) -> TransformSummary:
     staging = work_dir / "staging"
     shutil.rmtree(staging, ignore_errors=True)
     staged = _Staged(published=[])
     unclassified = _stage_crime_log(lake, staging, staged)
     _stage_bpd(lake, staging, staged)
+    _stage_calibration(lake, staging, staged)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
@@ -180,6 +208,8 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
         tuple(coverage),
         staged.bpd_pages,
         bpd_audit if staged.bpd_pages else (),
+        staged.calibration_files,
+        staged.calibration_errors,
     )
 
 
