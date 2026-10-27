@@ -14,6 +14,7 @@ DAY_2 = DAY_1 + timedelta(days=1)
 THEFT = Incident(
     case_number="900001",
     offense="THEFT FROM BUILDING LESS THAN $750",
+    offense_raw="THEFT FROM BUILDING LESS THAN $750",
     offense_count=1,
     date_reported=date(2026, 10, 25),
     occurred_from=datetime(2026, 10, 24, 22, 0),
