@@ -12,6 +12,7 @@ from legacy_pdf import REPORT, make_pdf
 from moto import mock_aws
 
 from campus_safety.lake import bronze
+from campus_safety.lake.cli import main
 from campus_safety.lake.storage import CachedLake, FileLake, Lake, S3Lake
 from campus_safety.lake.transform import TransformError, transform
 
@@ -221,3 +222,24 @@ def test_archive_backfill_merges_with_live_capture(tmp_path: Path) -> None:
         "SELECT dataset, count(*) FROM $t GROUP BY 1 ORDER BY 1",
     )
     assert sources == [("iu_crime_log", 1), ("iu_crime_log_wayback", 3)]
+
+
+def test_coverage_merges_windows_and_reports_gaps(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    lake = FileLake(tmp_path / "lake")
+    for day, window in enumerate(
+        ("08/01/2026 - 08/10/2026", "08/05/2026 - 08/20/2026", "08/22/2026 - 08/30/2026")
+    ):
+        snapshot(lake, day, page(section("Bloomington", incident(), window=window)))
+    snapshot(lake, 3, "<html>broken: covers nothing</html>")
+    summary = transform(lake, tmp_path / "work")
+    coverage = [row for row in summary.coverage if row[0] == "iu_crime_log"]
+    assert coverage == [
+        ("iu_crime_log", "covered", "2026-08-01", "2026-08-20", 20),
+        ("iu_crime_log", "gap", "2026-08-21", "2026-08-21", 1),
+        ("iu_crime_log", "covered", "2026-08-22", "2026-08-30", 9),
+    ]
+    assert [row[1:] for row in summary.coverage if row[0] == "all"] == [row[1:] for row in coverage]
+    assert main(["--work-dir", str(tmp_path / "work"), "coverage"]) == 0
+    assert "gap      2026-08-21 2026-08-21     1" in capsys.readouterr().out

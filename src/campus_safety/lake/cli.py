@@ -35,12 +35,42 @@ def run_transform(work_dir: Path, cache_dir: Path) -> int:
         summary.cases,
         summary.history_rows,
     )
+    for dataset in sorted({row[0] for row in summary.coverage}):
+        rows = [row for row in summary.coverage if row[0] == dataset]
+        covered = sum(row[4] for row in rows if row[1] == "covered")
+        gaps = [row for row in rows if row[1] == "gap"]
+        log.info(
+            "coverage %s: %s to %s, %d days covered, %d gaps (%d days)",
+            dataset,
+            min(row[2] for row in rows),
+            max(row[3] for row in rows),
+            covered,
+            len(gaps),
+            sum(row[4] for row in gaps),
+        )
     if summary.unclassified:
         labels_file = work_dir.parent / "logs" / "unclassified-offenses.txt"
         record_unclassified(labels_file, summary.unclassified)
         log.warning(
             "%d unclassified offense labels, see %s", len(summary.unclassified), labels_file
         )
+    return 0
+
+
+def print_coverage(work_dir: Path) -> int:
+    """Covered ranges and gaps from the last transform: dates and day counts only."""
+    import duckdb
+
+    warehouse = work_dir / "warehouse.duckdb"
+    if not warehouse.exists():
+        raise LakeConfigError(f"no warehouse at {warehouse}; run make transform first")
+    # Default (read-write) mode: DuckDB refuses mixed modes within one process.
+    with duckdb.connect(str(warehouse)) as con:
+        rows = con.execute(
+            "SELECT * FROM gold.iu_crime_log_coverage ORDER BY dataset, range_start"
+        ).fetchall()
+    for dataset, kind, start, end, days in rows:
+        print(f"{dataset:22} {kind:8} {start} {end} {days:5d}")
     return 0
 
 
@@ -68,6 +98,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--cache-dir", type=Path, default=Path("data/cache/lake"))
     commands = parser.add_subparsers(dest="command", required=True)
     commands.add_parser("transform", help="parse all bronze, dbt build, publish silver")
+    commands.add_parser("coverage", help="print covered date ranges and gaps (last transform)")
     commands.add_parser("backup-notes", help="copy CLAUDE.md and .notes/ to the lake bucket")
     args = parser.parse_args(argv)
 
@@ -75,6 +106,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "backup-notes":
             return backup_notes(NOTES)
+        if args.command == "coverage":
+            return print_coverage(args.work_dir)
         return run_transform(args.work_dir, args.cache_dir)
     except (LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)

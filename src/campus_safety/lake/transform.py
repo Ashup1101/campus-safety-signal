@@ -22,11 +22,12 @@ from campus_safety.lake.storage import Lake
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
 CRIME_LOG_DATASETS = (silver.SOURCE, backfill.SOURCE)
-SILVER_TABLES = (
-    "incidents",
-    "incident_sources",
-    "iu_crime_log_incidents",
-    "iu_crime_log_incident_history",
+PUBLISHED = (
+    ("silver", "incidents"),
+    ("silver", "incident_sources"),
+    ("silver", "iu_crime_log_incidents"),
+    ("silver", "iu_crime_log_incident_history"),
+    ("gold", "iu_crime_log_coverage"),
 )
 
 
@@ -42,6 +43,7 @@ class TransformSummary:
     cases: int
     history_rows: int
     unclassified: frozenset[str]  # offense labels no severity rule matched; never logged
+    coverage: tuple[tuple[str, str, str, str, int], ...] = ()  # dataset, kind, start, end, days
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -93,19 +95,31 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
     exports = work_dir / "exports"
     exports.mkdir(parents=True, exist_ok=True)
     with duckdb.connect(str(warehouse)) as con:
-        for table in SILVER_TABLES:
-            path = exports / f"{table}.parquet"
-            con.execute(f"COPY silver.{table} TO $path (FORMAT parquet)", {"path": str(path)})
-            published.append((f"silver/{table}.parquet", path))
+        for layer, table in PUBLISHED:
+            path = exports / f"{layer}_{table}.parquet"
+            con.execute(f"COPY {layer}.{table} TO $path (FORMAT parquet)", {"path": str(path)})
+            published.append((f"{layer}/{table}.parquet", path))
         incidents, cases = _one(
             con, "SELECT count(*), count(DISTINCT case_number) FROM silver.iu_crime_log_incidents"
         )
         (history_rows,) = _one(con, "SELECT count(*) FROM silver.iu_crime_log_incident_history")
+        coverage = [
+            (str(dataset), str(kind), str(start), str(end), int(days))
+            for dataset, kind, start, end, days in con.execute(
+                "SELECT * FROM gold.iu_crime_log_coverage ORDER BY dataset, range_start"
+            ).fetchall()
+        ]
 
     for key, path in published:
         lake.put(key, path.read_bytes())
     return TransformSummary(
-        len(manifests), parse_errors, incidents, cases, history_rows, frozenset(unclassified)
+        len(manifests),
+        parse_errors,
+        incidents,
+        cases,
+        history_rows,
+        frozenset(unclassified),
+        tuple(coverage),
     )
 
 

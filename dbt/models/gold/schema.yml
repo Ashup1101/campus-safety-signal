@@ -1,0 +1,13 @@
+version: 2
+
+models:
+  - name: iu_crime_log_coverage
+    description: Covered reporting-date ranges and gaps in the crime log history.
+    columns:
+      - name: kind
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [covered, gap]
+      - name: days
+        data_tests: [not_null]
