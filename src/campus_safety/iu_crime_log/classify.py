@@ -5,7 +5,9 @@ UNCLASSIFIED, so new labels show up in the run log instead of landing in a tier 
 """
 
 import re
+from collections.abc import Iterable
 from enum import StrEnum
+from pathlib import Path
 
 
 class Severity(StrEnum):
@@ -103,3 +105,11 @@ def location_type(location: str) -> LocationType:
 
 def geocodable(kind: LocationType) -> bool:
     return kind not in (LocationType.CATCH_ALL, LocationType.UNKNOWN)
+
+
+def record_unclassified(path: Path, labels: Iterable[str]) -> None:
+    """Merge offense labels into a local, gitignored list. Labels can be sensitive, so they go
+    here for review and never into a log."""
+    known = set(path.read_text().splitlines()) if path.exists() else set()
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text("".join(f"{label}\n" for label in sorted(known | set(labels))))

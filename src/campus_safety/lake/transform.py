@@ -12,13 +12,16 @@ from pathlib import Path
 
 import duckdb
 
-from campus_safety.iu_crime_log import silver
+from campus_safety.iu_crime_log import backfill, silver
+from campus_safety.iu_crime_log.classify import Severity
+from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 from campus_safety.lake import bronze
 from campus_safety.lake.parquet import write_parquet
 from campus_safety.lake.storage import Lake
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
+CRIME_LOG_DATASETS = (silver.SOURCE, backfill.SOURCE)
 SILVER_TABLES = (
     "incidents",
     "incident_sources",
@@ -38,36 +41,51 @@ class TransformSummary:
     incidents: int
     cases: int
     history_rows: int
+    unclassified: frozenset[str]  # offense labels no severity rule matched; never logged
+
+
+def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
+    if manifest.key.endswith(".pdf.gz"):
+        return parse_legacy_pdf(body)
+    return parse_crime_log(body.decode("utf-8", errors="replace"))
 
 
 def transform(lake: Lake, work_dir: Path) -> TransformSummary:
-    manifests = bronze.manifests(lake, silver.SOURCE)
+    manifests = sorted(
+        (m for dataset in CRIME_LOG_DATASETS for m in bronze.manifests(lake, dataset)),
+        key=lambda m: (m.observed_at, m.key),
+    )
     if not manifests:
-        raise TransformError(f"no bronze snapshots for {silver.SOURCE} in {lake.uri}")
+        raise TransformError(f"no crime log snapshots in bronze at {lake.uri}")
     staging = work_dir / "staging"
     shutil.rmtree(staging, ignore_errors=True)
 
     published: list[tuple[str, Path]] = []
     parse_errors = 0
+    unclassified: set[str] = set()
     for manifest in manifests:
         log: CrimeLog | None = None
         error: str | None = None
         try:
-            log = parse_crime_log(bronze.read(lake, manifest).decode("utf-8", errors="replace"))
+            log = parse_snapshot(manifest, bronze.read(lake, manifest))
+            unclassified |= {
+                i.offense for i in log.incidents if i.severity is Severity.UNCLASSIFIED
+            }
         except ParseError as e:
             error = str(e)
             parse_errors += 1
         folder, _, name = manifest.key.rpartition("/")
-        partition, stem = folder.rpartition("/")[2], name.split(".", 1)[0]
+        dataset, partition = folder.split("/")[1], folder.rpartition("/")[2]
+        stem = name.split(".", 1)[0]
         observations = silver.observation_rows(log, manifest) if log else []
         tables = (
             ("iu_crime_log_observations", silver.OBSERVATIONS, observations),
             ("iu_crime_log_runs", silver.RUNS, [silver.run_row(manifest, log, error)]),
         )
         for table, columns, rows in tables:
-            path = staging / table / f"{stem}.parquet"
+            path = staging / table / f"{dataset}_{stem}.parquet"
             write_parquet(path, columns, rows)
-            published.append((f"silver/{table}/{partition}/{stem}.parquet", path))
+            published.append((f"silver/{table}/{dataset}/{partition}/{stem}.parquet", path))
 
     warehouse = work_dir / "warehouse.duckdb"
     _dbt_build(work_dir, staging, warehouse)
@@ -86,7 +104,9 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
 
     for key, path in published:
         lake.put(key, path.read_bytes())
-    return TransformSummary(len(manifests), parse_errors, incidents, cases, history_rows)
+    return TransformSummary(
+        len(manifests), parse_errors, incidents, cases, history_rows, frozenset(unclassified)
+    )
 
 
 def _one(con: duckdb.DuckDBPyConnection, sql: str) -> tuple[int, ...]:

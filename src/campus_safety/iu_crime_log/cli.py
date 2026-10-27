@@ -18,7 +18,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from campus_safety import fetch
 from campus_safety.iu_crime_log import backfill
-from campus_safety.iu_crime_log.classify import Severity
+from campus_safety.iu_crime_log.classify import Severity, record_unclassified
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 from campus_safety.iu_crime_log.silver import SOURCE
 from campus_safety.lake import bronze
@@ -124,9 +124,7 @@ def _report(crime_log: CrimeLog, unclassified_file: Path | None) -> None:
     if unclassified_file is None:
         log.warning("%d unclassified offense labels; run locally to list them", len(unclassified))
         return
-    unclassified_file.parent.mkdir(parents=True, exist_ok=True)
-    known = set(unclassified_file.read_text().splitlines()) if unclassified_file.exists() else set()
-    unclassified_file.write_text("".join(f"{label}\n" for label in sorted(known | unclassified)))
+    record_unclassified(unclassified_file, unclassified)
     log.warning(
         "%d unclassified offense labels; add rules in classify.py, see %s",
         len(unclassified),
