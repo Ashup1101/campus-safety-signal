@@ -37,12 +37,13 @@ class BackfillSummary:
     failed: int
 
 
-def captures() -> list[tuple[str, wayback.Capture]]:
+def captures(sleep: Callable[[float], None], delay: float) -> list[tuple[str, wayback.Capture]]:
     found: list[tuple[str, wayback.Capture]] = []
     for ext, url in TARGETS:
-        listing = fetch.polite_get(
-            wayback.cdx_url(url, prefix=ext == "pdf"), timeout=wayback.CDX_TIMEOUT_SECONDS
-        )
+        listing_url = wayback.cdx_url(url, prefix=ext == "pdf")
+        listing = _get(listing_url, sleep, delay, timeout=wayback.CDX_TIMEOUT_SECONDS)
+        if listing is None:
+            raise fetch.FetchError(f"CDX listing failed after {RETRIES} attempts: {listing_url}")
         found += [
             (ext, capture)
             for capture in wayback.parse_cdx(listing.body)
@@ -59,7 +60,7 @@ def backfill(
     sleep: Callable[[float], None] = time.sleep,
 ) -> BackfillSummary:
     done = {manifest.url for manifest in bronze.manifests(lake, SOURCE)}
-    listed = captures()
+    listed = captures(sleep, delay)
     todo = [(ext, c) for ext, c in listed if c.raw_url not in done][:limit]
     fetched = failed = 0
     for number, (ext, capture) in enumerate(todo, 1):
@@ -86,10 +87,15 @@ def backfill(
     return BackfillSummary(len(listed), fetched, present, failed)
 
 
-def _get(url: str, sleep: Callable[[float], None], delay: float) -> fetch.Page | None:
+def _get(
+    url: str,
+    sleep: Callable[[float], None],
+    delay: float,
+    timeout: float = fetch.TIMEOUT_SECONDS,
+) -> fetch.Page | None:
     for attempt in range(1, RETRIES + 1):
         try:
-            return fetch.polite_get(url)
+            return fetch.polite_get(url, timeout=timeout)
         except fetch.HTTPStatusError as e:
             if e.status not in RETRY_STATUSES or attempt == RETRIES:
                 return None
