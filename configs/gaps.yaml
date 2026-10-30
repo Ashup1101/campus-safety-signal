@@ -1,0 +1,67 @@
+# Gap register: segments where real public data is missing or too coarse. Synthetic data
+# (Phase 4) may patch only these, and every synthetic row carries the gap_id it patches.
+# Day ranges and counts come from gold.iu_crime_log_coverage and gold.bpd_cfs_audit (`make
+# transform`, `uv run lake coverage`); figures below as of 2026-10-29.
+gaps:
+  - gap_id: iu_log_2017_2024
+    reason: >-
+      The legacy daily-log page (daily PDFs) went offline in 2017 and the current page was first
+      archived in October 2024, so no incident-level IU log exists for this span (2,539 days).
+    segment:
+      source: iu_crime_log
+      start: 2017-09-04
+      end: 2024-08-16
+      fields: [all]
+    closing_source: >-
+      None public at incident level. Yearly totals only: Department of Education Clery data
+      (calibration import-doe) bounds counts per category, location, and year.
+
+  - gap_id: iu_log_2025_2026_archive
+    reason: >-
+      Wayback captures of the current page from 2025 to mid-2026 are page templates without the
+      data tables; history resumes with our live daily capture (574 days).
+    segment:
+      source: iu_crime_log
+      start: 2025-01-29
+      end: 2026-08-25
+      fields: [all]
+    closing_source: >-
+      None for the past; the daily ingest closes it going forward. Clery data covers 2025 totals.
+
+  - gap_id: iu_log_2014
+    reason: >-
+      Almost no 2014 daily PDFs were archived (one capture), leaving most of the year uncovered
+      (364 days).
+    segment:
+      source: iu_crime_log
+      start: 2014-01-02
+      end: 2014-12-31
+      fields: [all]
+    closing_source: Clery totals for 2014 (DoE survey 2015/2016 files) bound yearly counts.
+
+  - gap_id: iu_log_small_archive_gaps
+    reason: >-
+      67 shorter gaps (924 days in total, median 2, longest 137) where daily PDFs were not
+      archived, failed to download, or did not parse: 2011 (6), 2012 (8), 2013 (8), 2015 (13),
+      2016 (14), 2017 (18). Exact ranges: gold.iu_crime_log_coverage (dataset 'all', kind 'gap').
+    segment:
+      source: iu_crime_log
+      start: 2011-09-03
+      end: 2017-08-16
+      fields: [all]
+    closing_source: >-
+      Re-run backfill-wayback for failed downloads; an LLM fallback for odd layouts (T3-lite,
+      rows tagged llm_fallback until verified).
+
+  - gap_id: bpd_calls_zone_only
+    reason: >-
+      BPD calls for service are published with a dispatch district (LB###) only: no address or
+      coordinates, and 5,940 of 650,128 calls (0.9%) have no district at all.
+    segment:
+      source: bpd_calls_for_service
+      start: null
+      end: null
+      fields: [location, lat, lon]
+    closing_source: >-
+      None public for points. District polygons from the city's public-safety GIS give zone
+      geometry (Phase 3); any synthetic point placement must stay inside the district.
