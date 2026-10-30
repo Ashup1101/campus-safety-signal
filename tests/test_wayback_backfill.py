@@ -108,3 +108,16 @@ def test_backfill_retries_when_the_archive_pushes_back(
 def test_cdx_listings_get_a_long_timeout(archive: list[str], tmp_path: Path) -> None:
     backfill.backfill(FileLake(tmp_path / "lake"), delay=0, sleep=lambda _: None)
     assert timeouts == [wayback.CDX_TIMEOUT_SECONDS, wayback.CDX_TIMEOUT_SECONDS]
+
+
+def test_cdx_listing_retries_then_gives_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    attempts: list[str] = []
+
+    def unavailable(url: str, **kwargs: object) -> fetch.Page:
+        attempts.append(url)
+        raise fetch.HTTPStatusError(url, 503)
+
+    monkeypatch.setattr(fetch, "polite_get", unavailable)
+    with pytest.raises(fetch.FetchError, match="CDX listing failed"):
+        backfill.backfill(FileLake(tmp_path / "lake"), delay=1, sleep=lambda _: None)
+    assert len(attempts) == backfill.RETRIES
