@@ -1,5 +1,5 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
@@ -105,9 +105,34 @@ def test_backfill_retries_when_the_archive_pushes_back(
     assert 30 in waits
 
 
-def test_cdx_listings_get_a_long_timeout(archive: list[str], tmp_path: Path) -> None:
-    backfill.backfill(FileLake(tmp_path / "lake"), delay=0, sleep=lambda _: None)
-    assert timeouts == [wayback.CDX_TIMEOUT_SECONDS, wayback.CDX_TIMEOUT_SECONDS]
+def test_cdx_listings_are_per_year_with_a_long_timeout(archive: list[str], tmp_path: Path) -> None:
+    lake = FileLake(tmp_path / "lake")
+    backfill.backfill(lake, delay=0, sleep=lambda _: None)
+    listings = [url for url in archive if url.startswith(wayback.CDX)]
+    assert set(timeouts) == {wayback.CDX_TIMEOUT_SECONDS}
+    assert len(listings) == 1 + len(range(backfill.FIRST_CAPTURE_YEAR, datetime.now(UTC).year + 1))
+    assert "from=2011&to=2011" in listings[2]
+    assert len(bronze.manifests(lake, backfill.LISTING_SOURCE)) == len(listings)
+
+
+def test_a_failed_listing_reuses_the_last_stored_one(
+    archive: list[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    lake = FileLake(tmp_path / "lake")
+    backfill.backfill(lake, delay=0, sleep=lambda _: None)
+    for manifest in bronze.manifests(lake, backfill.SOURCE):  # pretend the PDF never arrived
+        if manifest.key.endswith(".pdf.gz"):
+            (tmp_path / "lake" / bronze.manifest_key(manifest.key)).unlink()
+
+    def listings_down(url: str, **kwargs: object) -> fetch.Page:
+        if url.startswith(wayback.CDX):
+            raise fetch.HTTPStatusError(url, 503)
+        return fetch.Page(url, b"pdf again", datetime.now(UTC) + timedelta(hours=1))
+
+    monkeypatch.setattr(fetch, "polite_get", listings_down)
+    summary = backfill.backfill(lake, delay=0, sleep=lambda _: None)
+    # From the stored listings: the missing PDF plus the capture that answered 404 the first time.
+    assert (summary.listed, summary.fetched) == (3, 2)
 
 
 def test_cdx_listing_retries_then_gives_up(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:

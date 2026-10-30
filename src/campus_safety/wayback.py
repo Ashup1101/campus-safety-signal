@@ -25,8 +25,9 @@ class Capture:
         return f"https://web.archive.org/web/{self.timestamp}id_/{self.original}"
 
 
-def cdx_url(url: str, *, prefix: bool = False) -> str:
-    """Successful captures of a URL (or every URL under a prefix), deduplicated by the archive."""
+def cdx_url(url: str, *, prefix: bool = False, year: int | None = None) -> str:
+    """Successful captures of a URL (or every URL under a prefix), deduplicated by the archive;
+    `year` limits the listing to captures made that year, which keeps prefix queries light."""
     params = {
         "url": url,
         "output": "json",
@@ -37,6 +38,8 @@ def cdx_url(url: str, *, prefix: bool = False) -> str:
     }
     if prefix:
         params["matchType"] = "prefix"
+    if year is not None:
+        params["from"] = params["to"] = str(year)
     return f"{CDX}?{urlencode(params)}"
 
 
