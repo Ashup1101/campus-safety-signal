@@ -95,3 +95,13 @@ def test_legacy_errors_name_positions_not_contents(lines: list[str]) -> None:
     with pytest.raises(ParseError) as error:
         parse_legacy_text("\n".join(lines))
     assert MARK not in str(error.value)
+
+
+def test_legacy_sources_are_each_entrys_lines() -> None:
+    report, event = parse_legacy_text("\n".join(REPORT)).sources
+    assert report.splitlines()[0].startswith("date reported:") and "report #: 900445" in report
+    assert "modified date:" in report and "cad event #" not in report
+    assert event.splitlines()[-1] == "disposition: REPORT FILED"
+    rape, drunk = parse_legacy_text("\n".join(CAD)).sources
+    assert rape.splitlines()[0].startswith("Date Reported:") and len(rape.splitlines()) == 4
+    assert "UNION" in drunk and "Incidents Listed" not in drunk
