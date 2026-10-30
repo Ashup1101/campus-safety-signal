@@ -20,10 +20,11 @@ from campus_safety.calibration import bps, doe
 from campus_safety.iu_crime_log import backfill, silver
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
-from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
+from campus_safety.iu_crime_log.parse import CrimeLog, Incident, ParseError, parse_crime_log
 from campus_safety.lake import bronze
 from campus_safety.lake.parquet import Columns, write_parquet
 from campus_safety.lake.storage import Lake
+from campus_safety.t3 import fallback
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
 CRIME_LOG_DATASETS = (silver.SOURCE, backfill.SOURCE)
@@ -71,6 +72,7 @@ class TransformSummary:
     bpd_audit: tuple[tuple[str, object], ...] = ()  # column, value from gold.bpd_cfs_audit
     calibration_files: int = 0
     calibration_errors: int = 0
+    llm_recovered: int = 0  # incidents read by the LLM fallback (extractor=llm_fallback)
 
 
 @dataclass
@@ -81,6 +83,7 @@ class _Staged:
     bpd_pages: int = 0
     calibration_files: int = 0
     calibration_errors: int = 0
+    llm_recovered: int = 0
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -97,7 +100,30 @@ def _lake_key(table: str, manifest: bronze.Manifest) -> tuple[str, str]:
     return f"{dataset}_{stem}.parquet", f"silver/{table}/{dataset}/{partition}/{stem}.parquet"
 
 
-def _stage_crime_log(lake: Lake, staging: Path, staged: _Staged) -> set[str]:
+@dataclass(frozen=True)
+class Extraction:
+    """Rules only, or rules plus cached LLM answers for snapshots the rules could not read."""
+
+    extractor: str = "rules"  # rules | llm_fallback
+    cache_dir: Path | None = None
+    verified: frozenset[tuple[str, str]] = frozenset()  # (case_number, offense) the owner checked
+
+
+def _fallback_log(extraction: Extraction, manifest: bronze.Manifest) -> CrimeLog | None:
+    if extraction.extractor != "llm_fallback" or extraction.cache_dir is None:
+        return None
+    unique: dict[tuple[str, str], Incident] = {}
+    for incident in fallback.cached_incidents(extraction.cache_dir, manifest.sha256):
+        unique.setdefault((incident.case_number, incident.offense), incident)
+    if not unique:
+        return None
+    reported = [incident.date_reported for incident in unique.values()]
+    return CrimeLog("Bloomington", min(reported), max(reported), tuple(unique.values()))
+
+
+def _stage_crime_log(
+    lake: Lake, staging: Path, staged: _Staged, extraction: Extraction
+) -> set[str]:
     manifests = sorted(
         (m for dataset in CRIME_LOG_DATASETS for m in bronze.manifests(lake, dataset)),
         key=lambda m: (m.observed_at, m.key),
@@ -115,6 +141,13 @@ def _stage_crime_log(lake: Lake, staging: Path, staged: _Staged) -> set[str]:
             error = str(e)
             staged.parse_errors += 1
         observations = silver.observation_rows(log, manifest) if log else []
+        recovered = None if log else _fallback_log(extraction, manifest)
+        if recovered is not None:
+            # Coverage stays rules-only: the run row keeps its parse error and no window.
+            observations = silver.observation_rows(
+                recovered, manifest, "llm_fallback", extraction.verified
+            )
+            staged.llm_recovered += len(recovered.incidents)
         for table, rows in (
             ("iu_crime_log_observations", observations),
             ("iu_crime_log_runs", [silver.run_row(manifest, log, error)]),
@@ -158,11 +191,12 @@ def _stage_calibration(lake: Lake, staging: Path, staged: _Staged) -> None:
             staged.calibration_files += 1
 
 
-def transform(lake: Lake, work_dir: Path) -> TransformSummary:
+def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
+    extraction = extraction or Extraction()
     staging = work_dir / "staging"
     shutil.rmtree(staging, ignore_errors=True)
     staged = _Staged(published=[])
-    unclassified = _stage_crime_log(lake, staging, staged)
+    unclassified = _stage_crime_log(lake, staging, staged, extraction)
     _stage_bpd(lake, staging, staged)
     _stage_calibration(lake, staging, staged)
     if not staged.snapshots and not staged.bpd_pages:
@@ -210,6 +244,7 @@ def transform(lake: Lake, work_dir: Path) -> TransformSummary:
         bpd_audit if staged.bpd_pages else (),
         staged.calibration_files,
         staged.calibration_errors,
+        staged.llm_recovered,
     )
 
 
