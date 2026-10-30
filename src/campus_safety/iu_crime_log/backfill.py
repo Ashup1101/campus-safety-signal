@@ -10,12 +10,17 @@ import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 
 from campus_safety import fetch, wayback
 from campus_safety.lake import bronze
 from campus_safety.lake.storage import Lake
 
 SOURCE = "iu_crime_log_wayback"
+LISTING_SOURCE = (
+    "wayback_cdx"  # CDX listings are raw responses too; a failed listing reuses the last one
+)
+FIRST_CAPTURE_YEAR = 2010
 TARGETS = (
     (
         "html",
@@ -37,19 +42,43 @@ class BackfillSummary:
     failed: int
 
 
-def captures(sleep: Callable[[float], None], delay: float) -> list[tuple[str, wayback.Capture]]:
-    found: list[tuple[str, wayback.Capture]] = []
-    for ext, url in TARGETS:
-        listing_url = wayback.cdx_url(url, prefix=ext == "pdf")
+def _listing_urls() -> list[tuple[str, str]]:
+    """(ext, CDX URL): one listing for today's page, one per capture year for the PDF prefix."""
+    page, pdfs = TARGETS
+    years = range(FIRST_CAPTURE_YEAR, datetime.now(UTC).year + 1)
+    return [(page[0], wayback.cdx_url(page[1]))] + [
+        (pdfs[0], wayback.cdx_url(pdfs[1], prefix=True, year=year)) for year in years
+    ]
+
+
+def captures(
+    lake: Lake, run_id: str, sleep: Callable[[float], None], delay: float
+) -> list[tuple[str, wayback.Capture]]:
+    stored = {m.url: m for m in bronze.manifests(lake, LISTING_SOURCE)}  # newest wins
+    found: dict[str, tuple[str, wayback.Capture]] = {}
+    for number, (ext, listing_url) in enumerate(_listing_urls()):
+        sleep(delay)
         listing = _get(listing_url, sleep, delay, timeout=wayback.CDX_TIMEOUT_SECONDS)
-        if listing is None:
+        if listing is not None:
+            bronze.write(
+                lake,
+                source=LISTING_SOURCE,
+                body=listing.body,
+                url=listing_url,
+                fetched_at=listing.fetched_at,
+                http_status=listing.status,
+                run_id=f"{run_id}-cdx{number:02d}",
+                ext="json",
+            )
+            body = listing.body
+        elif listing_url in stored:
+            body = bronze.read(lake, stored[listing_url])
+        else:
             raise fetch.FetchError(f"CDX listing failed after {RETRIES} attempts: {listing_url}")
-        found += [
-            (ext, capture)
-            for capture in wayback.parse_cdx(listing.body)
-            if ext != "pdf" or capture.original.lower().endswith(".pdf")
-        ]
-    return found
+        for capture in wayback.parse_cdx(body):
+            if ext != "pdf" or capture.original.lower().endswith(".pdf"):
+                found.setdefault(capture.raw_url, (ext, capture))
+    return list(found.values())
 
 
 def backfill(
@@ -60,7 +89,7 @@ def backfill(
     sleep: Callable[[float], None] = time.sleep,
 ) -> BackfillSummary:
     done = {manifest.url for manifest in bronze.manifests(lake, SOURCE)}
-    listed = captures(sleep, delay)
+    listed = captures(lake, bronze.new_run_id(), sleep, delay)
     todo = [(ext, c) for ext, c in listed if c.raw_url not in done][:limit]
     fetched = failed = 0
     for number, (ext, capture) in enumerate(todo, 1):
