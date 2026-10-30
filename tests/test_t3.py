@@ -13,7 +13,7 @@ from campus_safety.iu_crime_log.parse import parse_crime_log
 from campus_safety.lake import bronze
 from campus_safety.lake.storage import FileLake
 from campus_safety.t3 import pairs
-from campus_safety.t3.privacy import PersonScreen
+from campus_safety.t3.privacy import PersonScreen, is_known, known_words
 from campus_safety.t3.schema import FIELDS, messages, target
 from campus_safety.t3.score import parse_output, score
 
@@ -94,7 +94,7 @@ def test_collect_dedupes_and_screens_people(tmp_path: Path) -> None:
     write(lake, make_pdf(REPORT), "pdf", at, "r3")
     write(lake, b"<html>arrest log, never parsed</html>", "html", at, "r4")
 
-    found, counts = pairs.collect(lake, has_person=lambda text: "900002" in text)
+    found, counts = pairs.collect(lake, has_person=lambda text, known: "900002" in text)
     assert counts["snapshots_unparsed"] == 1
     assert counts["duplicates"] == 1
     assert counts["dropped_person"] == 1
@@ -132,6 +132,16 @@ def test_presidio_screen_finds_a_name_but_not_buildings() -> None:
     screen = PersonScreen()
     assert screen.has_person("Reported by Jane Doe at the front desk.")
     assert not screen.has_person("general location: SAMPLE HALL - On Campus disposition: OPEN CASE")
+
+
+def test_spans_the_incident_publishes_are_not_names() -> None:
+    known = known_words(["WRIGHT QUAD", "BATTERY", "OPEN CASE", "900001"])
+    assert is_known("WRIGHT", known)
+    assert is_known("09/22/2024", known)  # no letters: a date, not a name
+    assert is_known("03/10/16 - THU", known)
+    assert is_known("WRIGHT QUAD - NON", known)  # NON is a form label
+    assert not is_known("JANE DOE", known)
+    assert not is_known("WRIGHT DOE", known)
 
 
 def test_committed_notebook_matches_its_builder() -> None:
