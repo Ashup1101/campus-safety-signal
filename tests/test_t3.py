@@ -132,3 +132,19 @@ def test_presidio_screen_finds_a_name_but_not_buildings() -> None:
     screen = PersonScreen()
     assert screen.has_person("Reported by Jane Doe at the front desk.")
     assert not screen.has_person("general location: SAMPLE HALL - On Campus disposition: OPEN CASE")
+
+
+def test_committed_notebook_matches_its_builder() -> None:
+    import build_t3_notebook
+
+    assert build_t3_notebook.NOTEBOOK.read_text() == build_t3_notebook.build()
+
+
+def test_notebook_embeds_schema_and_scorer_and_has_no_outputs() -> None:
+    import build_t3_notebook
+
+    notebook = json.loads(build_t3_notebook.build())
+    code = "".join("".join(cell["source"]) for cell in notebook["cells"])
+    assert "SYSTEM_PROMPT = (" in code and "def score(" in code
+    assert "from campus_safety" not in code
+    assert all(cell.get("outputs", []) == [] for cell in notebook["cells"])
