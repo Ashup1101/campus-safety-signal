@@ -148,3 +148,30 @@ def test_notebook_embeds_schema_and_scorer_and_has_no_outputs() -> None:
     assert "SYSTEM_PROMPT = (" in code and "def score(" in code
     assert "from campus_safety" not in code
     assert all(cell.get("outputs", []) == [] for cell in notebook["cells"])
+
+
+def test_log_run_and_kaggle_import(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    import mlflow
+
+    from campus_safety.t3 import cli, track
+
+    monkeypatch.setattr(track, "TRACKING", tmp_path / "mlruns")
+    outputs = tmp_path / "t3_outputs"
+    outputs.mkdir()
+    metrics = {
+        "baseline": {"test": {"valid_json_rate": 0.5, "rows": 10.0}},
+        "finetuned": {"test": {"valid_json_rate": 0.99, "rows": 10.0}},
+    }
+    (outputs / "metrics.json").write_text(json.dumps(metrics))
+    (outputs / "run_info.json").write_text(
+        json.dumps({"gpu": "Tesla T4", "hyperparameters": {"lora_r": 16}, "train_seconds": 60})
+    )
+    (outputs / "errors_finetuned_test.json").write_text("{}")
+    assert cli.track_kaggle(outputs) == 0
+
+    mlflow.set_tracking_uri((tmp_path / "mlruns").resolve().as_uri())
+    (run,) = mlflow.search_runs(experiment_names=[track.EXPERIMENT], output_format="list")
+    assert run.data.metrics["finetuned.test.valid_json_rate"] == pytest.approx(0.99)
+    assert run.data.metrics["train_seconds"] == 60
+    assert run.data.params["hyperparameters.lora_r"] == "16"
+    assert run.data.params["gpu"] == "Tesla T4"
