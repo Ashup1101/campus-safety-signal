@@ -18,6 +18,10 @@ def export(out: Path) -> int:
 
     pairs, counts = collect(open_lake(os.environ.get("LAKE_URI")), PersonScreen().has_person)
     stats = write(split(pairs), counts, out)
+    from campus_safety.t3.track import log_run
+
+    sizes = {f"rows.{name}": float(info["rows"]) for name, info in stats["splits"].items()}  # type: ignore[attr-defined]
+    log_run("export", stats, sizes, [out / "stats.json"])
     log.info("t3 export: %s", json.dumps(stats["counts"]))
     for name, info in stats["splits"].items():  # type: ignore[attr-defined]
         log.info("  %-15s %s", name, json.dumps(info))
@@ -32,7 +36,15 @@ def fallback_run(model: str, cache: Path) -> int:
     def chat(name: str, messages: list[dict[str, str]]) -> str:
         return ollama.chat(name, messages, json_mode=True)
 
-    summary = fallback.run(lake, model, ollama.model_digest(model), cache, chat)
+    digest = ollama.model_digest(model)
+    summary = fallback.run(lake, model, digest, cache, chat)
+    from campus_safety.t3.track import log_run
+
+    log_run(
+        "fallback",
+        {"model": model, "digest": digest},
+        {k: float(v) for k, v in summary.__dict__.items()},
+    )
     log.info("t3 fallback: %s", json.dumps(summary.__dict__))
     return 0
 
@@ -50,7 +62,33 @@ def baseline(model: str, split_file: Path, out: Path, limit: int | None) -> int:
     with out.open("w") as file:
         for row, answer in zip(rows, answers, strict=True):
             file.write(json.dumps({"pair_id": row["pair_id"], "output": answer}) + "\n")
+    from campus_safety.t3.track import log_run
+
+    log_run(
+        f"baseline-ollama-{model}", {"model": model, "split": split_file.name}, report.summary()
+    )
     log.info("t3 baseline %s on %s: %s", model, split_file.name, json.dumps(report.summary()))
+    return 0
+
+
+def track_kaggle(outputs: Path) -> int:
+    """Log a finished Kaggle run (run_info.json + metrics.json from the notebook) to MLflow."""
+    from campus_safety.t3.track import kaggle_metrics, log_run
+
+    run_info = json.loads((outputs / "run_info.json").read_text())
+    metrics = kaggle_metrics(json.loads((outputs / "metrics.json").read_text()))
+    metrics |= {
+        k: float(run_info[k])
+        for k in ("train_seconds", "train_loss", "gguf_seconds")
+        if k in run_info
+    }
+    artifacts = [
+        outputs / "metrics.json",
+        outputs / "run_info.json",
+        *outputs.glob("errors_*.json"),
+    ]
+    run_id = log_run("kaggle-qlora", run_info, metrics, artifacts)
+    log.info("t3 track-kaggle: logged run %s with %d metrics", run_id, len(metrics))
     return 0
 
 
@@ -71,6 +109,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline_parser.add_argument("--split", type=Path, default=Path("data/t3/test.jsonl"))
     baseline_parser.add_argument("--out", type=Path, default=Path("data/t3/baseline_ollama.jsonl"))
     baseline_parser.add_argument("--limit", type=int)
+    track_parser = commands.add_parser("track-kaggle", help="log the notebook's outputs to MLflow")
+    track_parser.add_argument("outputs", type=Path, help="the downloaded t3_outputs folder")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     from campus_safety.t3.ollama import OllamaError
@@ -80,6 +120,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return fallback_run(args.model, args.cache)
         if args.command == "baseline":
             return baseline(args.model, args.split, args.out, args.limit)
+        if args.command == "track-kaggle":
+            return track_kaggle(args.outputs)
         return export(args.out)
     except (LakeConfigError, OllamaError) as e:
         log.error("%s", e)

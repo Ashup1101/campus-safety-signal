@@ -30,6 +30,7 @@ dev = [
 ]
 ml = [
     "en-core-web-sm",
+    "mlflow-skinny>=3.17.1",
     "presidio-analyzer>=2.2.364",
 ]
 transform = [
