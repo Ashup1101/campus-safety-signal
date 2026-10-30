@@ -1,7 +1,7 @@
 # Gap register: segments where real public data is missing or too coarse. Synthetic data
 # (Phase 4) may patch only these, and every synthetic row carries the gap_id it patches.
 # Day ranges and counts come from gold.iu_crime_log_coverage and gold.bpd_cfs_audit (`make
-# transform`, `uv run lake coverage`); figures below as of 2026-10-29.
+# transform`, `uv run lake coverage`); figures below as of 2026-10-30, after the Wayback retry.
 gaps:
   - gap_id: iu_log_2017_2024
     reason: >-
@@ -41,12 +41,12 @@ gaps:
 
   - gap_id: iu_log_small_archive_gaps
     reason: >-
-      67 shorter gaps (924 days in total, median 2, longest 137) where daily PDFs were not
-      archived, failed to download, or did not parse: 2011 (6), 2012 (8), 2013 (8), 2015 (13),
+      65 shorter gaps (922 days in total, median 2, longest 137) where daily PDFs were not
+      archived, failed to download, or did not parse: 2011 (4), 2012 (8), 2013 (8), 2015 (13),
       2016 (14), 2017 (18). Exact ranges: gold.iu_crime_log_coverage (dataset 'all', kind 'gap').
     segment:
       source: iu_crime_log
-      start: 2011-09-03
+      start: 2011-09-14
       end: 2017-08-16
       fields: [all]
     closing_source: >-
