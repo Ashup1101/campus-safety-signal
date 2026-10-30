@@ -1,28 +1,32 @@
 """U.S. Department of Education Campus Safety and Security data: the Clery statistics every
 institution reports, one zip per survey year (each covering the three prior calendar years).
 
-Only IU Bloomington's rows (UNITID 151351, all branches) are kept in silver.
+Never fetched: ope.ed.gov's robots.txt answers our crawler with 403, which we treat as a ban. The
+owner downloads CrimeYYYYEXCEL.zip in a browser into data/manual/doe/, and `calibration import-doe`
+copies those files into bronze with their sha256. Only IU Bloomington's rows (UNITID 151351, all
+branches) are kept in silver.
 """
 
+import hashlib
 import io
-import json
 import re
-import time
 import zipfile
-from collections.abc import Callable, Iterable, Iterator, Sequence
+from collections.abc import Iterator, Sequence
+from dataclasses import dataclass
+from datetime import UTC, datetime
+from pathlib import Path
 
 import xlrd
 
-from campus_safety import fetch
 from campus_safety.lake import bronze
 from campus_safety.lake.storage import Lake
 
 SOURCE = "doe_campus_safety"
-API = "https://ope.ed.gov/campussafety/api/dataFiles"
+MANUAL_DIR = Path("manual", "doe")  # under the data dir; filled by hand
 UNITID = "151351"
 MAX_ZIP_BYTES = 120 * 1024 * 1024
 MAX_MEMBER_BYTES = 64 * 1024 * 1024
-DELAY_SECONDS = 2.0
+_ZIP_NAME = re.compile(r"^Crime(\d{4})EXCEL\.zip$")
 # Oncampuscrime222324.xls: where, what, and the three calendar years covered.
 _MEMBER = re.compile(
     r"^(oncampus|noncampus|publicproperty|reported|residencehall)"
@@ -33,6 +37,7 @@ _COUNT = re.compile(r"^([A-Z_]+?)(\d{2})$")
 
 ROWS = (
     ("source_ref", "VARCHAR"),
+    ("source_sha256", "VARCHAR"),  # of the zip as downloaded
     ("run_id", "VARCHAR"),
     ("survey_year", "INTEGER"),
     ("unitid_p", "VARCHAR"),
@@ -45,38 +50,45 @@ ROWS = (
 )
 
 
-def file_url(name: str) -> str:
-    return f"{API}/file?fileName={name}"
+@dataclass(frozen=True)
+class ImportSummary:
+    imported: int
+    present: int  # same bytes already in bronze
+    skipped: int  # not CrimeYYYYEXCEL.zip, too large, or not a zip
 
 
-def pull(
-    lake: Lake,
-    run_id: str,
-    survey_years: Iterable[int],
-    *,
-    sleep: Callable[[float], None] = time.sleep,
-) -> int:
-    listing = fetch.polite_get(f"{API}/fileList")
-    available = {item["FileName"] for item in json.loads(listing.body)}
-    stored = 0
-    for year in survey_years:
-        name = f"Crime{year}EXCEL.zip"
-        if name not in available:
+def import_manual(lake: Lake, data_dir: Path) -> ImportSummary:
+    """Copy hand-downloaded survey zips from <data_dir>/manual/doe/ into bronze. No network."""
+    folder = data_dir / MANUAL_DIR
+    known = {manifest.sha256 for manifest in bronze.manifests(lake, SOURCE)}
+    imported = present = skipped = 0
+    for path in sorted(folder.iterdir()) if folder.is_dir() else []:
+        if (
+            not path.is_file()
+            or not _ZIP_NAME.match(path.name)
+            or path.stat().st_size > MAX_ZIP_BYTES
+            or not zipfile.is_zipfile(path)
+        ):
+            skipped += 1
             continue
-        sleep(DELAY_SECONDS)
-        page = fetch.polite_get(file_url(name), max_bytes=MAX_ZIP_BYTES)
+        body = path.read_bytes()
+        digest = hashlib.sha256(body).hexdigest()
+        if digest in known:
+            present += 1
+            continue
         bronze.write(
             lake,
             source=SOURCE,
-            body=page.body,
-            url=file_url(name),
-            fetched_at=page.fetched_at,
-            http_status=page.status,
-            run_id=f"{run_id}-{year}",
+            body=body,
+            url=f"manual:{MANUAL_DIR.as_posix()}/{path.name}",
+            fetched_at=datetime.fromtimestamp(path.stat().st_mtime, UTC),  # when it was downloaded
+            http_status=None,
+            run_id=f"manual-{digest[:12]}",
             ext="zip",
         )
-        stored += 1
-    return stored
+        known.add(digest)
+        imported += 1
+    return ImportSummary(imported, present, skipped)
 
 
 def survey_year(manifest: bronze.Manifest) -> int:
@@ -135,6 +147,7 @@ def clery_rows(
     return [
         (
             manifest.key,
+            manifest.sha256,
             manifest.run_id,
             year,
             _unitid(values[unit]),

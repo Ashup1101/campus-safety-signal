@@ -1,10 +1,11 @@
-"""calibration: pull published aggregates (Clery data files, BPS packets) into bronze."""
+"""calibration: published aggregates into bronze; make transform builds silver.calibration_*."""
 
 import argparse
 import logging
 import os
 from collections.abc import Sequence
 from datetime import UTC, datetime
+from pathlib import Path
 
 from botocore.exceptions import BotoCoreError, ClientError
 
@@ -24,44 +25,35 @@ def years(text: str) -> range:
 def main(argv: Sequence[str] | None = None) -> int:
     this_year = datetime.now(UTC).year
     parser = argparse.ArgumentParser(prog="calibration", description=__doc__)
+    parser.add_argument("--data-dir", type=Path, default=Path("data"), help="default: data")
     commands = parser.add_subparsers(dest="command", required=True)
-    pull = commands.add_parser("pull", help="Clery data files and Board of Public Safety packets")
-    pull.add_argument(
-        "--doe-years", type=years, default=years("2014-2025"), help="survey years, e.g. 2014-2025"
-    )
-    pull.add_argument(
-        "--sources",
-        default="doe,bps",
-        help="comma-separated: doe (Clery data files), bps (meeting packets); default both",
-    )
+    pull = commands.add_parser("pull", help="fetch Board of Public Safety meeting packets")
     pull.add_argument(
         "--bps-years",
         type=years,
         default=years(f"2021-{this_year}"),
         help=f"meeting years, e.g. 2021-{this_year}",
     )
+    commands.add_parser(
+        "import-doe",
+        help=f"copy hand-downloaded Clery zips from <data-dir>/{doe.MANUAL_DIR} (never fetches)",
+    )
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         lake = open_lake(os.environ.get("LAKE_URI"))
-    except LakeConfigError as e:
+        if args.command == "import-doe":
+            summary = doe.import_manual(lake, args.data_dir)
+            log.info(
+                "doe: imported %d zips, %d already in bronze, %d files skipped",
+                summary.imported,
+                summary.present,
+                summary.skipped,
+            )
+            return 0
+        log.info("bps: stored %d packets", bps.pull(lake, bronze.new_run_id(), args.bps_years))
+        return 0
+    except (fetch.FetchError, LakeConfigError, ClientError, BotoCoreError, ValueError) as e:
         log.error("%s", e)
         return 1
-    run_id = bronze.new_run_id()
-    pulls = {
-        "doe": lambda: doe.pull(lake, run_id, args.doe_years),
-        "bps": lambda: bps.pull(lake, run_id, args.bps_years),
-    }
-    names = args.sources.split(",")
-    if unknown := sorted(set(names) - pulls.keys()):
-        parser.error(f"unknown sources: {', '.join(unknown)}")
-    failed = 0
-    # Each source runs on its own: a site that bans us (robots.txt) must not stop the others.
-    for name in names:
-        try:
-            log.info("%s: stored %d files", name, pulls[name]())
-        except (fetch.FetchError, ClientError, BotoCoreError, ValueError) as e:
-            log.error("%s: %s", name, e)
-            failed += 1
-    return 1 if failed else 0
