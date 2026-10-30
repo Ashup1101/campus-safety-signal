@@ -29,17 +29,36 @@ jobs:
       contents: read
       id-token: write
     steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      # Environment variables only exist once terraform apply has run; until then the job ends
+      # green with a notice instead of failing every day.
+      - name: Check the ingest environment is configured
+        id: configured
+        env:
+          ROLE: ${{ vars.AWS_ROLE_ARN }}
+          REGION: ${{ vars.AWS_REGION }}
+          LAKE: ${{ vars.LAKE_URI }}
+        run: |
+          if [ -n "$ROLE" ] && [ -n "$REGION" ] && [ -n "$LAKE" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::ingest environment not configured yet (terraform apply sets it); skipping"
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+      - if: steps.configured.outputs.ready == 'true'
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
-      - uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
+      - if: steps.configured.outputs.ready == 'true'
+        uses: astral-sh/setup-uv@1c37ad07a6a961277cf70c0d37d6f313000f5884 # v10.3.0
+      - if: steps.configured.outputs.ready == 'true'
+        uses: aws-actions/configure-aws-credentials@e1253824e5c10ff9df46874f81ed3ec929e19cfd # v6.3.0
         with:
           role-to-assume: ${{ vars.AWS_ROLE_ARN }}
           aws-region: ${{ vars.AWS_REGION }}
           role-session-name: ingest-${{ github.run_id }}
       # The role cannot list bronze, so the 12-hour guard is off (--min-interval-hours 0).
       - name: Fetch to bronze, then validate
+        if: steps.configured.outputs.ready == 'true'
         env:
           LAKE_URI: ${{ vars.LAKE_URI }}
           RUN_ID: gha-${{ github.run_id }}-${{ github.run_attempt }}
