@@ -11,6 +11,10 @@ terraform {
       source  = "integrations/github"
       version = "6.13.0"
     }
+    archive = {
+      source  = "hashicorp/archive"
+      version = "2.8.1"
+    }
   }
 }
 
