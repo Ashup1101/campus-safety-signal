@@ -11,6 +11,7 @@ dependencies = [
 iu-crime-log = "campus_safety.iu_crime_log.cli:main"
 bpd-cfs = "campus_safety.bpd_cfs.cli:main"
 calibration = "campus_safety.calibration.cli:main"
+collect = "campus_safety.collectors.cli:main"
 lake = "campus_safety.lake.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
