@@ -1,6 +1,7 @@
-# Markdown never enters git
+# Markdown never enters git, except the root README
 *.md
 *.MD
+!/README.md
 
 # Local-only context, data, secrets
 .claude/

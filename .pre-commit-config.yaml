@@ -27,6 +27,7 @@ repos:
         language: fail
         entry: Markdown stays local and gitignored; unstage it
         files: (?i)\.md$
+        exclude: ^README\.md$
       - id: no-ai-attribution
         name: block AI attribution in commit message
         language: python

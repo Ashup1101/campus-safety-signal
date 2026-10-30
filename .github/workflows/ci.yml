@@ -60,11 +60,11 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: No tracked markdown
+      - name: No tracked markdown except the root README
         run: |
-          tracked="$(git ls-files ':(icase)*.md')"
+          tracked="$(git ls-files ':(icase)*.md' | grep -vx 'README.md' || true)"
           if [ -n "$tracked" ]; then
-            echo "::error::Markdown must stay local:"
+            echo "::error::Markdown must stay local (only the root README.md is tracked):"
             echo "$tracked"
             exit 1
           fi
