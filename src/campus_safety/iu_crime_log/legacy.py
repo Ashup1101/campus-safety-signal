@@ -116,32 +116,38 @@ def _stamp(text: str, what: str) -> datetime | None:
 
 def _incident(
     where: str,
+    source: list[str],
     case: str,
     reported: datetime | None,
     offense: str,
     location: str,
     disposition: str,
     occurred: tuple[datetime | None, datetime | None],
-) -> tuple[str, Incident]:
+) -> tuple[str, Incident, str]:
     if not case or not offense or reported is None:
         raise ParseError(f"{where}: blank case number, offense, or date reported")
     label, count = split_offense(offense)
-    return where, Incident(
-        case_number=case,
-        offense=label,
-        offense_raw=offense,
-        offense_count=count,
-        date_reported=reported.date(),
-        occurred_from=occurred[0],
-        occurred_to=occurred[1],
-        location=_CAMPUS_SUFFIX.sub("", location),
-        disposition=disposition.rstrip(". "),
+    return (
+        where,
+        Incident(
+            case_number=case,
+            offense=label,
+            offense_raw=offense,
+            offense_count=count,
+            date_reported=reported.date(),
+            occurred_from=occurred[0],
+            occurred_to=occurred[1],
+            location=_CAMPUS_SUFFIX.sub("", location),
+            disposition=disposition.rstrip(". "),
+        ),
+        "\n".join(source),
     )
 
 
 def _parse_report(lines: list[str]) -> CrimeLog:
     start, end = _window(lines, _REPORT_WINDOW, "%m/%d/%Y")
     blocks: list[dict[str, str]] = []
+    block_lines: list[list[str]] = []
     field: str | None = None
     for number, line in enumerate(lines):
         if _PAGE_HEADER.match(line):
@@ -149,8 +155,11 @@ def _parse_report(lines: list[str]) -> CrimeLog:
         reported = _REPORTED.match(line)
         if reported:
             blocks.append({"date reported": reported[1], "report #": reported[2]})
+            block_lines.append([line])
             field = None
             continue
+        if block_lines:
+            block_lines[-1].append(line)
         match = _FIELD.match(line)
         if match and blocks:
             field = match[1].lower()
@@ -169,6 +178,7 @@ def _parse_report(lines: list[str]) -> CrimeLog:
         found.append(
             _incident(
                 where,
+                block_lines[position],
                 block["report #"],
                 _stamp(block["date reported"], f"{where} date reported"),
                 # CAD events: the final incident type wins over the initial call type.
@@ -180,16 +190,19 @@ def _parse_report(lines: list[str]) -> CrimeLog:
                 occurred,
             )
         )
-    return CrimeLog("Bloomington", start, end, merge_repeats(found))
+    return CrimeLog("Bloomington", start, end, *merge_repeats(found))
 
 
 def _parse_cad(lines: list[str]) -> CrimeLog:
     start, end = _window(lines, _CAD_WINDOW, "%b %d, %Y")
     entries: list[dict[str, list[str]]] = []
+    entry_lines: list[list[str]] = []
     last: str | None = None
     for number, line in enumerate(lines):
         if _PAGE_HEADER.match(line) or _CAD_FOOTER.match(line):
             continue
+        if entry_lines and not line.lower().startswith("date reported:"):
+            entry_lines[-1].append(line)
         row = next(
             ((name, m) for name, m in ((n, p.match(line)) for n, p in _CAD_ROWS.items()) if m), None
         )
@@ -197,6 +210,7 @@ def _parse_cad(lines: list[str]) -> CrimeLog:
             name, match = row
             if name == "reported":
                 entries.append({})
+                entry_lines.append([line])
             if not entries:
                 raise ParseError(f"line {number}: row before the first Date Reported")
             entries[-1][name] = list(match.groups())
@@ -224,6 +238,7 @@ def _parse_cad(lines: list[str]) -> CrimeLog:
         found.append(
             _incident(
                 where,
+                entry_lines[position],
                 report or event,
                 _stamp(reported, f"{where} date reported"),
                 incident,
@@ -232,4 +247,4 @@ def _parse_cad(lines: list[str]) -> CrimeLog:
                 (ends[0], ends[1]) if ends else (None, None),
             )
         )
-    return CrimeLog("Bloomington", start, end, merge_repeats(found))
+    return CrimeLog("Bloomington", start, end, *merge_repeats(found))
