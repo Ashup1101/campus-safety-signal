@@ -1,6 +1,9 @@
 """Calibration aggregates: Clery data files and BPS statistics slides. All figures are made up."""
 
+import hashlib
+import io
 import json
+import zipfile
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
@@ -18,6 +21,7 @@ from campus_safety.lake.storage import FileLake
 from campus_safety.lake.transform import transform
 
 FETCHED = datetime(2026, 10, 26, tzinfo=UTC)
+MANUAL_URL = "manual:manual/doe/Crime{}EXCEL.zip"
 SLIDES = [
     "CALLS FOR SERVICE",
     "The department has",
@@ -55,14 +59,14 @@ def test_clery_rows_keep_iu_counts_per_year() -> None:
         [151351002.0, "Indiana University-Bloomington", "Center", "", 1.0, 0.0, 1.0],
     ]
     found = doe.clery_rows(
-        manifest(doe.SOURCE, doe.file_url("Crime2025EXCEL.zip")),
+        manifest(doe.SOURCE, MANUAL_URL.format(2025)),
         2025,
         "oncampus",
         "crime",
         header,
         data,
     )
-    assert [row[3:] for row in found] == [
+    assert [row[4:] for row in found] == [
         ("151351001", "Main Campus", "oncampus", "crime", "MURD", 2023, 0),
         ("151351001", "Main Campus", "oncampus", "crime", "BURGLA", 2023, 12),
         ("151351001", "Main Campus", "oncampus", "crime", "BURGLA", 2024, 9),
@@ -71,8 +75,8 @@ def test_clery_rows_keep_iu_counts_per_year() -> None:
     ]
 
 
-def test_survey_year_comes_from_the_download_url() -> None:
-    assert doe.survey_year(manifest(doe.SOURCE, doe.file_url("Crime2019EXCEL.zip"))) == 2019
+def test_survey_year_comes_from_the_file_name() -> None:
+    assert doe.survey_year(manifest(doe.SOURCE, MANUAL_URL.format(2019))) == 2019
     with pytest.raises(ValueError, match="Crime"):
         doe.survey_year(manifest(doe.SOURCE, "https://example.org/other.zip"))
 
@@ -131,7 +135,7 @@ def test_transform_checks_feed_against_reported_calls(
             lake,
             source=source,
             body=body,
-            url=doe.file_url("Crime2025EXCEL.zip") if source == doe.SOURCE else "https://x",
+            url=MANUAL_URL.format(2025) if source == doe.SOURCE else "https://x",
             fetched_at=FETCHED,
             http_status=200,
             run_id=run_id,
@@ -139,7 +143,7 @@ def test_transform_checks_feed_against_reported_calls(
         )
 
     def fake_clery(m: bronze.Manifest, body: bytes) -> list[tuple[object, ...]]:
-        base = (m.key, m.run_id, 2025, "151351001", "Main", "oncampus", "crime", "BURGLA")
+        base = (m.key, m.sha256, m.run_id, 2025, "151351001", "Main", "oncampus", "crime", "BURGLA")
         return [(*base, 2023, 12), (*base, 2024, 9)]
 
     monkeypatch.setattr(doe, "rows", fake_clery)
@@ -155,45 +159,53 @@ def test_transform_checks_feed_against_reported_calls(
     assert "silver/calibration_clery.parquet" in lake.keys("silver/")
 
 
-def test_doe_pull_stores_listed_survey_zips(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-) -> None:
-    requested: list[str] = []
+def zip_bytes(member: str = "ReadMe.txt") -> bytes:
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w") as archive:
+        archive.writestr(member, "made up")
+    return buffer.getvalue()
 
-    def fake_polite_get(url: str, max_bytes: int = fetch.MAX_BYTES) -> fetch.Page:
-        requested.append(url)
-        if url.endswith("fileList"):
-            body = json.dumps(
-                [{"FileName": "Crime2024EXCEL.zip"}, {"FileName": "Crime2025SAS.zip"}]
-            )
-            return fetch.Page(url, body.encode(), FETCHED)
-        return fetch.Page(url, b"zip bytes", FETCHED)
 
-    monkeypatch.setattr(fetch, "polite_get", fake_polite_get)
+@pytest.fixture
+def no_network(monkeypatch: pytest.MonkeyPatch) -> None:
+    def refuse(*args: object, **kwargs: object) -> fetch.Page:
+        raise AssertionError("import-doe must never fetch")
+
+    monkeypatch.setattr(fetch, "polite_get", refuse)
+
+
+def test_import_doe_reads_only_the_manual_folder(no_network: None, tmp_path: Path) -> None:
+    folder = tmp_path / "data" / doe.MANUAL_DIR
+    folder.mkdir(parents=True)
+    good = zip_bytes()
+    (folder / "Crime2025EXCEL.zip").write_bytes(good)
+    (folder / "Crime2024EXCEL.zip").write_bytes(b"not a zip")
+    (folder / "notes.txt").write_text("ignored")
+    (tmp_path / "data" / "Crime2023EXCEL.zip").write_bytes(zip_bytes())  # outside manual/doe
     lake = FileLake(tmp_path / "lake")
-    assert doe.pull(lake, "cal", [2024, 2025], sleep=lambda _: None) == 1
+
+    summary = doe.import_manual(lake, tmp_path / "data")
+    assert (summary.imported, summary.present, summary.skipped) == (1, 0, 2)
     (stored,) = bronze.manifests(lake, doe.SOURCE)
-    assert stored.url == doe.file_url("Crime2024EXCEL.zip")
-    assert stored.run_id == "cal-2024"
+    assert stored.url == "manual:manual/doe/Crime2025EXCEL.zip"
+    assert stored.http_status is None
+    assert stored.sha256 == hashlib.sha256(good).hexdigest()
+    assert bronze.read(lake, stored) == good
+    assert doe.survey_year(stored) == 2025
+
+    again = doe.import_manual(lake, tmp_path / "data")
+    assert (again.imported, again.present) == (0, 1)
 
 
-def test_a_banned_source_does_not_stop_the_others(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, caplog: pytest.LogCaptureFixture
-) -> None:
-    def banned(*args: object, **kwargs: object) -> int:
-        raise fetch.RobotsDisallowedError("https://ope.example.gov/robots.txt returned HTTP 403")
-
-    ran: list[str] = []
-
-    def packets(*args: object, **kwargs: object) -> int:
-        ran.append("bps")
-        return 3
-
-    monkeypatch.setattr(doe, "pull", banned)
-    monkeypatch.setattr(bps, "pull", packets)
+def test_import_doe_cli(no_network: None, monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    folder = tmp_path / "data" / doe.MANUAL_DIR
+    folder.mkdir(parents=True)
+    (folder / "Crime2022EXCEL.zip").write_bytes(zip_bytes())
     monkeypatch.setenv("LAKE_URI", (tmp_path / "lake").as_uri())
-    assert cli.main(["pull"]) == 1
-    assert ran == ["bps"]
-    assert "doe: https://ope.example.gov/robots.txt returned HTTP 403" in caplog.text
-    with pytest.raises(SystemExit):
-        cli.main(["pull", "--sources", "doe,nope"])
+    assert cli.main(["--data-dir", str(tmp_path / "data"), "import-doe"]) == 0
+    assert len(bronze.manifests(FileLake(tmp_path / "lake"), doe.SOURCE)) == 1
+
+
+def test_import_doe_without_a_folder_imports_nothing(no_network: None, tmp_path: Path) -> None:
+    summary = doe.import_manual(FileLake(tmp_path / "lake"), tmp_path / "data")
+    assert (summary.imported, summary.present, summary.skipped) == (0, 0, 0)

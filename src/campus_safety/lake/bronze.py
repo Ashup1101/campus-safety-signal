@@ -32,7 +32,7 @@ class Manifest:
     url: str
     fetched_at: datetime  # UTC
     sha256: str  # of the uncompressed body
-    http_status: int
+    http_status: int | None  # None for files imported by hand, never fetched
     run_id: str
     captured_at: datetime | None = None  # archive sources: when the archive saw the page
 
@@ -87,7 +87,7 @@ def write(
     body: bytes,
     url: str,
     fetched_at: datetime,
-    http_status: int,
+    http_status: int | None,
     run_id: str,
     ext: str,
     captured_at: datetime | None = None,
