@@ -16,14 +16,25 @@ NOTES = (Path("CLAUDE.md"), Path(".notes"))
 log = logging.getLogger("lake")
 
 
-def run_transform(work_dir: Path, cache_dir: Path) -> int:
+VERIFIED = Path("data", "manual", "llm_verified.txt")  # case_number|offense per line, owner-checked
+
+
+def _verified(path: Path) -> frozenset[tuple[str, str]]:
+    if not path.exists():
+        return frozenset()
+    pairs = (line.split("|", 1) for line in path.read_text().splitlines() if "|" in line)
+    return frozenset((case.strip(), offense.strip()) for case, offense in pairs)
+
+
+def run_transform(work_dir: Path, cache_dir: Path, extractor: str, fallback_cache: Path) -> int:
     # Imported here: duckdb and dbt live in the transform group, not in the ingest install.
     from campus_safety.iu_crime_log.classify import record_unclassified
-    from campus_safety.lake.transform import TransformError, transform
+    from campus_safety.lake.transform import Extraction, TransformError, transform
 
     lake = open_lake(os.environ.get("LAKE_URI"), cache_dir)
+    extraction = Extraction(extractor, fallback_cache, _verified(VERIFIED))
     try:
-        summary = transform(lake, work_dir)
+        summary = transform(lake, work_dir, extraction)
     except TransformError as e:
         log.error("%s", e)
         return 1
@@ -67,6 +78,8 @@ def run_transform(work_dir: Path, cache_dir: Path) -> int:
                 )
             ),
         )
+    if extractor == "llm_fallback":
+        log.info("llm_fallback: %d incidents from cached model answers", summary.llm_recovered)
     if summary.calibration_files or summary.calibration_errors:
         log.info(
             "calibration: %d files staged, %d unreadable",
@@ -141,7 +154,18 @@ def main(argv: Sequence[str] | None = None) -> int:
     parser.add_argument("--work-dir", type=Path, default=Path("data/warehouse"))
     parser.add_argument("--cache-dir", type=Path, default=Path("data/cache/lake"))
     commands = parser.add_subparsers(dest="command", required=True)
-    commands.add_parser("transform", help="parse all bronze, dbt build, publish silver")
+    transform_parser = commands.add_parser(
+        "transform", help="parse all bronze, dbt build, publish silver"
+    )
+    transform_parser.add_argument(
+        "--extractor",
+        choices=["rules", "llm_fallback"],
+        default="rules",
+        help="llm_fallback adds cached model answers for snapshots the rules could not read",
+    )
+    transform_parser.add_argument(
+        "--fallback-cache", type=Path, default=Path("data/cache/llm_fallback")
+    )
     commands.add_parser("coverage", help="print covered date ranges and gaps (last transform)")
     copy_parser = commands.add_parser("copy-bronze", help="copy bronze from another lake URI")
     copy_parser.add_argument("source_uri", help="e.g. file:///abs/path/data/lake")
@@ -156,7 +180,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             return print_coverage(args.work_dir)
         if args.command == "copy-bronze":
             return copy_bronze(args.source_uri)
-        return run_transform(args.work_dir, args.cache_dir)
+        return run_transform(args.work_dir, args.cache_dir, args.extractor, args.fallback_cache)
     except (LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)
         return 1

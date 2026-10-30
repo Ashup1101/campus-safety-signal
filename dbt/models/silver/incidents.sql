@@ -32,7 +32,9 @@ select
     cast(null as integer) as deaths,
     cast(null as boolean) as weapon_involved,
     cast(null as varchar) as summary,
-    cast(1.0 as double) as confidence,
+    -- Rules parsing is exact; LLM-read rows count less until the owner verifies them.
+    cast(case extractor when 'rules' then 1.0 when 'llm_verified' then 0.9 else 0.5 end as double)
+        as confidence,
     cast(null as varchar) as gap_id,
     cast(null as bigint) as seed
 from {{ ref('iu_crime_log_incidents') }}
