@@ -8,6 +8,7 @@ select
     md5('iu_crime_log|' || case_number || '|' || offense) as incident_id,
     'official' as source,
     dataset,
+    max_by(extractor, observed_at) as extractor,
     max_by(source_ref, observed_at) as source_ref,
     case_number || '|' || offense as source_record_id,
     max_by(run_id, observed_at) as run_id,

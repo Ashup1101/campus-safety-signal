@@ -32,6 +32,7 @@ OBSERVATIONS = (
     ("disposition", "VARCHAR"),
     ("severity", "VARCHAR"),
     ("sensitive", "BOOLEAN"),
+    ("extractor", "VARCHAR"),  # rules | llm_fallback | llm_verified (owner-checked LLM rows)
 )
 
 RUNS = (
@@ -54,7 +55,12 @@ def _utc(at: datetime) -> datetime:
     return at.astimezone(UTC).replace(tzinfo=None)
 
 
-def observation_rows(log: CrimeLog, manifest: Manifest) -> list[tuple[object, ...]]:
+def observation_rows(
+    log: CrimeLog,
+    manifest: Manifest,
+    extractor: str = "rules",
+    verified: frozenset[tuple[str, str]] = frozenset(),
+) -> list[tuple[object, ...]]:
     return [
         (
             manifest.source,
@@ -76,6 +82,9 @@ def observation_rows(log: CrimeLog, manifest: Manifest) -> list[tuple[object, ..
             incident.disposition,
             incident.severity.value,
             incident.sensitive,
+            "llm_verified"
+            if extractor == "llm_fallback" and (incident.case_number, incident.offense) in verified
+            else extractor,
         )
         for incident in log.incidents
     ]
