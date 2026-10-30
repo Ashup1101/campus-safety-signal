@@ -20,6 +20,7 @@ from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
 from campus_safety.iu_crime_log.parse import CrimeLog, ParseError, parse_crime_log
 from campus_safety.lake import bronze
 from campus_safety.lake.storage import Lake
+from campus_safety.t3.privacy import known_words
 from campus_safety.t3.schema import target
 
 SPLITS = ("train", "validation", "test", "legacy_holdout")
@@ -49,7 +50,9 @@ def _layout(manifest: bronze.Manifest, source: str) -> str:
     return "pdf_cad" if "Location :" in source else "pdf_report"
 
 
-def collect(lake: Lake, has_person: Callable[[str], bool]) -> tuple[list[Pair], Counter[str]]:
+def collect(
+    lake: Lake, has_person: Callable[[str, frozenset[str]], bool]
+) -> tuple[list[Pair], Counter[str]]:
     counts: Counter[str] = Counter()
     pairs: dict[str, Pair] = {}
     manifests = sorted(
@@ -69,7 +72,9 @@ def collect(lake: Lake, has_person: Callable[[str], bool]) -> tuple[list[Pair], 
             if pair_id in pairs:
                 counts["duplicates"] += 1
                 continue
-            if has_person(source):
+            answer = target(incident)
+            fields = (answer[k] for k in ("case_number", "location", "offense", "disposition"))
+            if has_person(source, known_words(fields)):
                 counts["dropped_person"] += 1
                 continue
             pairs[pair_id] = Pair(
@@ -79,7 +84,7 @@ def collect(lake: Lake, has_person: Callable[[str], bool]) -> tuple[list[Pair], 
                 layout=_layout(manifest, source),
                 date_reported=incident.date_reported.isoformat(),
                 source=source,
-                target=target(incident),
+                target=answer,
             )
     return sorted(pairs.values(), key=lambda p: (p.date_reported, p.pair_id)), counts
 
