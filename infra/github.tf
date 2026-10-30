@@ -1,3 +1,10 @@
+# GitHub created this environment (with no branch policy) when the scheduled ingest first ran
+# before apply. Adopt it so the plan updates it to main-only instead of failing on "exists".
+import {
+  to = github_repository_environment.ingest
+  id = "${var.github_repository}:ingest"
+}
+
 resource "github_repository_environment" "ingest" {
   repository  = var.github_repository
   environment = "ingest"
