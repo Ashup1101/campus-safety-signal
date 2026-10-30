@@ -42,8 +42,10 @@ audit:
 check: lint typecheck test audit infra-check
 
 # Replay all of bronze into silver: parse, dbt build (tests + contract), publish.
+# EXTRACTOR=llm_fallback adds cached T3-lite answers for snapshots the rules could not read.
+EXTRACTOR ?= rules
 transform:
-	LAKE_URI='$(LAKE_URI)' $(AWS_ENV) uv run lake transform
+	LAKE_URI='$(LAKE_URI)' $(AWS_ENV) uv run lake transform --extractor $(EXTRACTOR)
 
 # Local-only notes (CLAUDE.md, .notes/) to s3://<bucket>/_private/notes/; S3 versioning keeps
 # every earlier copy. The lake itself is already versioned in S3.

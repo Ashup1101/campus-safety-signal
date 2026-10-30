@@ -37,6 +37,7 @@ select
     latest.disposition,
     latest.severity,
     latest.sensitive,
+    latest.extractor,
     latest.source_ref,
     latest.run_id,
     latest.ingested_at,
