@@ -86,11 +86,13 @@ def import_snapshots(lake: Lake, data_dir: Path) -> int:
 def backfill_wayback(lake: Lake, delay: float, limit: int | None) -> int:
     summary = backfill.backfill(lake, delay=delay, limit=limit)
     log.info(
-        "wayback: %d captures listed, %d fetched, %d already in bronze, %d failed",
+        "wayback: %d captures listed, %d fetched, %d already in bronze, %d failed;"
+        " %d CDX listings unavailable",
         summary.listed,
         summary.fetched,
         summary.present,
         summary.failed,
+        summary.listings_failed,
     )
     return 0
 

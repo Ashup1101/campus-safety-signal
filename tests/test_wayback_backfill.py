@@ -143,6 +143,22 @@ def test_cdx_listing_retries_then_gives_up(monkeypatch: pytest.MonkeyPatch, tmp_
         raise fetch.HTTPStatusError(url, 503)
 
     monkeypatch.setattr(fetch, "polite_get", unavailable)
-    with pytest.raises(fetch.FetchError, match="CDX listing failed"):
+    with pytest.raises(fetch.FetchError, match="every CDX listing failed"):
         backfill.backfill(FileLake(tmp_path / "lake"), delay=1, sleep=lambda _: None)
-    assert len(attempts) == backfill.RETRIES
+    assert len(attempts) == backfill.RETRIES * len(backfill._listing_urls())
+
+
+def test_one_failed_year_does_not_stop_the_others(
+    archive: list[str], monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    working = fetch.polite_get
+
+    def year_2013_down(url: str, **kwargs: object) -> fetch.Page:
+        if "from=2013" in url:
+            raise fetch.HTTPStatusError(url, 503)
+        return working(url)
+
+    monkeypatch.setattr(fetch, "polite_get", year_2013_down)
+    summary = backfill.backfill(FileLake(tmp_path / "lake"), delay=0, sleep=lambda _: None)
+    assert summary.listings_failed == 1
+    assert summary.fetched == 2

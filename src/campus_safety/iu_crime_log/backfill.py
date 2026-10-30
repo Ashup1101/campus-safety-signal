@@ -40,6 +40,7 @@ class BackfillSummary:
     fetched: int
     present: int
     failed: int
+    listings_failed: int = 0  # CDX listings that failed with no stored copy to fall back on
 
 
 def _listing_urls() -> list[tuple[str, str]]:
@@ -53,10 +54,14 @@ def _listing_urls() -> list[tuple[str, str]]:
 
 def captures(
     lake: Lake, run_id: str, sleep: Callable[[float], None], delay: float
-) -> list[tuple[str, wayback.Capture]]:
+) -> tuple[list[tuple[str, wayback.Capture]], int]:
+    """Captures to consider, and how many listings failed with nothing stored to fall back on.
+    A missing year only narrows this run; the next run lists it again."""
     stored = {m.url: m for m in bronze.manifests(lake, LISTING_SOURCE)}  # newest wins
     found: dict[str, tuple[str, wayback.Capture]] = {}
-    for number, (ext, listing_url) in enumerate(_listing_urls()):
+    urls = _listing_urls()
+    failed = 0
+    for number, (ext, listing_url) in enumerate(urls):
         sleep(delay)
         listing = _get(listing_url, sleep, delay, timeout=wayback.CDX_TIMEOUT_SECONDS)
         if listing is not None:
@@ -74,11 +79,14 @@ def captures(
         elif listing_url in stored:
             body = bronze.read(lake, stored[listing_url])
         else:
-            raise fetch.FetchError(f"CDX listing failed after {RETRIES} attempts: {listing_url}")
+            failed += 1
+            continue
         for capture in wayback.parse_cdx(body):
             if ext != "pdf" or capture.original.lower().endswith(".pdf"):
                 found.setdefault(capture.raw_url, (ext, capture))
-    return list(found.values())
+    if failed == len(urls):
+        raise fetch.FetchError(f"every CDX listing failed after {RETRIES} attempts")
+    return list(found.values()), failed
 
 
 def backfill(
@@ -89,7 +97,7 @@ def backfill(
     sleep: Callable[[float], None] = time.sleep,
 ) -> BackfillSummary:
     done = {manifest.url for manifest in bronze.manifests(lake, SOURCE)}
-    listed = captures(lake, bronze.new_run_id(), sleep, delay)
+    listed, listings_failed = captures(lake, bronze.new_run_id(), sleep, delay)
     todo = [(ext, c) for ext, c in listed if c.raw_url not in done][:limit]
     fetched = failed = 0
     for number, (ext, capture) in enumerate(todo, 1):
@@ -113,7 +121,7 @@ def backfill(
         if number % 50 == 0:
             log.info("backfill progress: %d of %d", number, len(todo))
     present = sum(1 for _, capture in listed if capture.raw_url in done)
-    return BackfillSummary(len(listed), fetched, present, failed)
+    return BackfillSummary(len(listed), fetched, present, failed, listings_failed)
 
 
 def _get(
