@@ -122,3 +122,20 @@ def test_clean_text_collapses_whitespace() -> None:
 def test_unexpected_shapes_fail_loudly(html: str) -> None:
     with pytest.raises(ParseError):
         parse_crime_log(html)
+
+
+def test_sources_are_the_incident_rows_as_published() -> None:
+    log = parse_crime_log(
+        page(section("Bloomington", incident(case="900001") + incident(case="900002")))
+    )
+    first, second = log.sources
+    assert first.startswith('<tr role="row" class="case_date">') and first.endswith("</tr>")
+    assert "900001" in first and "900002" not in first
+    assert first.count("<tr") == 4 and "  " not in first  # whitespace collapsed
+    assert "900002" in second
+
+
+def test_merged_repeats_keep_every_source_row() -> None:
+    row = incident(offense="BATTERY AGAINST PUBLIC SAFETY OFFICIAL")
+    (source,) = parse_crime_log(page(section("Bloomington", row + row))).sources
+    assert source.count('class="case_date"') == 2

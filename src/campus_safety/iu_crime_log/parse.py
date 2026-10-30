@@ -60,6 +60,10 @@ class CrimeLog:
     window_start: date
     window_end: date
     incidents: tuple[Incident, ...]
+    # Per incident, the source text it was parsed from (HTML rows or PDF lines, whitespace
+    # collapsed): the input side of extraction training pairs. Repeats merged into one incident
+    # keep all their rows.
+    sources: tuple[str, ...] = ()
 
 
 _DASHES = str.maketrans(dict.fromkeys("\u2010\u2011\u2012\u2013\u2014\u2212", "-"))
@@ -89,12 +93,16 @@ class _Table:
     heading: str
     window: str
     rows: list[list[str]] = field(default_factory=list)
+    spans: list[tuple[int, int]] = field(default_factory=list)  # each row's offsets in the page
     closed: bool = False
 
 
 class _PageParser(HTMLParser):
-    def __init__(self) -> None:
+    def __init__(self, html: str) -> None:
         super().__init__(convert_charrefs=True)
+        self.html = html
+        self._line_starts = [0] + [i + 1 for i, ch in enumerate(html) if ch == "\n"]
+        self._row_start = 0
         self.tables: list[_Table] = []
         self._heading = ""
         self._window = ""
@@ -107,6 +115,7 @@ class _PageParser(HTMLParser):
             self._text = []
         elif tag == "tr":
             self._row = []
+            self._row_start = self._offset()
         elif tag == "table":
             self._table = _Table(self._heading, self._window)
             self.tables.append(self._table)
@@ -123,6 +132,7 @@ class _PageParser(HTMLParser):
                 self._row.append(text)
         elif tag == "tr" and self._row is not None and self._table is not None:
             self._table.rows.append(self._row)
+            self._table.spans.append((self._row_start, self.html.find(">", self._offset()) + 1))
             self._row = None
         elif tag == "table" and self._table is not None:
             self._table.closed = True
@@ -132,9 +142,13 @@ class _PageParser(HTMLParser):
         if self._text is not None:
             self._text.append(data)
 
+    def _offset(self) -> int:
+        line, column = self.getpos()
+        return self._line_starts[line - 1] + column
+
 
 def parse_crime_log(html: str, campus: str = "Bloomington") -> CrimeLog:
-    parser = _PageParser()
+    parser = _PageParser(html)
     parser.feed(html)
     parser.close()
     heading = f"Daily Crime & Fire Log for the IU {campus} Campus"
@@ -147,20 +161,23 @@ def parse_crime_log(html: str, campus: str = "Bloomington") -> CrimeLog:
     window = _WINDOW.match(table.window)
     if window is None:
         raise ParseError(f"{campus} date window is not MM/DD/YYYY - MM/DD/YYYY")
+    incidents, sources = _incidents(table, html)
     return CrimeLog(
         campus=campus,
         window_start=_parse_time(window[1], "%m/%d/%Y", "window start").date(),
         window_end=_parse_time(window[2], "%m/%d/%Y", "window end").date(),
-        incidents=_incidents(table.rows),
+        incidents=incidents,
+        sources=sources,
     )
 
 
-def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
+def _incidents(table: _Table, html: str) -> tuple[tuple[Incident, ...], tuple[str, ...]]:
+    rows = table.rows
     if len(rows) == 1 and len(rows[0]) == 1 and rows[0][0].startswith(_NO_CRIMES):
-        return ()
+        return (), ()
     if not rows or len(rows) % len(_LAYOUT):
         raise ParseError(f"{len(rows)} table rows do not split into 4-row incidents")
-    found: list[tuple[str, Incident]] = []
+    found: list[tuple[str, Incident, str]] = []
     for first in range(0, len(rows), len(_LAYOUT)):
         group = rows[first : first + len(_LAYOUT)]
         for offset, (row, (left, right)) in enumerate(zip(group, _LAYOUT, strict=True)):
@@ -169,28 +186,35 @@ def _incidents(rows: list[list[str]]) -> tuple[Incident, ...]:
                     f"table row {first + offset}: expected labels {left!r}/{right!r}"
                     f" in a 4-cell row, got {len(row)} cells"
                 )
-        found.append((f"table row {first}", _incident(group, first)))
+        start, end = table.spans[first][0], table.spans[first + len(_LAYOUT) - 1][1]
+        source = " ".join(html[start:end].split())  # one line; tags kept as published
+        found.append((f"table row {first}", _incident(group, first), source))
     return merge_repeats(found)
 
 
-def merge_repeats(found: list[tuple[str, Incident]]) -> tuple[Incident, ...]:
+def merge_repeats(
+    found: list[tuple[str, Incident, str]],
+) -> tuple[tuple[Incident, ...], tuple[str, ...]]:
     """Key incidents by case number + offense. Identical repeats add to the count; a repeat
-    with different details raises, naming only its position."""
+    with different details raises, naming only its position. Returns incidents and sources."""
     incidents: dict[tuple[str, str], Incident] = {}
-    for position, incident in found:
+    sources: dict[tuple[str, str], str] = {}
+    for position, incident, source in found:
         key = (incident.case_number, incident.offense)
         seen = incidents.get(key)
         if seen is None:
             incidents[key] = incident
+            sources[key] = source
         elif replace(seen, offense_count=incident.offense_count) == incident:
             # A repeated charge is sometimes listed as identical rows instead of an X2 suffix.
             total = seen.offense_count + incident.offense_count
             incidents[key] = replace(seen, offense_count=total)
+            sources[key] += "\n" + source
         else:
             raise ParseError(
                 f"{position}: repeats an earlier case number + offense with different details"
             )
-    return tuple(incidents.values())
+    return tuple(incidents.values()), tuple(sources[key] for key in incidents)
 
 
 def _incident(group: list[list[str]], first: int) -> Incident:
