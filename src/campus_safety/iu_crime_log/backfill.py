@@ -40,7 +40,9 @@ class BackfillSummary:
 def captures() -> list[tuple[str, wayback.Capture]]:
     found: list[tuple[str, wayback.Capture]] = []
     for ext, url in TARGETS:
-        listing = fetch.polite_get(wayback.cdx_url(url, prefix=ext == "pdf"))
+        listing = fetch.polite_get(
+            wayback.cdx_url(url, prefix=ext == "pdf"), timeout=wayback.CDX_TIMEOUT_SECONDS
+        )
         found += [
             (ext, capture)
             for capture in wayback.parse_cdx(listing.body)

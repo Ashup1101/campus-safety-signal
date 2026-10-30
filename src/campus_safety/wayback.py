@@ -6,6 +6,7 @@ from datetime import UTC, datetime
 from urllib.parse import urlencode
 
 CDX = "https://web.archive.org/cdx/search/cdx"
+CDX_TIMEOUT_SECONDS = 180  # a prefix listing of ~1,000 URLs can take minutes to start answering
 
 
 @dataclass(frozen=True)

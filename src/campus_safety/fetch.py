@@ -61,17 +61,17 @@ def decode_body(raw: bytes, content_encoding: str, max_bytes: int = MAX_BYTES) -
 
 
 def get(url: str, max_bytes: int = MAX_BYTES) -> bytes:
-    return _get(url, max_bytes)[1]
+    return _get(url, max_bytes, TIMEOUT_SECONDS)[1]
 
 
-def _get(url: str, max_bytes: int) -> tuple[int, bytes]:
+def _get(url: str, max_bytes: int, timeout: float) -> tuple[int, bytes]:
     if urlsplit(url).scheme != "https":
         raise FetchError(f"refusing non-https URL {url!r}")
     # https is enforced above, so no file:// or other handlers are reachable.
     headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
     request = urllib.request.Request(url, headers=headers)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_SECONDS) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
             if urlsplit(response.geturl()).scheme != "https":
                 raise FetchError(f"{url} redirected off https to {response.geturl()}")
             raw = response.read(max_bytes + 1)
@@ -112,7 +112,7 @@ def check_robots(url: str) -> None:
         raise RobotsDisallowedError(f"robots.txt disallows {url}")
 
 
-def polite_get(url: str, max_bytes: int = MAX_BYTES) -> Page:
+def polite_get(url: str, max_bytes: int = MAX_BYTES, timeout: float = TIMEOUT_SECONDS) -> Page:
     check_robots(url)
-    status, body = _get(url, max_bytes)
+    status, body = _get(url, max_bytes, timeout)
     return Page(url=url, body=body, fetched_at=datetime.now(UTC), status=status)

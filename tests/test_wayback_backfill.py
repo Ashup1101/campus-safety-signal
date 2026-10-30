@@ -36,12 +36,18 @@ def test_cdx_parsing_and_raw_urls() -> None:
     assert "collapse=digest" in wayback.cdx_url("x")
 
 
+timeouts: list[object] = []
+
+
 @pytest.fixture
 def archive(monkeypatch: pytest.MonkeyPatch) -> list[str]:
     requested: list[str] = []
+    timeouts.clear()
 
-    def fake_polite_get(url: str) -> fetch.Page:
+    def fake_polite_get(url: str, **kwargs: object) -> fetch.Page:
         requested.append(url)
+        if url.startswith(wayback.CDX):
+            timeouts.append(kwargs.get("timeout"))
         if url.startswith(wayback.CDX):
             rows = PDF_CDX if "matchType=prefix" in url else PAGE_CDX
             return fetch.Page(url, json.dumps(rows).encode(), datetime.now(UTC))
@@ -84,7 +90,7 @@ def test_backfill_retries_when_the_archive_pushes_back(
     calls: list[str] = []
     waits: list[float] = []
 
-    def flaky(url: str) -> fetch.Page:
+    def flaky(url: str, **kwargs: object) -> fetch.Page:
         calls.append(url)
         if url.startswith(wayback.CDX):
             rows = [PAGE_CDX[0], PAGE_CDX[1]] if "matchType" not in url else [PDF_CDX[0]]
@@ -97,3 +103,8 @@ def test_backfill_retries_when_the_archive_pushes_back(
     summary = backfill.backfill(FileLake(tmp_path / "lake"), delay=2, sleep=waits.append)
     assert (summary.fetched, summary.failed) == (1, 0)
     assert 30 in waits
+
+
+def test_cdx_listings_get_a_long_timeout(archive: list[str], tmp_path: Path) -> None:
+    backfill.backfill(FileLake(tmp_path / "lake"), delay=0, sleep=lambda _: None)
+    assert timeouts == [wayback.CDX_TIMEOUT_SECONDS, wayback.CDX_TIMEOUT_SECONDS]
