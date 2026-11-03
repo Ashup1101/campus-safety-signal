@@ -1,0 +1,16 @@
+# Event nights: the activity map's event_night window (18:00 on the date to 04:00 the next
+# morning, local time) and the alert poller's high-alert window. Public calendar dates only.
+# Phase 5 extends this to the full calendar (home football, move-in, finals, earlier years).
+events:
+  - event_id: halloween_2024
+    name: Halloween
+    nights: [2024-10-31]
+  - event_id: halloween_2025
+    name: Halloween weekend
+    nights: [2025-10-31, 2025-11-01]
+  - event_id: little_500_2026
+    name: Little 500 weekend
+    nights: [2026-04-24, 2026-04-25]
+  - event_id: halloween_2026
+    name: Halloween weekend
+    nights: [2026-10-30, 2026-10-31]
