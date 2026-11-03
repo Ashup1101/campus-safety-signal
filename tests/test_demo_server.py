@@ -201,6 +201,8 @@ def test_replays_are_labeled_and_strip_descriptions(tmp_path: Path) -> None:
         "RECONSTRUCTION (IU alert sent Oct 4, 2026, 1:31 AM): Test alert. [description removed]"
     )
     assert all(a.test_only and a.verification == "reconstruction" for a in alerts)
+    assert alerts[1].official_at is not None
+    assert alerts[1].official_at.isoformat() == "2026-10-04T02:08:00-04:00"  # IU's own time
 
 
 @pytest.fixture
