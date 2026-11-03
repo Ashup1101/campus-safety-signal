@@ -1,4 +1,6 @@
 import gzip
+import ssl
+from email.message import Message
 
 import pytest
 
@@ -119,3 +121,30 @@ def test_robots_txt_is_fetched_once_per_host(monkeypatch: pytest.MonkeyPatch) ->
         "https://protect.example.edu/robots.txt",
         "https://web.example.org/robots.txt",
     ]
+
+
+def test_tls_context_adds_intermediates_without_new_roots() -> None:
+    context = fetch.tls_context()
+    assert not context.verify_flags & ssl.VERIFY_X509_PARTIAL_CHAIN
+    assert context.verify_mode == ssl.CERT_REQUIRED and context.check_hostname
+    bare = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
+    bare.load_verify_locations(cadata=fetch.INTERMEDIATES.read_text())
+    certs = bare.get_ca_certs()
+    assert len(certs) == 2
+    assert all(c["subject"] != c["issuer"] for c in certs)  # none is self-signed
+
+
+def test_conditional_get_returns_304_as_unchanged(monkeypatch: pytest.MonkeyPatch) -> None:
+    sent: list[dict[str, str] | None] = []
+
+    def fake_get(
+        url: str, max_bytes: int, timeout: float, extra: dict[str, str] | None = None
+    ) -> tuple[int, bytes, Message]:
+        sent.append(extra)
+        return 304, b"", Message()
+
+    monkeypatch.setattr(fetch, "check_robots", lambda url: None)
+    monkeypatch.setattr(fetch, "_get", fake_get)
+    page = fetch.polite_get("https://example.org/x", etag='"a"', last_modified="Sun")
+    assert (page.status, page.body, page.etag, page.last_modified) == (304, b"", '"a"', "Sun")
+    assert sent == [{"If-None-Match": '"a"', "If-Modified-Since": "Sun"}]
