@@ -1,13 +1,16 @@
 """Polite HTTP GET for public sources: identifying User-Agent, robots.txt first, bounded size."""
 
 import http.client
+import ssl
 import urllib.error
 import urllib.request
 import urllib.robotparser
 import zlib
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from email.message import Message
 from functools import cache
+from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
 from campus_safety import __version__
@@ -17,6 +20,7 @@ USER_AGENT = (
 )
 TIMEOUT_SECONDS = 30
 MAX_BYTES = 20 * 1024 * 1024
+INTERMEDIATES = Path(__file__).with_name("intermediates.pem")
 
 
 class FetchError(RuntimeError):
@@ -38,7 +42,9 @@ class Page:
     url: str
     body: bytes
     fetched_at: datetime
-    status: int = 200
+    status: int = 200  # 304: unchanged since the etag / last_modified sent; body is empty
+    etag: str | None = None
+    last_modified: str | None = None
 
 
 def decode_body(raw: bytes, content_encoding: str, max_bytes: int = MAX_BYTES) -> bytes:
@@ -64,26 +70,40 @@ def get(url: str, max_bytes: int = MAX_BYTES) -> bytes:
     return _get(url, max_bytes, TIMEOUT_SECONDS)[1]
 
 
-def _get(url: str, max_bytes: int, timeout: float) -> tuple[int, bytes]:
+@cache
+def tls_context() -> ssl.SSLContext:
+    """System roots plus intermediates some servers fail to send. Chains must still end at a
+    self-signed system root: partial chains (an intermediate as trust anchor) stay disabled."""
+    context = ssl.create_default_context()
+    context.load_verify_locations(cadata=INTERMEDIATES.read_text())
+    context.verify_flags &= ~ssl.VERIFY_X509_PARTIAL_CHAIN
+    return context
+
+
+def _get(
+    url: str, max_bytes: int, timeout: float, extra: dict[str, str] | None = None
+) -> tuple[int, bytes, Message]:
     if urlsplit(url).scheme != "https":
         raise FetchError(f"refusing non-https URL {url!r}")
     # https is enforced above, so no file:// or other handlers are reachable.
-    headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip"}
+    headers = {"User-Agent": USER_AGENT, "Accept-Encoding": "gzip", **(extra or {})}
     request = urllib.request.Request(url, headers=headers)  # noqa: S310
     try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=timeout, context=tls_context()) as response:  # noqa: S310
             if urlsplit(response.geturl()).scheme != "https":
                 raise FetchError(f"{url} redirected off https to {response.geturl()}")
             raw = response.read(max_bytes + 1)
             encoding = response.headers.get("Content-Encoding", "")
-            status = response.status
+            status, received = response.status, response.headers
     except urllib.error.HTTPError as e:
+        if e.code == 304 and extra:
+            return 304, b"", e.headers
         raise HTTPStatusError(url, e.code) from e
     except (OSError, http.client.HTTPException) as e:
         raise FetchError(f"GET {url} failed: {e}") from e
     if len(raw) > max_bytes:
         raise FetchError(f"GET {url} body exceeds {max_bytes} bytes")
-    return status, decode_body(raw, encoding, max_bytes)
+    return status, decode_body(raw, encoding, max_bytes), received
 
 
 def robots_allows(robots_txt: str, url: str) -> bool:
@@ -112,7 +132,25 @@ def check_robots(url: str) -> None:
         raise RobotsDisallowedError(f"robots.txt disallows {url}")
 
 
-def polite_get(url: str, max_bytes: int = MAX_BYTES, timeout: float = TIMEOUT_SECONDS) -> Page:
+def polite_get(
+    url: str,
+    max_bytes: int = MAX_BYTES,
+    timeout: float = TIMEOUT_SECONDS,
+    etag: str | None = None,
+    last_modified: str | None = None,
+) -> Page:
+    """GET after a robots.txt check. With etag / last_modified it is a conditional request and
+    an unchanged page comes back as status 304 with an empty body."""
     check_robots(url)
-    status, body = _get(url, max_bytes, timeout)
-    return Page(url=url, body=body, fetched_at=datetime.now(UTC), status=status)
+    conditional = {"If-None-Match": etag} if etag else {}
+    if last_modified:
+        conditional["If-Modified-Since"] = last_modified
+    status, body, headers = _get(url, max_bytes, timeout, conditional)
+    return Page(
+        url=url,
+        body=body,
+        fetched_at=datetime.now(UTC),
+        status=status,
+        etag=headers.get("ETag") or etag,
+        last_modified=headers.get("Last-Modified") or last_modified,
+    )

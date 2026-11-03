@@ -1,5 +1,6 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply transform
+	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay \
+	demo-assets demo demo-stop demo-walk demo-walk-home apps-check
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
@@ -86,3 +87,56 @@ infra-plan: $(TF)
 infra-apply: $(TF)
 	AWS_PROFILE='$(call env,AWS_PROFILE)' AWS_REGION='$(call env,AWS_REGION)' \
 		GITHUB_TOKEN="$$(gh auth token)" $(TF) -chdir=infra apply -input=false tfplan
+
+# Local IUPD demo server (apps/server, 127.0.0.1 only). Drills and replays reach test accounts only.
+DEMO := PYTHONPATH=apps/server nice -n 10 uv run python -m demo_server
+demo-seed:
+	$(DEMO) seed
+
+demo-drill:
+	$(DEMO) drill
+
+demo-all-clear:
+	$(DEMO) all-clear
+
+# make demo-replay REPLAY=kirkwood_2026_11_01 (ids: data/manual/demo_incidents.yaml)
+demo-replay:
+	@test -n '$(REPLAY)' || { echo "usage: make demo-replay REPLAY=<id>" >&2; exit 1; }
+	$(DEMO) replay '$(REPLAY)'
+
+# Pinned pmtiles CLI (go-pmtiles, checksum-verified, macOS arm64) for the offline map extract.
+PMTILES_VERSION := 1.31.2
+PMTILES_SHA256 := 40528f7f616fcbf91207cd48c8fc023d213f6d86c0cbf1f748732803d1880f3d
+PMTILES := .tools/pmtiles-$(PMTILES_VERSION)/pmtiles
+
+$(PMTILES):
+	@test "$(TF_PLATFORM)" = darwin_arm64 || { echo "demo assets: macOS arm64 only" >&2; exit 1; }
+	@dir='$(dir $(PMTILES))'; zip="$$dir/pmtiles.zip"; mkdir -p "$$dir"; \
+	curl -sSfL -o "$$zip" \
+		https://github.com/protomaps/go-pmtiles/releases/download/v$(PMTILES_VERSION)/go-pmtiles-$(PMTILES_VERSION)_Darwin_arm64.zip; \
+	echo "$(PMTILES_SHA256)  $$zip" | shasum -a 256 -c - >/dev/null || { rm -f "$$zip"; exit 1; }; \
+	unzip -q -o "$$zip" pmtiles -d "$$dir" && rm "$$zip"
+
+# Offline map for the demo web app: Bloomington extract + fonts + sprites into data/demo/tiles/.
+demo-assets: $(PMTILES)
+	nice -n 10 uv run python scripts/fetch_demo_assets.py $(PMTILES)
+
+# The whole local demo: server (127.0.0.1:8100), web (localhost:3100), iPhone app in one Simulator.
+# Installs node packages only if missing. `make demo-stop` ends every demo process.
+demo:
+	uv run python scripts/demo.py start
+
+demo-stop:
+	uv run python scripts/demo.py stop
+
+# Move the Simulator along Kirkwood into the 400 block, then home (Share until I'm home).
+demo-walk:
+	uv run python scripts/demo.py walk
+
+demo-walk-home:
+	uv run python scripts/demo.py walk-home
+
+# TypeScript checks for both apps (also in CI). Installs node packages only if missing.
+apps-check:
+	cd apps/web && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck && npm run lint
+	cd apps/mobile && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck

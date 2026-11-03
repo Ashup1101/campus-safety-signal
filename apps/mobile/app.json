@@ -1,0 +1,31 @@
+{
+  "expo": {
+    "name": "Campus Safety Signal",
+    "slug": "campus-safety-signal-demo",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#f6fbfa"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "dev.campussafetysignal.demo",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved."
+      }
+    },
+    "plugins": [
+      [
+        "expo-location",
+        {
+          "locationWhenInUsePermission": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved."
+        }
+      ],
+      "expo-notifications"
+    ]
+  }
+}
