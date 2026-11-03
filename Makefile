@@ -1,6 +1,6 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
 	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay \
-	demo-assets
+	demo-assets demo demo-stop demo-walk demo-walk-home apps-check
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
@@ -120,3 +120,23 @@ $(PMTILES):
 # Offline map for the demo web app: Bloomington extract + fonts + sprites into data/demo/tiles/.
 demo-assets: $(PMTILES)
 	nice -n 10 uv run python scripts/fetch_demo_assets.py $(PMTILES)
+
+# The whole local demo: server (127.0.0.1:8100), web (localhost:3100), iPhone app in one Simulator.
+# Installs node packages only if missing. `make demo-stop` ends every demo process.
+demo:
+	uv run python scripts/demo.py start
+
+demo-stop:
+	uv run python scripts/demo.py stop
+
+# Move the Simulator along Kirkwood into the 400 block, then home (Share until I'm home).
+demo-walk:
+	uv run python scripts/demo.py walk
+
+demo-walk-home:
+	uv run python scripts/demo.py walk-home
+
+# TypeScript checks for both apps (also in CI). Installs node packages only if missing.
+apps-check:
+	cd apps/web && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck && npm run lint
+	cd apps/mobile && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck

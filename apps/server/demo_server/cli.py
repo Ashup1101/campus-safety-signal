@@ -13,7 +13,9 @@ from typing import Any
 from demo_server.seed import Settings, seed
 from demo_server.store import Store
 
-SERVER = "http://127.0.0.1:8000"
+# 8100 / 3100: ports 8000 and 3000 are often taken by other local projects.
+PORT = 8100
+SERVER = f"http://127.0.0.1:{PORT}"
 
 
 def _post(path: str, body: dict[str, Any], token: str | None = None) -> dict[str, Any]:
@@ -36,7 +38,7 @@ def _as_console(path: str, body: dict[str, Any] | None = None) -> None:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="demo_server")
     commands = parser.add_subparsers(dest="command", required=True)
-    serve = commands.add_parser("serve", help="run the local demo server on 127.0.0.1:8000")
+    serve = commands.add_parser("serve", help="run the local demo server on 127.0.0.1:8100")
     serve.add_argument("--no-live-feed", action="store_true", help="do not poll IU's alert feed")
     commands.add_parser("seed", help="(re)build demo accounts and activity levels")
     commands.add_parser("drill", help='send "DRILL: Shelter in place, avoid Kirkwood Avenue."')
@@ -52,7 +54,7 @@ def main(argv: list[str] | None = None) -> int:
         from demo_server.app import create_app
 
         app = create_app(Settings(live_feed=not args.no_live_feed))
-        uvicorn.run(app, host="127.0.0.1", port=8000, access_log=False, ws_max_size=65536)
+        uvicorn.run(app, host="127.0.0.1", port=PORT, access_log=False, ws_max_size=65536)
     elif args.command == "seed":
         settings = Settings()
         store = Store(settings.db)

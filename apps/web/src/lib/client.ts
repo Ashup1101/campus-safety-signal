@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "
 import type { Account, ClientMessage, ServerMessage } from "@/shared/api";
 import tokens from "@/shared/tokens.json";
 
-export const SERVER = process.env.NEXT_PUBLIC_DEMO_SERVER ?? "http://127.0.0.1:8000";
+export const SERVER = process.env.NEXT_PUBLIC_DEMO_SERVER ?? "http://127.0.0.1:8100";
 
 export interface Session {
   token: string;
