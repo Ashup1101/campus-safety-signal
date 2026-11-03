@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import type { Account, ClientMessage, ServerMessage } from "./shared/api";
 
 // The iPhone Simulator shares the Mac's network, so the local demo server is at localhost.
-export const SERVER = process.env.EXPO_PUBLIC_DEMO_SERVER ?? "http://localhost:8000";
+export const SERVER = process.env.EXPO_PUBLIC_DEMO_SERVER ?? "http://localhost:8100";
 
 export interface Session {
   token: string;
