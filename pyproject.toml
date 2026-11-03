@@ -16,9 +16,16 @@ lake = "campus_safety.lake.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
+demo = [
+    "fastapi>=0.143.3",
+    "uvicorn>=0.54.0",
+    "websockets>=17.3",
+]
 dev = [
+    { include-group = "demo" },
     { include-group = "ml" },
     { include-group = "transform" },
+    "httpx>=0.28.1",
     "moto[s3]>=5.2.4",
     "mypy",
     "pip-audit",
@@ -67,15 +74,18 @@ extend-exclude = ["notebooks"]
 [tool.ruff.lint]
 select = ["E", "W", "F", "I", "B", "UP", "SIM", "S", "RUF"]
 
+[tool.ruff.lint.isort]
+known-first-party = ["campus_safety", "demo_server"]
+
 [tool.ruff.lint.per-file-ignores]
 "tests/**" = ["S101"]
 
 [tool.mypy]
 strict = true
-files = ["src", "tests", "scripts"]
-mypy_path = "src:scripts:tests"
+files = ["src", "tests", "scripts", "apps/server"]
+mypy_path = "src:scripts:tests:apps/server"
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-pythonpath = ["scripts"]
+pythonpath = ["scripts", "apps/server"]
 addopts = "-ra --strict-markers"
