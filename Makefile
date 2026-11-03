@@ -1,5 +1,6 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay
+	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay \
+	demo-assets
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
@@ -102,3 +103,20 @@ demo-all-clear:
 demo-replay:
 	@test -n '$(REPLAY)' || { echo "usage: make demo-replay REPLAY=<id>" >&2; exit 1; }
 	$(DEMO) replay '$(REPLAY)'
+
+# Pinned pmtiles CLI (go-pmtiles, checksum-verified, macOS arm64) for the offline map extract.
+PMTILES_VERSION := 1.31.2
+PMTILES_SHA256 := 40528f7f616fcbf91207cd48c8fc023d213f6d86c0cbf1f748732803d1880f3d
+PMTILES := .tools/pmtiles-$(PMTILES_VERSION)/pmtiles
+
+$(PMTILES):
+	@test "$(TF_PLATFORM)" = darwin_arm64 || { echo "demo assets: macOS arm64 only" >&2; exit 1; }
+	@dir='$(dir $(PMTILES))'; zip="$$dir/pmtiles.zip"; mkdir -p "$$dir"; \
+	curl -sSfL -o "$$zip" \
+		https://github.com/protomaps/go-pmtiles/releases/download/v$(PMTILES_VERSION)/go-pmtiles-$(PMTILES_VERSION)_Darwin_arm64.zip; \
+	echo "$(PMTILES_SHA256)  $$zip" | shasum -a 256 -c - >/dev/null || { rm -f "$$zip"; exit 1; }; \
+	unzip -q -o "$$zip" pmtiles -d "$$dir" && rm "$$zip"
+
+# Offline map for the demo web app: Bloomington extract + fonts + sprites into data/demo/tiles/.
+demo-assets: $(PMTILES)
+	nice -n 10 uv run python scripts/fetch_demo_assets.py $(PMTILES)
