@@ -14,6 +14,7 @@ from pathlib import Path
 
 import yaml
 
+from campus_safety import events
 from campus_safety.official.alerts import OfficialAlert, QueueSource
 from campus_safety.official.descriptors import strip_descriptors
 
@@ -95,12 +96,10 @@ class ReplaySource(QueueSource):
         self,
         replays: dict[str, Replay],
         sleep: Callable[[float], Awaitable[None]] = asyncio.sleep,
-        now: Callable[[], datetime] = _utc_now,
     ) -> None:
         super().__init__("replay", "replay")
         self.replays = replays
         self._sleep = sleep
-        self._now = now
 
     async def play(self, replay_id: str, speed: float = REPLAY_SPEED) -> None:
         replay = self.replays[replay_id]
@@ -114,7 +113,7 @@ class ReplaySource(QueueSource):
                     kind="replay",
                     text=f"RECONSTRUCTION (IU alert sent {_sent_label(step.sent_at)}): {step.text}",
                     verification="reconstruction",
-                    official_at=self._now(),
+                    official_at=step.sent_at.replace(tzinfo=events.LOCAL),
                     status=step.status,
                     external_id=f"{replay_id}#{index}",
                     link=replay.sources[0] if replay.sources else None,

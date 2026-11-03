@@ -22,7 +22,8 @@ from demo_server.seed import Settings, seed
 from demo_server.sources import DrillSource, ReplaySource, load_replays
 from demo_server.store import Account, Store
 
-ORIGINS = ["http://localhost:3000", "http://127.0.0.1:3000"]
+# The web app runs on 3100 (3000 is often taken by other local projects).
+ORIGINS = ["http://localhost:3100", "http://127.0.0.1:3100"]
 
 
 class Login(BaseModel):

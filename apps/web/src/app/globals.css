@@ -1,0 +1,69 @@
+@import "tailwindcss";
+
+/* Calm, friendly theme (shadcn/ui variables). Dark mode follows the system setting.
+   Activity and alert colors come from src/shared/tokens.json; red only for live official alerts. */
+
+:root {
+  --background: oklch(0.985 0.005 190);
+  --foreground: oklch(0.27 0.02 235);
+  --card: oklch(1 0 0);
+  --card-foreground: oklch(0.27 0.02 235);
+  --muted: oklch(0.965 0.008 200);
+  --muted-foreground: oklch(0.52 0.02 235);
+  --border: oklch(0.91 0.012 200);
+  --primary: oklch(0.56 0.075 185);
+  --primary-foreground: oklch(0.99 0 0);
+  --secondary: oklch(0.95 0.012 200);
+  --secondary-foreground: oklch(0.3 0.02 235);
+  --ring: oklch(0.62 0.075 185);
+  --radius: 1rem;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: oklch(0.19 0.015 240);
+    --foreground: oklch(0.93 0.01 220);
+    --card: oklch(0.235 0.017 240);
+    --card-foreground: oklch(0.93 0.01 220);
+    --muted: oklch(0.27 0.017 240);
+    --muted-foreground: oklch(0.72 0.015 225);
+    --border: oklch(0.32 0.018 240);
+    --primary: oklch(0.72 0.08 185);
+    --primary-foreground: oklch(0.2 0.02 240);
+    --secondary: oklch(0.29 0.018 240);
+    --secondary-foreground: oklch(0.92 0.01 220);
+    --ring: oklch(0.72 0.08 185);
+  }
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-border: var(--border);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 4px);
+  --radius-xl: calc(var(--radius) + 4px);
+  --font-sans: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+}
+
+.maplibregl-popup-content {
+  border-radius: var(--radius);
+  background: var(--card);
+  color: var(--card-foreground);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
+}

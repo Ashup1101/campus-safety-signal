@@ -24,6 +24,13 @@ dist/
 .coverage.*
 htmlcov/
 
+# Node apps (apps/web, apps/mobile)
+node_modules/
+.next/
+.expo/
+*.tsbuildinfo
+next-env.d.ts
+
 # Notebooks
 .ipynb_checkpoints/
 
