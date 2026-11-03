@@ -1,5 +1,5 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply transform
+	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
@@ -86,3 +86,19 @@ infra-plan: $(TF)
 infra-apply: $(TF)
 	AWS_PROFILE='$(call env,AWS_PROFILE)' AWS_REGION='$(call env,AWS_REGION)' \
 		GITHUB_TOKEN="$$(gh auth token)" $(TF) -chdir=infra apply -input=false tfplan
+
+# Local IUPD demo server (apps/server, 127.0.0.1 only). Drills and replays reach test accounts only.
+DEMO := PYTHONPATH=apps/server nice -n 10 uv run python -m demo_server
+demo-seed:
+	$(DEMO) seed
+
+demo-drill:
+	$(DEMO) drill
+
+demo-all-clear:
+	$(DEMO) all-clear
+
+# make demo-replay REPLAY=kirkwood_2026_11_01 (ids: data/manual/demo_incidents.yaml)
+demo-replay:
+	@test -n '$(REPLAY)' || { echo "usage: make demo-replay REPLAY=<id>" >&2; exit 1; }
+	$(DEMO) replay '$(REPLAY)'
