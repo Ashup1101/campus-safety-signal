@@ -30,6 +30,10 @@ node_modules/
 .expo/
 *.tsbuildinfo
 next-env.d.ts
+expo-env.d.ts
+.metro-health-check*
+/apps/mobile/ios/
+/apps/mobile/android/
 
 # Notebooks
 .ipynb_checkpoints/
