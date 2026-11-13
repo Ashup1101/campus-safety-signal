@@ -18,34 +18,14 @@ from typing import Any
 import duckdb
 import yaml
 
-from campus_safety import events
+from campus_safety.patterns.categories import SERIOUS, category
+from campus_safety.patterns.levels import LOOKBACK_YEARS, WINDOWS
+from campus_safety.patterns.levels import in_window as _in_window
+from campus_safety.patterns.levels import level as _level
+from campus_safety.patterns.levels import reason as _reason
 from demo_server.store import Activity
 
 SEGMENTS = Path(__file__).with_name("segments.geojson")
-WINDOWS = {"late_night": "on late nights", "event_night": "on event nights"}
-LOOKBACK_YEARS = 3
-# Demo thresholds (DECISIONS.md 2026-11-02): serious incidents weigh more than volume.
-HIGH = (2, 8)  # serious, total
-ELEVATED = (1, 3)
-
-_CATEGORIES = [
-    ("shooting", r"SHOOTING|SHOTS FIRED|DISCHARG"),
-    ("robbery", r"ROBBERY"),
-    ("weapons incident", r"WEAPON|FIREARM|HANDGUN|\bGUN\b"),
-    ("assault", r"ASSAULT|BATTERY"),
-    ("burglary", r"BURGLARY|UNLAWFUL ENTRY"),
-    ("traffic incident", r"DRIVING|CRASH|HIT & RUN|OPERATING|LICENSE"),
-    ("theft", r"THEFT|LARCENY|SHOPLIFT"),
-    ("vandalism report", r"VANDAL|MISCHIEF|GRAFFITI"),
-    ("alcohol incident", r"ALCOHOL|LIQUOR|INTOXICAT|DRUNK|CONSUMPTION"),
-    ("drug incident", r"DRUG|NARCOTIC|MARIJUANA|PARAPHERNALIA|METHAMPHETAMINE|COCAINE"),
-    ("harassment report", r"HARASSMENT|INTIMIDATION"),
-    ("disorderly conduct report", r"DISORDERLY|DISTURB"),
-    ("trespass report", r"TRESPASS"),
-    ("fake ID case", r"FALSE .*IDENTIFICATION|FAKE ID"),
-    ("police obstruction report", r"RESISTING|OBSTRUCTION"),
-]
-SERIOUS = {"shooting", "robbery", "weapons incident"}
 
 
 @dataclass(frozen=True)
@@ -83,17 +63,6 @@ def segments(geojson: dict[str, Any]) -> list[Segment]:
     ]
 
 
-def category(incident_type: str) -> str:
-    text = incident_type.upper()
-    return next((name for name, rx in _CATEGORIES if re.search(rx, text)), "other incident")
-
-
-def plural(noun: str, n: int) -> str:
-    if n == 1:
-        return noun
-    return noun[:-1] + "ies" if noun.endswith("y") and noun[-2] not in "aeiou" else noun + "s"
-
-
 def warehouse_incidents(db: Path, found: list[Segment]) -> list[Incident]:
     """Non-sensitive IU log incidents whose location names one of our segments."""
     if not db.exists():
@@ -128,30 +97,6 @@ def manual_incidents(path: Path) -> list[Incident]:
         )
         for e in entries
     ]
-
-
-def _in_window(window: str, at: datetime, nights: frozenset[date]) -> bool:
-    if window == "late_night":
-        return events.is_late_night(at)
-    return events.is_event_night(at, nights)
-
-
-def _reason(window: str, kinds: Counter[str], years: set[int]) -> str:
-    where = WINDOWS[window]
-    if not kinds:
-        return f"Nothing recorded {where} in the data we hold"
-    top = [f"{n} {plural(kind, n)}" for kind, n in kinds.most_common(2)]
-    span = f"in {min(years)}" if len(years) == 1 else f"{min(years)}-{max(years)}"
-    joined = " and ".join(top)
-    return f"{joined[0].upper()}{joined[1:]} {where} {span}"
-
-
-def _level(serious: int, total: int) -> str:
-    if serious >= HIGH[0] or total >= HIGH[1]:
-        return "high"
-    if serious >= ELEVATED[0] or total >= ELEVATED[1]:
-        return "elevated"
-    return "quiet"
 
 
 def levels(
