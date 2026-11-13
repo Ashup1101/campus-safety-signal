@@ -20,3 +20,16 @@ models:
         data_tests: [unique]
   - name: news_audit
     description: One-row audit of the news pipeline (duplicate and confirmation rates).
+  - name: gap_report
+    description: Per registered gap, real coverage vs synthetic patching vs Clery totals.
+    columns:
+      - name: gap_id
+        data_tests: [unique, not_null]
+  - name: incidents_real
+    description: Conformed incidents without synthetic rows (the default public view).
+    columns:
+      - name: source
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [official, news]

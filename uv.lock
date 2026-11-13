@@ -8,20 +8,20 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-31T18:23:20.473339Z"
+exclude-newer = "2026-10-31T18:26:16.260805Z"
 exclude-newer-span = "P14D"
 
 [options.exclude-newer-package]
-opentelemetry-sdk = { timestamp = "2026-11-14T18:23:20.473806Z", span = "PT0S" }
-setuptools = { timestamp = "2026-11-14T18:23:20.473808Z", span = "PT0S" }
-opentelemetry-api = { timestamp = "2026-11-14T18:23:20.473805Z", span = "PT0S" }
-pyasn1 = { timestamp = "2026-11-14T18:23:20.473807Z", span = "PT0S" }
-opentelemetry-proto = { timestamp = "2026-11-14T18:23:20.473806Z", span = "PT0S" }
-virtualenv = { timestamp = "2026-11-14T18:23:20.473808Z", span = "PT0S" }
-certifi = { timestamp = "2026-11-14T18:23:20.473495Z", span = "PT0S" }
-opentelemetry-semantic-conventions = { timestamp = "2026-11-14T18:23:20.473806Z", span = "PT0S" }
-filelock = { timestamp = "2026-11-14T18:23:20.473805Z", span = "PT0S" }
-pypdf = { timestamp = "2026-11-14T18:23:20.473807Z", span = "PT0S" }
+opentelemetry-sdk = { timestamp = "2026-11-14T18:26:16.261325Z", span = "PT0S" }
+setuptools = { timestamp = "2026-11-14T18:26:16.261326Z", span = "PT0S" }
+opentelemetry-api = { timestamp = "2026-11-14T18:26:16.261324Z", span = "PT0S" }
+pyasn1 = { timestamp = "2026-11-14T18:26:16.261326Z", span = "PT0S" }
+opentelemetry-proto = { timestamp = "2026-11-14T18:26:16.261325Z", span = "PT0S" }
+virtualenv = { timestamp = "2026-11-14T18:26:16.261327Z", span = "PT0S" }
+certifi = { timestamp = "2026-11-14T18:26:16.261025Z", span = "PT0S" }
+opentelemetry-semantic-conventions = { timestamp = "2026-11-14T18:26:16.261325Z", span = "PT0S" }
+filelock = { timestamp = "2026-11-14T18:26:16.261324Z", span = "PT0S" }
+pypdf = { timestamp = "2026-11-14T18:26:16.261326Z", span = "PT0S" }
 
 [[package]]
 name = "agate"
