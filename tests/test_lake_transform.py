@@ -288,3 +288,50 @@ def test_news_clusters_join_the_conformed_incidents(tmp_path: Path) -> None:
     )
     assert audit == (3, 2, 1, 1, 2.0)
     assert NAME_MARKER not in str(rows(silver / "news_items.parquet", "SELECT title FROM $t"))
+
+
+def test_synthetic_patches_join_incidents_and_the_gap_report(tmp_path: Path) -> None:
+    from campus_safety.gaps import Gap, Segment
+    from campus_safety.synthetic import generate, profile, store
+
+    lake = FileLake(tmp_path / "lake")
+    seed_history(lake)
+    gap = Gap(
+        "iu_log_2014",
+        "r",
+        Segment("iu_crime_log", date(2014, 1, 2), date(2014, 1, 31), ("all",)),
+        "c",
+    )
+    incidents, anomalies = generate.generate(gap, profile.default(), 5, frozenset())
+    store.write(
+        lake,
+        tmp_path / "work" / "syn",
+        "iu_log_2014",
+        5,
+        "syn-1",
+        incidents,
+        anomalies,
+        profile.default(),
+    )
+    summary = transform(lake, tmp_path / "work")
+    assert summary.synthetic_patches == 1
+    silver = tmp_path / "lake" / "silver"
+    counts = rows(
+        silver / "incidents.parquet", "SELECT source, count(*) FROM $t GROUP BY 1 ORDER BY 1"
+    )
+    assert counts == [("official", 4), ("synthetic", len(incidents))]
+    sample = rows(
+        silver / "incidents.parquet",
+        "SELECT gap_id, seed, confidence, is_sensitive, business_name FROM $t"
+        " WHERE source = 'synthetic' LIMIT 1",
+    )
+    assert sample == [("iu_log_2014", 5, 0.0, False, None)]
+    gold = tmp_path / "lake" / "gold"
+    assert rows(gold / "incidents_real.parquet", "SELECT count(*) FROM $t") == [(4,)]
+    report = rows(
+        gold / "gap_report.parquet",
+        "SELECT gap_id, synthetic_rows, synthetic_seeds, planted_anomalies, real_days_covered"
+        " FROM $t WHERE gap_id = 'iu_log_2014'",
+    )
+    assert report == [("iu_log_2014", len(incidents), 1, len(anomalies), 0)]
+    assert rows(gold / "gap_report.parquet", "SELECT count(*) FROM $t") == [(5,)]
