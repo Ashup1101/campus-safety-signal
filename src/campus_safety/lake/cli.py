@@ -26,13 +26,18 @@ def _verified(path: Path) -> frozenset[tuple[str, str]]:
     return frozenset((case.strip(), offense.strip()) for case, offense in pairs)
 
 
-def run_transform(work_dir: Path, cache_dir: Path, extractor: str, fallback_cache: Path) -> int:
+def run_transform(
+    work_dir: Path, cache_dir: Path, extractor: str, fallback_cache: Path, news_cache: Path
+) -> int:
     # Imported here: duckdb and dbt live in the transform group, not in the ingest install.
     from campus_safety.iu_crime_log.classify import record_unclassified
     from campus_safety.lake.transform import Extraction, TransformError, transform
+    from campus_safety.news.gemini import model_name
 
     lake = open_lake(os.environ.get("LAKE_URI"), cache_dir)
-    extraction = Extraction(extractor, fallback_cache, _verified(VERIFIED))
+    extraction = Extraction(
+        extractor, fallback_cache, _verified(VERIFIED), news_cache, model_name()
+    )
     try:
         summary = transform(lake, work_dir, extraction)
     except TransformError as e:
@@ -80,6 +85,21 @@ def run_transform(work_dir: Path, cache_dir: Path, extractor: str, fallback_cach
         )
     if extractor == "llm_fallback":
         log.info("llm_fallback: %d incidents from cached model answers", summary.llm_recovered)
+    if summary.news and summary.news.pages:
+        news = summary.news
+        log.info(
+            "news: %d pages (%d unreadable), %d items, %d relevant, %d incidents, %d clusters,"
+            " %d confirmed, %d injection-suspected, %d ungrounded model answers",
+            news.pages,
+            news.layout_errors,
+            news.items,
+            news.relevant,
+            news.incidents,
+            news.clusters,
+            news.confirmed,
+            news.injection_suspected,
+            news.ungrounded,
+        )
     if summary.calibration_files or summary.calibration_errors:
         log.info(
             "calibration: %d files staged, %d unreadable",
@@ -166,6 +186,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     transform_parser.add_argument(
         "--fallback-cache", type=Path, default=Path("data/cache/llm_fallback")
     )
+    transform_parser.add_argument(
+        "--news-cache",
+        type=Path,
+        default=Path("data/cache/news_llm"),
+        help="cached model answers for news items (written by `news extract`)",
+    )
     commands.add_parser("coverage", help="print covered date ranges and gaps (last transform)")
     copy_parser = commands.add_parser("copy-bronze", help="copy bronze from another lake URI")
     copy_parser.add_argument("source_uri", help="e.g. file:///abs/path/data/lake")
@@ -180,7 +206,9 @@ def main(argv: Sequence[str] | None = None) -> int:
             return print_coverage(args.work_dir)
         if args.command == "copy-bronze":
             return copy_bronze(args.source_uri)
-        return run_transform(args.work_dir, args.cache_dir, args.extractor, args.fallback_cache)
+        return run_transform(
+            args.work_dir, args.cache_dir, args.extractor, args.fallback_cache, args.news_cache
+        )
     except (LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)
         return 1

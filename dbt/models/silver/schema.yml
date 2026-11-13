@@ -124,3 +124,26 @@ models:
     columns:
       - name: case_number
         data_tests: [unique, not_null]
+
+  - name: news_items
+    description: Unique news and notice items; text only for relevant items, redacted.
+    columns:
+      - name: item_id
+        data_tests: [unique, not_null]
+      - name: relevant
+        data_tests: [not_null]
+
+  - name: news_incidents
+    description: Cross-outlet clusters with the alerts.md confirmation rule applied.
+    columns:
+      - name: cluster_id
+        data_tests: [unique, not_null]
+      - name: confirmed
+        data_tests: [not_null]
+      - name: is_sensitive
+        data_tests: [not_null]
+      - name: severity_tier
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [high, medium, low]

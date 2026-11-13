@@ -243,3 +243,48 @@ def test_coverage_merges_windows_and_reports_gaps(
     assert [row[1:] for row in summary.coverage if row[0] == "all"] == [row[1:] for row in coverage]
     assert main(["--work-dir", str(tmp_path / "work"), "coverage"]) == 0
     assert "gap      2026-08-21 2026-08-21     1" in capsys.readouterr().out
+
+
+def test_news_clusters_join_the_conformed_incidents(tmp_path: Path) -> None:
+    from test_news import RSS, SITEMAP
+
+    from campus_safety.lake.transform import Extraction
+    from campus_safety.news.silver import NAME_MARKER
+
+    lake = FileLake(tmp_path / "lake")
+    seed_history(lake)
+    for source, body in (("news_ipm", RSS), ("news_ids", SITEMAP)):
+        bronze.write(
+            lake, source=source, body=body, url="https://x.example", fetched_at=DAY_1,
+            http_status=200, run_id="news-1", ext="xml",
+        )  # fmt: skip
+    summary = transform(lake, tmp_path / "work", Extraction(redact=lambda text: text))
+    assert summary.news is not None
+    assert (summary.news.items, summary.news.clusters, summary.news.confirmed) == (3, 1, 1)
+    silver = tmp_path / "lake" / "silver"
+    news = rows(
+        silver / "incidents.parquet",
+        "SELECT source, incident_type, severity_tier, time_precision, summary, confidence,"
+        " occurred_from::date FROM $t WHERE source = 'news'",
+    )
+    assert news == [
+        (
+            "news", "shooting", "high", "date",
+            "shooting reported near 400 block of E. Kirkwood Avenue (2 outlets)", 0.8,
+            date(2026, 11, 1),
+        )
+    ]  # fmt: skip
+    sources = rows(
+        silver / "incident_sources.parquet",
+        "SELECT dataset, extractor FROM $t WHERE source = 'news' ORDER BY 1",
+    )
+    assert sources == [("news_ids", "news"), ("news_ipm", "news")]
+    assert rows(silver / "news_items.parquet", "SELECT count(*) FROM $t WHERE title IS NULL") == [
+        (1,)
+    ]
+    (audit,) = rows(
+        tmp_path / "lake" / "gold" / "news_audit.parquet",
+        "SELECT items, relevant_items, clusters, confirmed_clusters, items_per_cluster FROM $t",
+    )
+    assert audit == (3, 2, 1, 1, 2.0)
+    assert NAME_MARKER not in str(rows(silver / "news_items.parquet", "SELECT title FROM $t"))
