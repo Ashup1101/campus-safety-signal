@@ -17,15 +17,20 @@ news = "campus_safety.news.cli:main"
 synthetic = "campus_safety.synthetic.cli:main"
 patterns = "campus_safety.patterns.cli:main"
 alerts = "campus_safety.alerts.cli:main"
+rag = "campus_safety.rag.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
+agents = [
+    "langgraph>=1.2.18",
+]
 demo = [
     "fastapi>=0.143.3",
     "uvicorn>=0.54.0",
     "websockets>=17.3",
 ]
 dev = [
+    { include-group = "agents" },
     { include-group = "demo" },
     { include-group = "ml" },
     { include-group = "transform" },
