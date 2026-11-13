@@ -16,6 +16,7 @@ lake = "campus_safety.lake.cli:main"
 news = "campus_safety.news.cli:main"
 synthetic = "campus_safety.synthetic.cli:main"
 patterns = "campus_safety.patterns.cli:main"
+alerts = "campus_safety.alerts.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
@@ -29,13 +30,13 @@ dev = [
     { include-group = "ml" },
     { include-group = "transform" },
     "httpx>=0.28.1",
-    "moto[s3]>=5.2.4",
+    "moto[s3,sns,sqs]>=5.2.4",
     "mypy",
     "pip-audit",
     "pre-commit",
     "pytest",
     "ruff",
-    "types-boto3[s3]>=1.43.112",
+    "types-boto3[s3,sns,sqs]>=1.43.112",
     "types-defusedxml>=0.7.0.20260504",
     "types-pyyaml>=6.0.12.20260906",
     "types-xlrd>=2.0.0.20260518",
