@@ -17,3 +17,21 @@ select
     max(observed_at) as last_seen
 from observations
 group by case_number, offense, dataset
+
+union all
+
+-- News: one row per cluster and outlet (an outlet may list the same incident twice).
+select
+    md5('news|' || members.cluster_id) as incident_id,
+    case when clusters.official then 'official' else 'news' end as source,
+    members.dataset,
+    'news' as extractor,
+    min_by(members.source_ref, members.published_at) as source_ref,
+    min_by(members.item_id, members.published_at) as source_record_id,
+    min_by(members.run_id, members.published_at) as run_id,
+    max(members.ingested_at) as ingested_at,
+    min(members.published_at) as first_seen,
+    max(members.published_at) as last_seen
+from {{ ref('stg_news__cluster_items') }} as members
+join {{ ref('news_incidents') }} as clusters on clusters.cluster_id = members.cluster_id
+group by members.cluster_id, members.dataset, clusters.official
