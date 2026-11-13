@@ -8,16 +8,16 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-20T04:17:11.75078Z"
+exclude-newer = "2026-10-30T01:39:05.619072Z"
 exclude-newer-span = "P14D"
 
 [options.exclude-newer-package]
-setuptools = { timestamp = "2026-11-03T04:17:11.750791Z", span = "PT0S" }
-certifi = { timestamp = "2026-11-03T04:17:11.750786Z", span = "PT0S" }
-filelock = { timestamp = "2026-11-03T04:17:11.75079Z", span = "PT0S" }
-pypdf = { timestamp = "2026-11-03T04:17:11.750791Z", span = "PT0S" }
-pyasn1 = { timestamp = "2026-11-03T04:17:11.750791Z", span = "PT0S" }
-virtualenv = { timestamp = "2026-11-03T04:17:11.750792Z", span = "PT0S" }
+setuptools = { timestamp = "2026-11-13T01:39:05.619567Z", span = "PT0S" }
+certifi = { timestamp = "2026-11-13T01:39:05.619283Z", span = "PT0S" }
+filelock = { timestamp = "2026-11-13T01:39:05.619566Z", span = "PT0S" }
+pypdf = { timestamp = "2026-11-13T01:39:05.619567Z", span = "PT0S" }
+pyasn1 = { timestamp = "2026-11-13T01:39:05.619567Z", span = "PT0S" }
+virtualenv = { timestamp = "2026-11-13T01:39:05.619568Z", span = "PT0S" }
 
 [[package]]
 name = "agate"
@@ -271,6 +271,7 @@ demo = [
 ]
 dev = [
     { name = "dbt-duckdb" },
+    { name = "defusedxml" },
     { name = "duckdb" },
     { name = "en-core-web-sm" },
     { name = "fastapi" },
@@ -286,6 +287,7 @@ dev = [
     { name = "pyyaml" },
     { name = "ruff" },
     { name = "types-boto3", extra = ["s3"] },
+    { name = "types-defusedxml" },
     { name = "types-pyyaml" },
     { name = "types-xlrd" },
     { name = "uvicorn" },
@@ -299,6 +301,7 @@ ml = [
 ]
 transform = [
     { name = "dbt-duckdb" },
+    { name = "defusedxml" },
     { name = "duckdb" },
     { name = "pypdf" },
     { name = "pyyaml" },
@@ -316,6 +319,7 @@ demo = [
 ]
 dev = [
     { name = "dbt-duckdb", specifier = ">=1.11.0" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "duckdb", specifier = ">=1.5.6" },
     { name = "en-core-web-sm", url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" },
     { name = "fastapi", specifier = ">=0.143.3" },
@@ -331,6 +335,7 @@ dev = [
     { name = "pyyaml", specifier = ">=6.0.3" },
     { name = "ruff" },
     { name = "types-boto3", extras = ["s3"], specifier = ">=1.43.112" },
+    { name = "types-defusedxml", specifier = ">=0.7.0.20260504" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20260906" },
     { name = "types-xlrd", specifier = ">=2.0.0.20260518" },
     { name = "uvicorn", specifier = ">=0.54.0" },
@@ -344,6 +349,7 @@ ml = [
 ]
 transform = [
     { name = "dbt-duckdb", specifier = ">=1.11.0" },
+    { name = "defusedxml", specifier = ">=0.7.1" },
     { name = "duckdb", specifier = ">=1.5.6" },
     { name = "pypdf", specifier = ">=6.20.1" },
     { name = "pyyaml", specifier = ">=6.0.3" },
@@ -3237,6 +3243,15 @@ source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/43/98/3c6997d7c7b0ee15c90595bb5165913c944f831bd7529458e1248807d75b/types_boto3_s3-1.43.106.tar.gz", hash = "sha256:aaf25465555efcb54586b141834cd108b2bd0a6f3229e46e72e20675fcd79f35", size = 79270, upload-time = "2026-09-30T22:44:27.614Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/ba/ba/176046d5287c59cf50e4d1bcc4ddb592a8e4b2e6ef33fa3910f97807e88f/types_boto3_s3-1.43.106-py3-none-any.whl", hash = "sha256:a08d18cacdbe77ae8a8e6ed79bbec0b3deaae9eda35d55def30ce72f41440950", size = 86607, upload-time = "2026-09-30T22:44:25.295Z" },
+]
+
+[[package]]
+name = "types-defusedxml"
+version = "0.7.0.20260504"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/da/d2/4553c8fa9cdebfe1e84b950cf790a4d2376a97fa016e43f7c65323fa6c7d/types_defusedxml-0.7.0.20260504.tar.gz", hash = "sha256:2ab2828a3f97111ba1c16cee273ad4124a831fc9198c41bf8368ff6ea48ad300", size = 10729, upload-time = "2026-05-04T05:22:50.192Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/bf/2d/8a4b5ba1d732b8bc691f0efbb1c6f77cb5f6f473b2afe181d83d910773c5/types_defusedxml-0.7.0.20260504-py3-none-any.whl", hash = "sha256:a959e3a0a43b93e464bd625d91ec9193a2703ddc10443bdd627792485fae0b10", size = 13467, upload-time = "2026-05-04T05:22:49.319Z" },
 ]
 
 [[package]]
