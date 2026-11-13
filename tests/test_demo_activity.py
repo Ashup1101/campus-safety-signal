@@ -6,6 +6,8 @@ from datetime import date, datetime
 import pytest
 from build_demo_segments import SEGMENTS
 
+from campus_safety.patterns.categories import category as category_of
+from campus_safety.patterns.categories import plural
 from demo_server import activity
 from demo_server.store import Activity
 
@@ -93,8 +95,8 @@ def test_reasons_never_use_alarming_words() -> None:
     ],
 )
 def test_category(incident_type: str, category: str) -> None:
-    assert activity.category(incident_type) == category
+    assert category_of(incident_type) == category
 
 
 def test_plural() -> None:
-    assert [activity.plural("robbery", 2), activity.plural("theft", 1)] == ["robberies", "theft"]
+    assert [plural("robbery", 2), plural("theft", 1)] == ["robberies", "theft"]
