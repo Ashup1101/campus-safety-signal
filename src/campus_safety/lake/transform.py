@@ -27,6 +27,7 @@ from campus_safety.lake.parquet import Columns, write_parquet
 from campus_safety.lake.storage import Lake
 from campus_safety.news import silver as news_silver
 from campus_safety.news.extract import CachedLLMExtractor, Extractor, RulesExtractor
+from campus_safety.synthetic import store as synthetic_store
 from campus_safety.t3 import fallback
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
@@ -39,13 +40,17 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     "calibration_clery_rows": doe.ROWS,
     "calibration_bpd_metric_rows": bps.ROWS,
     **news_silver.TABLES,
+    **synthetic_store.TABLES,
 }
 PUBLISHED = (
     ("silver", "incidents"),
     ("silver", "incident_sources"),
     ("silver", "news_items"),
     ("silver", "news_incidents"),
+    ("silver", "synthetic_incidents"),
     ("gold", "news_audit"),
+    ("gold", "gap_report"),
+    ("gold", "incidents_real"),
     ("silver", "iu_crime_log_incidents"),
     ("silver", "iu_crime_log_incident_history"),
     ("silver", "bpd_calls_for_service"),
@@ -81,6 +86,7 @@ class TransformSummary:
     calibration_errors: int = 0
     llm_recovered: int = 0  # incidents read by the LLM fallback (extractor=llm_fallback)
     news: news_silver.NewsSummary | None = None
+    synthetic_patches: int = 0  # (gap_id, seed) parquet files staged from the lake
 
 
 @dataclass
@@ -93,6 +99,7 @@ class _Staged:
     calibration_errors: int = 0
     llm_recovered: int = 0
     news: news_silver.NewsSummary | None = None
+    synthetic_patches: int = 0
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -222,6 +229,29 @@ def _stage_news(lake: Lake, staging: Path, staged: _Staged, extraction: Extracti
     staged.news = summary
 
 
+def _stage_synthetic(lake: Lake, staging: Path, staged: _Staged) -> None:
+    from campus_safety import gaps
+
+    found = synthetic_store.stage(lake, staging)
+    staged.synthetic_patches = sum(key.endswith("/incidents.parquet") for key, _ in found)
+    # Synthetic parquet is already in the lake; only the register is (re)published.
+    register = [
+        (
+            gap.gap_id,
+            gap.segment.source,
+            gap.segment.start,
+            gap.segment.end,
+            ",".join(gap.segment.fields),
+            gap.reason,
+            gap.closing_source,
+        )
+        for gap in gaps.load()
+    ]
+    path = staging / "gap_register" / "register.parquet"
+    write_parquet(path, STAGED_SCHEMAS["gap_register"], register)
+    staged.published.append(("silver/gap_register/register.parquet", path))
+
+
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
     extraction = extraction or Extraction()
     staging = work_dir / "staging"
@@ -231,6 +261,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     _stage_bpd(lake, staging, staged)
     _stage_calibration(lake, staging, staged)
     _stage_news(lake, staging, staged, extraction)
+    _stage_synthetic(lake, staging, staged)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
@@ -278,6 +309,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
         staged.calibration_errors,
         staged.llm_recovered,
         staged.news,
+        staged.synthetic_patches,
     )
 
 

@@ -83,3 +83,39 @@ select
     cast(null as varchar) as gap_id,
     cast(null as bigint) as seed
 from {{ ref('news_incidents') }}
+
+union all
+
+select
+    md5('synthetic|' || gap_id || '|' || seed || '|' || n) as incident_id,
+    'synthetic' as source,
+    source_ref,
+    case_number as source_record_id,
+    run_id,
+    ingested_at,
+    incident_type,
+    cast(null as varchar) as offense_raw,
+    severity as severity_tier,
+    1 as count,
+    cast(occurred_at as date) as date_reported,
+    occurred_at as occurred_from,
+    cast(null as timestamp) as occurred_to,
+    'exact' as time_precision,
+    location as location_text,
+    location_type,
+    cast(null as varchar) as business_name,
+    cast(null as double) as lat,
+    cast(null as double) as lon,
+    'pending' as geocode_quality,
+    zone_id,
+    cast(null as varchar) as disposition,
+    false as is_sensitive,
+    cast(null as integer) as injuries,
+    cast(null as integer) as deaths,
+    cast(null as boolean) as weapon_involved,
+    cast(null as varchar) as summary,
+    -- Synthetic rows are never evidence: they patch gaps for patterns and evaluation only.
+    cast(0.0 as double) as confidence,
+    gap_id,
+    seed
+from {{ ref('synthetic_incidents') }}
