@@ -16,3 +16,6 @@ sources:
       - name: news_extractions
       - name: news_clusters
       - name: news_cluster_items
+      - name: synthetic_incidents
+      - name: synthetic_anomalies
+      - name: gap_register

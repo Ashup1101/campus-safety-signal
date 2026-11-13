@@ -14,6 +14,7 @@ calibration = "campus_safety.calibration.cli:main"
 collect = "campus_safety.collectors.cli:main"
 lake = "campus_safety.lake.cli:main"
 news = "campus_safety.news.cli:main"
+synthetic = "campus_safety.synthetic.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
