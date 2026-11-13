@@ -18,3 +18,5 @@ models:
     columns:
       - name: day
         data_tests: [unique]
+  - name: news_audit
+    description: One-row audit of the news pipeline (duplicate and confirmation rates).

@@ -10,6 +10,7 @@
 import os
 import shutil
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 
 import duckdb
@@ -24,6 +25,8 @@ from campus_safety.iu_crime_log.parse import CrimeLog, Incident, ParseError, par
 from campus_safety.lake import bronze
 from campus_safety.lake.parquet import Columns, write_parquet
 from campus_safety.lake.storage import Lake
+from campus_safety.news import silver as news_silver
+from campus_safety.news.extract import CachedLLMExtractor, Extractor, RulesExtractor
 from campus_safety.t3 import fallback
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
@@ -35,10 +38,14 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     "bpd_cfs_metadata": bpd_silver.METADATA,
     "calibration_clery_rows": doe.ROWS,
     "calibration_bpd_metric_rows": bps.ROWS,
+    **news_silver.TABLES,
 }
 PUBLISHED = (
     ("silver", "incidents"),
     ("silver", "incident_sources"),
+    ("silver", "news_items"),
+    ("silver", "news_incidents"),
+    ("gold", "news_audit"),
     ("silver", "iu_crime_log_incidents"),
     ("silver", "iu_crime_log_incident_history"),
     ("silver", "bpd_calls_for_service"),
@@ -73,6 +80,7 @@ class TransformSummary:
     calibration_files: int = 0
     calibration_errors: int = 0
     llm_recovered: int = 0  # incidents read by the LLM fallback (extractor=llm_fallback)
+    news: news_silver.NewsSummary | None = None
 
 
 @dataclass
@@ -84,6 +92,7 @@ class _Staged:
     calibration_files: int = 0
     calibration_errors: int = 0
     llm_recovered: int = 0
+    news: news_silver.NewsSummary | None = None
 
 
 def parse_snapshot(manifest: bronze.Manifest, body: bytes) -> CrimeLog:
@@ -107,6 +116,9 @@ class Extraction:
     extractor: str = "rules"  # rules | llm_fallback
     cache_dir: Path | None = None
     verified: frozenset[tuple[str, str]] = frozenset()  # (case_number, offense) the owner checked
+    news_cache_dir: Path | None = None  # cached model answers for news items (news extract)
+    news_model: str = ""
+    redact: news_silver.Redact | None = None  # None: Presidio (tests pass a fake)
 
 
 def _fallback_log(extraction: Extraction, manifest: bronze.Manifest) -> CrimeLog | None:
@@ -191,6 +203,25 @@ def _stage_calibration(lake: Lake, staging: Path, staged: _Staged) -> None:
             staged.calibration_files += 1
 
 
+def _stage_news(lake: Lake, staging: Path, staged: _Staged, extraction: Extraction) -> None:
+    summary = news_silver.NewsSummary()
+    found = news_silver.unique_items(lake, summary)
+    if not found:
+        staged.news = summary
+        return
+    extractors: list[Extractor] = [RulesExtractor()]
+    if extraction.news_cache_dir is not None and extraction.news_model:
+        # Read-only: answers come from `news extract`; the transform never calls a model.
+        extractors.append(CachedLLMExtractor(extraction.news_cache_dir, extraction.news_model))
+    redact = extraction.redact or news_silver.presidio_redactor()
+    rows, summary = news_silver.stage(found, extractors, redact, datetime.now(UTC), summary)
+    for table, table_rows in rows.items():
+        path = staging / table / "all.parquet"
+        write_parquet(path, STAGED_SCHEMAS[table], table_rows)
+        staged.published.append((f"silver/{table}/all.parquet", path))
+    staged.news = summary
+
+
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
     extraction = extraction or Extraction()
     staging = work_dir / "staging"
@@ -199,6 +230,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     unclassified = _stage_crime_log(lake, staging, staged, extraction)
     _stage_bpd(lake, staging, staged)
     _stage_calibration(lake, staging, staged)
+    _stage_news(lake, staging, staged, extraction)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
@@ -245,6 +277,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
         staged.calibration_files,
         staged.calibration_errors,
         staged.llm_recovered,
+        staged.news,
     )
 
 

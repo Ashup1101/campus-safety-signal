@@ -13,6 +13,7 @@ bpd-cfs = "campus_safety.bpd_cfs.cli:main"
 calibration = "campus_safety.calibration.cli:main"
 collect = "campus_safety.collectors.cli:main"
 lake = "campus_safety.lake.cli:main"
+news = "campus_safety.news.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
@@ -33,6 +34,7 @@ dev = [
     "pytest",
     "ruff",
     "types-boto3[s3]>=1.43.112",
+    "types-defusedxml>=0.7.0.20260504",
     "types-pyyaml>=6.0.12.20260906",
     "types-xlrd>=2.0.0.20260518",
 ]
@@ -43,6 +45,7 @@ ml = [
 ]
 transform = [
     "dbt-duckdb>=1.11.0",
+    "defusedxml>=0.7.1",
     "duckdb>=1.5.6",
     "pypdf>=6.20.1",
     "pyyaml>=6.0.3",

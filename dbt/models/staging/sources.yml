@@ -12,3 +12,7 @@ sources:
       - name: bpd_cfs_metadata
       - name: calibration_clery_rows
       - name: calibration_bpd_metric_rows
+      - name: news_items
+      - name: news_extractions
+      - name: news_clusters
+      - name: news_cluster_items
