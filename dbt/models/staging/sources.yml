@@ -19,3 +19,4 @@ sources:
       - name: synthetic_incidents
       - name: synthetic_anomalies
       - name: gap_register
+      - name: geo_law_zones

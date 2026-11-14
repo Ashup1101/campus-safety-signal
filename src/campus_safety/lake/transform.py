@@ -18,6 +18,7 @@ import duckdb
 from campus_safety.bpd_cfs import pull as bpd_pull
 from campus_safety.bpd_cfs import silver as bpd_silver
 from campus_safety.calibration import bps, doe
+from campus_safety.geo import zones as geo_zones
 from campus_safety.iu_crime_log import backfill, silver
 from campus_safety.iu_crime_log.classify import Severity
 from campus_safety.iu_crime_log.legacy import parse_legacy_pdf
@@ -41,6 +42,7 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     "calibration_bpd_metric_rows": bps.ROWS,
     **news_silver.TABLES,
     **synthetic_store.TABLES,
+    "geo_law_zones": geo_zones.COLUMNS,
 }
 PUBLISHED = (
     ("silver", "incidents"),
@@ -49,6 +51,8 @@ PUBLISHED = (
     ("silver", "news_incidents"),
     ("silver", "synthetic_incidents"),
     ("silver", "synthetic_anomalies"),
+    ("silver", "geo_law_zones"),
+    ("gold", "bpd_zone_calls"),
     ("gold", "news_audit"),
     ("gold", "gap_report"),
     ("gold", "incidents_real"),
@@ -253,6 +257,15 @@ def _stage_synthetic(lake: Lake, staging: Path, staged: _Staged) -> None:
     staged.published.append(("silver/gap_register/register.parquet", path))
 
 
+def _stage_geo(lake: Lake, staging: Path) -> None:
+    """The newest copy of each map layer; older copies stay in bronze as history."""
+    found = bronze.manifests(lake, geo_zones.SOURCE)
+    if found:
+        path = staging / "geo_law_zones" / "zones.parquet"
+        rows = geo_zones.rows(found[-1], bronze.read(lake, found[-1]))
+        write_parquet(path, STAGED_SCHEMAS["geo_law_zones"], rows)
+
+
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
     extraction = extraction or Extraction()
     staging = work_dir / "staging"
@@ -263,6 +276,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     _stage_calibration(lake, staging, staged)
     _stage_news(lake, staging, staged, extraction)
     _stage_synthetic(lake, staging, staged)
+    _stage_geo(lake, staging)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():

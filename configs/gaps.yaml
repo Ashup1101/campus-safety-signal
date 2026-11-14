@@ -63,5 +63,6 @@ gaps:
       end: null
       fields: [location, lat, lon]
     closing_source: >-
-      None public for points. District polygons from the city's public-safety GIS give zone
-      geometry (Phase 3); any synthetic point placement must stay inside the district.
+      None public for points. Zone polygons: the city's Law Reporting Zones layer (`geo pull`,
+      silver.geo_law_zones), whose codes match 99.5% of calls (2026-11-14); gold.bpd_zone_calls
+      places calls at zone level. Any synthetic point placement must stay inside the zone.

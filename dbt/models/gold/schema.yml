@@ -33,3 +33,8 @@ models:
           - accepted_values:
               arguments:
                 values: [official, news]
+  - name: bpd_zone_calls
+    description: BPD calls per police reporting zone with the zone's centroid (no finer location exists).
+    columns:
+      - name: zonecode
+        data_tests: [unique, not_null]
