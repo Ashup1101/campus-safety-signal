@@ -48,6 +48,7 @@ PUBLISHED = (
     ("silver", "news_items"),
     ("silver", "news_incidents"),
     ("silver", "synthetic_incidents"),
+    ("silver", "synthetic_anomalies"),
     ("gold", "news_audit"),
     ("gold", "gap_report"),
     ("gold", "incidents_real"),

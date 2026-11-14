@@ -335,3 +335,7 @@ def test_synthetic_patches_join_incidents_and_the_gap_report(tmp_path: Path) -> 
     )
     assert report == [("iu_log_2014", len(incidents), 1, len(anomalies), 0)]
     assert rows(gold / "gap_report.parquet", "SELECT count(*) FROM $t") == [(5,)]
+    labels = rows(
+        silver / "synthetic_anomalies.parquet", "SELECT gap_id, count(*) FROM $t GROUP BY 1"
+    )
+    assert labels == [("iu_log_2014", len(anomalies))]

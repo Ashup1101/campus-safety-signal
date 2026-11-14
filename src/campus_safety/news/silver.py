@@ -113,6 +113,8 @@ def presidio_redactor() -> Redact:
     """Names found by Presidio become NAME_MARKER (privacy.md: no names beyond bronze)."""
     from campus_safety.t3.privacy import PersonScreen
 
+    # Presidio logs every recognizer it loads; keep the transform log to counts.
+    logging.getLogger("presidio-analyzer").setLevel(logging.ERROR)
     screen_ = PersonScreen()
 
     def redact(text: str) -> str:

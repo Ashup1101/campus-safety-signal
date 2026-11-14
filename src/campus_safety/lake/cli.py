@@ -100,6 +100,8 @@ def run_transform(
             news.injection_suspected,
             news.ungrounded,
         )
+    if summary.synthetic_patches:
+        log.info("synthetic: %d patches staged (gap_id + seed)", summary.synthetic_patches)
     if summary.calibration_files or summary.calibration_errors:
         log.info(
             "calibration: %d files staged, %d unreadable",
