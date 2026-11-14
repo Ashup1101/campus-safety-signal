@@ -20,6 +20,7 @@ patterns = "campus_safety.patterns.cli:main"
 alerts = "campus_safety.alerts.cli:main"
 rag = "campus_safety.rag.cli:main"
 redteam = "campus_safety.security.cli:main"
+geo = "campus_safety.geo.cli:main"
 t3 = "campus_safety.t3.cli:main"
 
 [dependency-groups]
