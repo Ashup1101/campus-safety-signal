@@ -37,6 +37,7 @@ class Incident:
     is_sensitive: bool
     injuries: int | None = None
     official_at: datetime | None = None  # when the official source published (latency)
+    quarantined: bool = False  # a source item carried instruction-like text (injection_suspected)
 
 
 @dataclass(frozen=True)
@@ -61,6 +62,8 @@ def decide(incident: Incident) -> Decision:
         return Decision("none", "n/a", "sensitive offense")
     if incident.source == "synthetic":
         return Decision("none", "n/a", "synthetic row")
+    if incident.quarantined:
+        return Decision("none", "n/a", "quarantined: injection suspected")
     if not incident.confirmed:
         return Decision("none", "n/a", "unconfirmed news")
     tier = incident.severity_tier or "unclassified"

@@ -31,7 +31,9 @@ def extract(cache: Path, model: str, limit: int) -> int:
     found, summary = _items()
     extractor = CachedLLMExtractor(cache, model, gemini.generate)
     relevant = [i for i in found if screen(i.text).relevant]
-    todo = [i for i in relevant if not extractor.cached(screen(i.text).text)][:limit]
+    # Flagged items are extracted by rules only, so a model call on them would be wasted credit.
+    safe = [i for i in relevant if not screen(i.text).injection_suspected]
+    todo = [i for i in safe if not extractor.cached(screen(i.text).text)][:limit]
     log.info(
         "%d items, %d relevant, %d to extract (cached: %d)",
         summary.items,

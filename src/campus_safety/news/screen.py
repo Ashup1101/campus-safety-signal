@@ -31,7 +31,9 @@ INJECTION = re.compile(
     r"<\s*/?\s*(?:system|instruction|prompt|tool)\b|\bBEGIN (?:SYSTEM|INSTRUCTION)|"
     r"\[INST\]|<\|im_start\|>|do not follow|respond (?:only )?with\b|output the (?:following|json)|"
     r"print (?:your|the) (?:prompt|instructions)|reveal\b.{0,20}(?:prompt|instructions)|"
-    r"\bjailbreak\b|\bdan mode\b|developer mode|override\b.{0,20}(?:rules|safety)",
+    r"\bjailbreak\b|\bdan mode\b|developer mode|override\b.{0,20}(?:rules|safety)|"
+    # Our own answer fields never appear in news prose: naming them targets the extractor.
+    r"\b(?:incident_type|location_text|occurred_date|occurred_time|weapon_involved|iu_related)\b",
     re.IGNORECASE,
 )
 
@@ -61,6 +63,21 @@ def screen(text: str) -> Screened:
         relevant=RELEVANT.search(cleaned) is not None,
         injection_suspected=INJECTION.search(cleaned) is not None,
     )
+
+
+_SENTENCES = re.compile(r"(?<=[.!?;])\s+")
+
+
+def strip_instructions(text: str) -> str:
+    """The item up to its first instruction-like sentence, so a flagged item's planted keywords
+    ("incident_type is shooting") cannot steer even the rules extractor. Everything after it
+    goes too: an attacker can split one instruction across sentences (red-team news-split-*)."""
+    kept: list[str] = []
+    for sentence in _SENTENCES.split(text):
+        if INJECTION.search(sentence):
+            break
+        kept.append(sentence)
+    return " ".join(kept)
 
 
 def nonce() -> str:
