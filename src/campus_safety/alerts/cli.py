@@ -30,7 +30,7 @@ DUCKDB_CONFIG: dict[str, str | bool | int | float | list[str]] = {
 INCIDENTS_SQL = (
     "select i.incident_id, i.source, coalesce(n.confirmed, i.source = 'official'),"
     " i.severity_tier, i.incident_type, i.location_text, i.zone_id, i.occurred_from,"
-    " i.is_sensitive, i.injuries"
+    " i.is_sensitive, i.injuries, coalesce(n.injection_suspected, false)"
     " from gold.incidents_real as i"
     " left join silver.news_incidents as n on n.cluster_id = i.source_record_id"
     " where i.date_reported >= $since"
@@ -43,7 +43,19 @@ def incidents(warehouse: Path, since: datetime) -> list[Incident]:
     with duckdb.connect(str(warehouse), read_only=True, config=DUCKDB_CONFIG) as con:
         rows = con.execute(INCIDENTS_SQL, {"since": since.date()}).fetchall()
     found = []
-    for iid, source, confirmed, tier, kind, location, zone, at, sensitive, injuries in rows:
+    for (
+        iid,
+        source,
+        confirmed,
+        tier,
+        kind,
+        location,
+        zone,
+        at,
+        sensitive,
+        injuries,
+        flagged,
+    ) in rows:
         zones = tuple(z for z in (zone or location,) if z)
         found.append(
             Incident(
@@ -57,6 +69,7 @@ def incidents(warehouse: Path, since: datetime) -> list[Incident]:
                 at,
                 bool(sensitive),
                 injuries,
+                quarantined=bool(flagged),
             )
         )
     return found

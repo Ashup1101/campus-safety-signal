@@ -50,6 +50,14 @@ def test_rules_follow_the_alert_policy() -> None:
     assert decide(low).route == "digest"
 
 
+def test_quarantined_news_never_alerts() -> None:
+    flagged = Incident(
+        "n3", "news", True, "high", "ROBBERY", "Walnut", ("z",), None, False, quarantined=True
+    )
+    assert decide(flagged) == decide(flagged)  # deterministic
+    assert decide(flagged).route == "none" and "quarantined" in decide(flagged).reason
+
+
 def test_recipients_need_a_shared_zone_and_never_a_blast() -> None:
     assert [s.subscriber_id for s in recipients(SHOOTING, [MOM, SAM, FAR, DIGEST])] == [
         "parent_mom",
@@ -222,7 +230,10 @@ def warehouse(path: Path) -> Path:
             " severity_tier VARCHAR, incident_type VARCHAR, location_text VARCHAR, zone_id VARCHAR,"
             " occurred_from TIMESTAMP, is_sensitive BOOLEAN, injuries INTEGER, date_reported DATE)"
         )
-        con.execute("CREATE TABLE silver.news_incidents (cluster_id VARCHAR, confirmed BOOLEAN)")
+        con.execute(
+            "CREATE TABLE silver.news_incidents"
+            " (cluster_id VARCHAR, confirmed BOOLEAN, injection_suspected BOOLEAN)"
+        )
         con.executemany(
             "INSERT INTO gold.incidents_real VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
             [
@@ -294,7 +305,8 @@ def warehouse(path: Path) -> Path:
             ],
         )
         con.executemany(
-            "INSERT INTO silver.news_incidents VALUES (?, ?)", [("cl1", True), ("cl2", False)]
+            "INSERT INTO silver.news_incidents VALUES (?, ?, ?)",
+            [("cl1", True, False), ("cl2", False, False)],
         )
     return path
 

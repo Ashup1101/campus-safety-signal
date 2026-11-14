@@ -18,7 +18,7 @@ from campus_safety.lake.storage import Lake
 from campus_safety.news.dedupe import Candidate, clusters
 from campus_safety.news.extract import SEVERITY, Extraction, Extractor
 from campus_safety.news.items import Item, ItemsLayoutError, items
-from campus_safety.news.screen import screen
+from campus_safety.news.screen import Screened, screen, strip_instructions
 from campus_safety.official.descriptors import strip_descriptors
 
 log = logging.getLogger("news")
@@ -152,12 +152,27 @@ def _utc(at: datetime | None) -> datetime | None:
     return at.astimezone(UTC).replace(tzinfo=None) if at else None
 
 
-def _choose(found: dict[str, Extraction | None]) -> Extraction | None:
-    """The model's answer when it is grounded, else the rules'."""
+def _choose(found: dict[str, Extraction | None], flagged: bool = False) -> Extraction | None:
+    """The model's answer when it is grounded, else the rules'. An item flagged for
+    instruction-like text never uses the model's answer: a hijacked model can copy a place the
+    attacker planted in the item, which grounding alone would accept (red-team news-*)."""
     llm = found.get("llm")
-    if llm is not None and llm.grounded:
+    if llm is not None and llm.grounded and not flagged:
         return llm
     return found.get("rules")
+
+
+def extract_item(
+    item: Item, extractors: list[Extractor]
+) -> tuple[Screened, dict[str, Extraction | None], Extraction | None]:
+    """Screen one item, run the extractors, choose an answer. A flagged item is extracted from
+    its text minus the instruction-like sentences, and the model's answer is never chosen."""
+    screened = screen(item.text)
+    if not screened.relevant:
+        return screened, {}, None
+    text = strip_instructions(screened.text) if screened.injection_suspected else screened.text
+    answers = {e.name: e.extract(text, item.published_at) for e in extractors}
+    return screened, answers, _choose(answers, screened.injection_suspected)
 
 
 def stage(
@@ -173,7 +188,7 @@ def stage(
     flagged: set[str] = set()
     ingested = _utc(now)
     for item in found:
-        screened = screen(item.text)
+        screened, answers, chosen = extract_item(item, extractors)
         title = summary_ = None
         if screened.relevant:
             summary.relevant += 1
@@ -201,10 +216,7 @@ def stage(
         )
         if not screened.relevant:
             continue
-        answers: dict[str, Extraction | None] = {}
-        for extractor in extractors:
-            extraction = extractor.extract(screened.text, item.published_at)
-            answers[extractor.name] = extraction
+        for name, extraction in answers.items():
             if extraction is None:
                 continue
             if not extraction.grounded:
@@ -212,7 +224,7 @@ def stage(
             rows["news_extractions"].append(
                 (
                     item.item_id,
-                    extractor.name,
+                    name,
                     extraction.incident_type,
                     extraction.occurred_date,
                     extraction.occurred_time,
@@ -224,10 +236,9 @@ def stage(
                     extraction.grounded,
                 )
             )
-        chosen = _choose(answers)
         if chosen is not None and chosen.is_incident:
             summary.incidents += 1
-            candidates.append(Candidate(item, chosen))
+            candidates.append(Candidate(item, chosen, screened.injection_suspected))
 
     for cluster in clusters(candidates):
         summary.clusters += 1

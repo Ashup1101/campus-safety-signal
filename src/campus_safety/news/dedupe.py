@@ -62,6 +62,7 @@ SAME_DAY = timedelta(days=1)
 class Candidate:
     item: Item
     extraction: Extraction
+    flagged: bool = False  # screening found instruction-like text: never confirms
 
     @property
     def day(self) -> date | None:
@@ -137,12 +138,12 @@ class Cluster:
 
     @property
     def outlets(self) -> int:
-        """Distinct tier 2 outlets."""
-        return len({c.item.source for c in self.candidates if c.item.tier == 2})
+        """Distinct tier 2 outlets among unflagged items."""
+        return len({c.item.source for c in self.candidates if c.item.tier == 2 and not c.flagged})
 
     @property
     def official(self) -> bool:
-        return any(c.item.tier == 1 for c in self.candidates)
+        return any(c.item.tier == 1 and not c.flagged for c in self.candidates)
 
     @property
     def confirmed(self) -> bool:
