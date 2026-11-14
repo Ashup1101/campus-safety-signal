@@ -3,6 +3,7 @@ is made up; no real article text."""
 
 import json
 import logging
+import os
 from datetime import UTC, date, datetime
 from pathlib import Path
 
@@ -346,7 +347,7 @@ def test_cli_extract_fills_cache_with_a_fake_model(
     monkeypatch.setenv("LAKE_URI", lake.uri)
     calls: list[str] = []
 
-    def generate(system: str, user: str) -> str:
+    def generate(system: str, user: str, **_: object) -> str:
         calls.append(user)
         return json.dumps({**dict.fromkeys(FIELDS), "incident_type": "other", "iu_related": False})
 
@@ -388,3 +389,63 @@ def test_evaluate_scores_per_field(tmp_path: Path) -> None:
     path.write_text("records:\n  - url: https://a/1\n    incident_type: shooting\n")
     assert evaluate.load_truth(path)[0]["incident_type"] == "shooting"
     assert set(TYPES) >= {"shooting", "other"}
+
+
+def test_openai_request_shape_and_usage(monkeypatch: pytest.MonkeyPatch) -> None:
+    import io
+    import urllib.request
+
+    from campus_safety.news import openai_api, providers
+
+    seen: dict[str, object] = {}
+
+    class Response(io.BytesIO):
+        def __enter__(self) -> "Response":
+            return self
+
+        def __exit__(self, *_: object) -> None:
+            pass
+
+    def urlopen(request: urllib.request.Request, timeout: float) -> Response:
+        seen["url"] = request.full_url
+        seen["auth"] = request.get_header("Authorization")
+        seen["body"] = json.loads(bytes(request.data) if isinstance(request.data, bytes) else b"{}")
+        return Response(
+            b'{"choices":[{"message":{"content":"{}"}}],'
+            b'"usage":{"prompt_tokens":120,"completion_tokens":30}}'
+        )
+
+    monkeypatch.setattr(urllib.request, "urlopen", urlopen)
+    monkeypatch.setenv("OPENAI_API_KEY", "k")
+    usage = openai_api.Usage()
+    ask = providers.generator("openai", "gpt-test", json_mode=True, usage=usage)
+    assert ask("sys", "user") == "{}"
+    assert seen["url"] == "https://api.openai.com/v1/chat/completions"
+    assert seen["auth"] == "Bearer k"
+    body = seen["body"]
+    assert isinstance(body, dict)
+    assert (body["model"], body["temperature"], body["response_format"]) == (
+        "gpt-test", 0, {"type": "json_object"},
+    )  # fmt: skip
+    assert body["max_tokens"] == openai_api.MAX_OUTPUT_TOKENS
+    assert (usage.calls, usage.prompt_tokens, usage.completion_tokens) == (1, 120, 30)
+    providers.generator("openai", "gpt-test", json_mode=False)("sys", "user")
+    body = seen["body"]
+    assert isinstance(body, dict) and "response_format" not in body
+    monkeypatch.delenv("OPENAI_API_KEY")
+    with pytest.raises(openai_api.OpenAIError):
+        openai_api.generate("sys", "user")
+    with pytest.raises(ValueError, match="unknown provider"):
+        providers.generator("other", "m", json_mode=True)
+
+
+def test_load_keys_reads_only_model_keys(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    from campus_safety.env import load_keys
+
+    dotenv = tmp_path / ".env"
+    dotenv.write_text("OPENAI_API_KEY='sk-test'\nAWS_PROFILE=x\nGEMINI_API_KEY=\n# comment\n")
+    monkeypatch.delenv("AWS_PROFILE", raising=False)
+    assert load_keys(dotenv) == ["OPENAI_API_KEY"]
+    assert os.environ["OPENAI_API_KEY"] == "sk-test" and "AWS_PROFILE" not in os.environ
+    monkeypatch.setenv("OPENAI_API_KEY", "already-set")
+    assert load_keys(dotenv) == [] and os.environ["OPENAI_API_KEY"] == "already-set"

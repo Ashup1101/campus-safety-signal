@@ -167,7 +167,7 @@ class FakeModel:
     def __init__(self, answers: list[str]) -> None:
         self.answers, self.prompts = list(answers), []  # type: list[str], list[str]
 
-    def __call__(self, system: str, user: str) -> str:
+    def __call__(self, system: str, user: str, **_: object) -> str:
         self.prompts.append(user)
         return self.answers.pop(0) if self.answers else "No answer."
 
