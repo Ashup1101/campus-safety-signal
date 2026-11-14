@@ -156,3 +156,13 @@ models:
         data_tests: [not_null]
       - name: seed
         data_tests: [not_null]
+
+  - name: synthetic_anomalies
+    columns:
+      - name: anomaly_id
+        data_tests: [not_null]
+      - name: kind
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [spike, lull]
