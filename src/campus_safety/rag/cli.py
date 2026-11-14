@@ -1,6 +1,7 @@
-"""rag: build the index from the warehouse, ask one question (Gemini, public incident data
-only), or eval a question file (one question per line) for faithfulness and citation
-correctness. Logs carry counts and scores; `ask` prints the answer and its citations."""
+"""rag: build the index from the warehouse, ask one question (Gemini by default or OpenAI;
+public incident data only), or eval a question file (one question per line, capped) for
+faithfulness and citation correctness. Logs carry counts and scores; `ask` prints the answer
+and its citations."""
 
 import argparse
 import logging
@@ -8,7 +9,8 @@ import statistics
 from collections.abc import Sequence
 from pathlib import Path
 
-from campus_safety.news import gemini
+from campus_safety.env import load_keys
+from campus_safety.news import providers
 from campus_safety.rag import index as rag_index
 from campus_safety.rag import metrics
 from campus_safety.rag.graph import Agent, Generate
@@ -43,8 +45,8 @@ def ask(path: Path, question: str, generate: Generate) -> int:
     return 0
 
 
-def evaluate(path: Path, questions: Path, generate: Generate) -> int:
-    lines = [q.strip() for q in questions.read_text().splitlines() if q.strip()]
+def evaluate(path: Path, questions: Path, generate: Generate, limit: int = 20) -> int:
+    lines = [q.strip() for q in questions.read_text().splitlines() if q.strip()][:limit]
     index = rag_index.Index(path)
     faith, cite, refused, empty = [], [], 0, 0
     try:
@@ -79,6 +81,8 @@ def evaluate(path: Path, questions: Path, generate: Generate) -> int:
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="rag", description=__doc__)
     parser.add_argument("--index", type=Path, default=rag_index.INDEX)
+    parser.add_argument("--provider", choices=providers.PROVIDERS, default="gemini")
+    parser.add_argument("--model", default=None, help="default: the provider's pinned model")
     commands = parser.add_subparsers(dest="command", required=True)
     build_parser = commands.add_parser("build", help="rebuild the index from the warehouse")
     build_parser.add_argument("--warehouse", type=Path, default=WAREHOUSE)
@@ -86,15 +90,21 @@ def main(argv: Sequence[str] | None = None) -> int:
     ask_parser.add_argument("question")
     eval_parser = commands.add_parser("eval", help="score a file of questions")
     eval_parser.add_argument("questions", type=Path)
+    eval_parser.add_argument("--limit", type=int, default=20, help="most questions per run")
     args = parser.parse_args(argv)
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    load_keys()
+    model = args.model or providers.default_model(args.provider)
+    # Answers are prose with [n] citations, not JSON.
+    generate = providers.generator(args.provider, model, json_mode=False)
+    errors: tuple[type[Exception], ...] = (FileNotFoundError, *providers.ERRORS)
     try:
         if args.command == "build":
             return build(args.warehouse, args.index)
         if args.command == "ask":
-            return ask(args.index, args.question, gemini.generate)
-        return evaluate(args.index, args.questions, gemini.generate)
-    except (FileNotFoundError, gemini.GeminiError) as e:
+            return ask(args.index, args.question, generate)
+        return evaluate(args.index, args.questions, generate, args.limit)
+    except errors as e:
         log.error("%s", e)
         return 1

@@ -33,12 +33,23 @@ def api_key() -> str:
     return key
 
 
-def generate(system: str, user: str, *, model: str | None = None, key: str | None = None) -> str:
-    """One deterministic JSON-mode answer. Errors carry status codes, never the request body."""
+def generate(
+    system: str,
+    user: str,
+    *,
+    model: str | None = None,
+    key: str | None = None,
+    json_mode: bool = True,
+) -> str:
+    """One deterministic answer, JSON mode for extraction. Errors carry status codes, never the
+    request body."""
+    config: dict[str, Any] = {"temperature": 0}
+    if json_mode:
+        config["responseMimeType"] = "application/json"
     body: dict[str, Any] = {
         "systemInstruction": {"parts": [{"text": system}]},
         "contents": [{"role": "user", "parts": [{"text": user}]}],
-        "generationConfig": {"temperature": 0, "responseMimeType": "application/json"},
+        "generationConfig": config,
     }
     request = urllib.request.Request(  # noqa: S310 (fixed https host)
         f"{HOST}/v1beta/models/{model or model_name()}:generateContent",

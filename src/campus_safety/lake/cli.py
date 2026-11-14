@@ -27,7 +27,12 @@ def _verified(path: Path) -> frozenset[tuple[str, str]]:
 
 
 def run_transform(
-    work_dir: Path, cache_dir: Path, extractor: str, fallback_cache: Path, news_cache: Path
+    work_dir: Path,
+    cache_dir: Path,
+    extractor: str,
+    fallback_cache: Path,
+    news_cache: Path,
+    news_model: str | None = None,
 ) -> int:
     # Imported here: duckdb and dbt live in the transform group, not in the ingest install.
     from campus_safety.iu_crime_log.classify import record_unclassified
@@ -36,7 +41,7 @@ def run_transform(
 
     lake = open_lake(os.environ.get("LAKE_URI"), cache_dir)
     extraction = Extraction(
-        extractor, fallback_cache, _verified(VERIFIED), news_cache, model_name()
+        extractor, fallback_cache, _verified(VERIFIED), news_cache, news_model or model_name()
     )
     try:
         summary = transform(lake, work_dir, extraction)
@@ -194,6 +199,9 @@ def main(argv: Sequence[str] | None = None) -> int:
         default=Path("data/cache/news_llm"),
         help="cached model answers for news items (written by `news extract`)",
     )
+    transform_parser.add_argument(
+        "--news-model", default=None, help="whose cached answers to use (default: Gemini's)"
+    )
     commands.add_parser("coverage", help="print covered date ranges and gaps (last transform)")
     copy_parser = commands.add_parser("copy-bronze", help="copy bronze from another lake URI")
     copy_parser.add_argument("source_uri", help="e.g. file:///abs/path/data/lake")
@@ -209,7 +217,12 @@ def main(argv: Sequence[str] | None = None) -> int:
         if args.command == "copy-bronze":
             return copy_bronze(args.source_uri)
         return run_transform(
-            args.work_dir, args.cache_dir, args.extractor, args.fallback_cache, args.news_cache
+            args.work_dir,
+            args.cache_dir,
+            args.extractor,
+            args.fallback_cache,
+            args.news_cache,
+            args.news_model,
         )
     except (LakeConfigError, ClientError, BotoCoreError) as e:
         log.error("%s", e)
