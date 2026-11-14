@@ -85,9 +85,14 @@ lambda-package:
 		"$$(uv run python -c 'import certifi, os; print(os.path.dirname(certifi.__file__))')" $(PACKAGE)/
 
 # Plan with the AWS profile and region from .env and the gh CLI's token; review, then apply.
+# A plan from a checkout behind main would undo merged infrastructure: refuse it.
 infra-plan: $(TF) lambda-package
 	@test -n '$(call env,AWS_PROFILE)' -a -n '$(call env,AWS_REGION)' \
 		|| { echo "set AWS_PROFILE and AWS_REGION in .env" >&2; exit 1; }
+	@git fetch -q origin main \
+		|| { echo "cannot reach GitHub: not planning from a possibly stale checkout" >&2; exit 1; }
+	@git merge-base --is-ancestor origin/main HEAD \
+		|| { echo "this checkout is behind origin/main: git pull first" >&2; exit 1; }
 	AWS_PROFILE='$(call env,AWS_PROFILE)' AWS_REGION='$(call env,AWS_REGION)' \
 		GITHUB_TOKEN="$$(gh auth token)" sh -c \
 		'$(TF) -chdir=infra init -input=false -lockfile=readonly && $(TF) -chdir=infra plan -input=false -out=tfplan'
