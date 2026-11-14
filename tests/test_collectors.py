@@ -63,6 +63,7 @@ def test_a_failing_source_does_not_stop_the_rest(web: FakeWeb, tmp_path: Path) -
     waits: list[float] = []
     result = poll(FileLake(tmp_path / "lake"), SOURCES, "r1", sleep=waits.append)
     assert result.failed == ["iu_emergency"]
+    assert result.reasons == {"iu_emergency": "HTTPStatusError 503"}
     assert len(result.stored) == len(SOURCES) - 1
     assert 10.0 in waits
 

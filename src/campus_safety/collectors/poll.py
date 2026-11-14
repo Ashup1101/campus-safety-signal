@@ -23,6 +23,7 @@ class PollResult:
     stored: list[str] = field(default_factory=list)
     unchanged: list[str] = field(default_factory=list)
     failed: list[str] = field(default_factory=list)
+    reasons: dict[str, str] = field(default_factory=dict)  # source -> error type (+ HTTP status)
     items: dict[str, int] = field(default_factory=dict)
 
 
@@ -42,8 +43,18 @@ def poll(
     for source in sources:
         try:
             page = fetch.polite_get(source.url)
-        except fetch.FetchError:
+        except fetch.FetchError as e:
             result.failed.append(source.name)
+            status = getattr(e, "status", None)
+            inner = getattr(e.__cause__, "reason", None)  # URLError wraps the socket/TLS error
+            cause = "".join(
+                f"({type(x).__name__})"
+                for x in (e.__cause__, inner)
+                if isinstance(x, BaseException)
+            )
+            result.reasons[source.name] = (
+                type(e).__name__ + cause + (f" {status}" if status else "")
+            )
             wait(source.delay)
             continue
         if source.ext == "xml":

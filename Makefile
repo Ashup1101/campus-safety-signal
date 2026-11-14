@@ -1,5 +1,5 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply transform demo-seed demo-drill demo-all-clear demo-replay \
+	infra-check infra-plan infra-apply lambda-package transform demo-seed demo-drill demo-all-clear demo-replay \
 	demo-assets demo demo-stop demo-walk demo-walk-home apps-check
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
@@ -75,8 +75,17 @@ infra-check: $(TF)
 	$(TF) -chdir=infra init -backend=false -input=false -lockfile=readonly >/dev/null
 	$(TF) -chdir=infra validate
 
+# The Lambda code: src/campus_safety plus certifi (the runtime ships boto3 but not certifi).
+# Copies only; a file removed from src/ stays in the package until infra/.build/ is cleared.
+PACKAGE := infra/.build/package
+lambda-package:
+	mkdir -p $(PACKAGE)
+	rsync -a --exclude __pycache__ src/campus_safety $(PACKAGE)/
+	rsync -a --exclude __pycache__ \
+		"$$(uv run python -c 'import certifi, os; print(os.path.dirname(certifi.__file__))')" $(PACKAGE)/
+
 # Plan with the AWS profile and region from .env and the gh CLI's token; review, then apply.
-infra-plan: $(TF)
+infra-plan: $(TF) lambda-package
 	@test -n '$(call env,AWS_PROFILE)' -a -n '$(call env,AWS_REGION)' \
 		|| { echo "set AWS_PROFILE and AWS_REGION in .env" >&2; exit 1; }
 	AWS_PROFILE='$(call env,AWS_PROFILE)' AWS_REGION='$(call env,AWS_REGION)' \

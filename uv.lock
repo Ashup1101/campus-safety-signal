@@ -8,20 +8,20 @@ resolution-markers = [
 ]
 
 [options]
-exclude-newer = "2026-10-31T18:33:04.115471Z"
+exclude-newer = "2026-10-31T18:53:25.014503Z"
 exclude-newer-span = "P14D"
 
 [options.exclude-newer-package]
-opentelemetry-sdk = { timestamp = "2026-11-14T18:33:04.115483Z", span = "PT0S" }
-setuptools = { timestamp = "2026-11-14T18:33:04.115484Z", span = "PT0S" }
-opentelemetry-api = { timestamp = "2026-11-14T18:33:04.115482Z", span = "PT0S" }
-pyasn1 = { timestamp = "2026-11-14T18:33:04.115483Z", span = "PT0S" }
-opentelemetry-proto = { timestamp = "2026-11-14T18:33:04.115482Z", span = "PT0S" }
-virtualenv = { timestamp = "2026-11-14T18:33:04.115484Z", span = "PT0S" }
-certifi = { timestamp = "2026-11-14T18:33:04.115478Z", span = "PT0S" }
-opentelemetry-semantic-conventions = { timestamp = "2026-11-14T18:33:04.115483Z", span = "PT0S" }
-filelock = { timestamp = "2026-11-14T18:33:04.115482Z", span = "PT0S" }
-pypdf = { timestamp = "2026-11-14T18:33:04.115484Z", span = "PT0S" }
+opentelemetry-sdk = { timestamp = "2026-11-14T18:53:25.015448Z", span = "PT0S" }
+setuptools = { timestamp = "2026-11-14T18:53:25.015449Z", span = "PT0S" }
+opentelemetry-api = { timestamp = "2026-11-14T18:53:25.015447Z", span = "PT0S" }
+pyasn1 = { timestamp = "2026-11-14T18:53:25.015449Z", span = "PT0S" }
+opentelemetry-proto = { timestamp = "2026-11-14T18:53:25.015447Z", span = "PT0S" }
+virtualenv = { timestamp = "2026-11-14T18:53:25.01545Z", span = "PT0S" }
+certifi = { timestamp = "2026-11-14T18:53:25.014934Z", span = "PT0S" }
+opentelemetry-semantic-conventions = { timestamp = "2026-11-14T18:53:25.015448Z", span = "PT0S" }
+filelock = { timestamp = "2026-11-14T18:53:25.015446Z", span = "PT0S" }
+pypdf = { timestamp = "2026-11-14T18:53:25.015449Z", span = "PT0S" }
 
 [[package]]
 name = "agate"
@@ -265,6 +265,7 @@ version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "boto3" },
+    { name = "certifi" },
 ]
 
 [package.dev-dependencies]
@@ -317,7 +318,10 @@ transform = [
 ]
 
 [package.metadata]
-requires-dist = [{ name = "boto3", specifier = ">=1.43.112" }]
+requires-dist = [
+    { name = "boto3", specifier = ">=1.43.112" },
+    { name = "certifi", specifier = ">=2026.10.23" },
+]
 
 [package.metadata.requires-dev]
 agents = [{ name = "langgraph", specifier = ">=1.2.18" }]

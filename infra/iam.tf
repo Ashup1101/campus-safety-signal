@@ -1,11 +1,13 @@
 locals {
+  oidc            = var.enable_github_oidc ? 1 : 0
   github_oidc_url = "https://token.actions.githubusercontent.com"
   github_oidc_arn = (
-    var.create_github_oidc_provider
+    !var.enable_github_oidc ? null
+    : var.create_github_oidc_provider
     ? aws_iam_openid_connect_provider.github[0].arn
     : data.aws_iam_openid_connect_provider.github[0].arn
   )
-  ingest_subject = "repo:${var.github_owner}/${var.github_repository}:environment:${github_repository_environment.ingest.environment}"
+  ingest_subject = "repo:${var.github_owner}/${var.github_repository}:environment:ingest"
 }
 
 # Local work (transform, backups, imports) assumes this role from a profile in the account.
@@ -65,19 +67,20 @@ resource "aws_iam_role_policy_attachment" "local" {
 }
 
 resource "aws_iam_openid_connect_provider" "github" {
-  count          = var.create_github_oidc_provider ? 1 : 0
+  count          = var.enable_github_oidc && var.create_github_oidc_provider ? 1 : 0
   url            = local.github_oidc_url
   client_id_list = ["sts.amazonaws.com"]
 }
 
 data "aws_iam_openid_connect_provider" "github" {
-  count = var.create_github_oidc_provider ? 0 : 1
+  count = var.enable_github_oidc && !var.create_github_oidc_provider ? 1 : 0
   url   = local.github_oidc_url
 }
 
 # Only jobs that run in the "ingest" environment get this role, and that environment only
 # deploys from main.
 data "aws_iam_policy_document" "ingest_trust" {
+  count = local.oidc
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
     principals {
@@ -98,6 +101,7 @@ data "aws_iam_policy_document" "ingest_trust" {
 }
 
 data "aws_iam_policy_document" "ingest" {
+  count = local.oidc
   statement {
     sid       = "WriteCrimeLogBronze"
     actions   = ["s3:PutObject"]
@@ -106,12 +110,14 @@ data "aws_iam_policy_document" "ingest" {
 }
 
 resource "aws_iam_role" "ingest" {
+  count              = local.oidc
   name               = "campus-safety-signal-ingest"
-  assume_role_policy = data.aws_iam_policy_document.ingest_trust.json
+  assume_role_policy = data.aws_iam_policy_document.ingest_trust[0].json
 }
 
 resource "aws_iam_role_policy" "ingest" {
+  count  = local.oidc
   name   = "write-crime-log-bronze"
-  role   = aws_iam_role.ingest.id
-  policy = data.aws_iam_policy_document.ingest.json
+  role   = aws_iam_role.ingest[0].id
+  policy = data.aws_iam_policy_document.ingest[0].json
 }

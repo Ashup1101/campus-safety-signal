@@ -13,6 +13,8 @@ from functools import cache
 from pathlib import Path
 from urllib.parse import urlsplit, urlunsplit
 
+import certifi
+
 from campus_safety import __version__
 
 USER_AGENT = (
@@ -72,9 +74,12 @@ def get(url: str, max_bytes: int = MAX_BYTES) -> bytes:
 
 @cache
 def tls_context() -> ssl.SSLContext:
-    """System roots plus intermediates some servers fail to send. Chains must still end at a
-    self-signed system root: partial chains (an intermediate as trust anchor) stay disabled."""
+    """System roots, Mozilla's current roots (certifi), and intermediates some servers fail to
+    send. Chains must still end at a self-signed trusted root: partial chains (an intermediate
+    as trust anchor) stay disabled. certifi matters where the system store is older or trimmed,
+    as in AWS Lambda, which lacks the emSign root behind emergency.iu.edu."""
     context = ssl.create_default_context()
+    context.load_verify_locations(cafile=certifi.where())
     context.load_verify_locations(cadata=INTERMEDIATES.read_text())
     context.verify_flags &= ~ssl.VERIFY_X509_PARTIAL_CHAIN
     return context

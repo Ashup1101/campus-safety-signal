@@ -84,13 +84,13 @@ resource "aws_cloudwatch_metric_alarm" "alerts_dlq" {
   }
 }
 
-# The whole package: the fan-out imports campus_safety.alerts.* (stdlib + boto3 only).
+# The whole package (make lambda-package): the fan-out imports campus_safety.alerts.* (stdlib,
+# boto3 from the runtime, and certifi for the email channel's TLS).
 data "archive_file" "alert_fanout" {
   count       = local.alerts
   type        = "zip"
-  source_dir  = "${path.module}/../src"
+  source_dir  = "${path.module}/.build/package"
   output_path = "${path.module}/.build/alert_fanout.zip"
-  excludes    = ["**/__pycache__/**", "**/*.pyc"]
 }
 
 resource "aws_cloudwatch_log_group" "alert_fanout" {
