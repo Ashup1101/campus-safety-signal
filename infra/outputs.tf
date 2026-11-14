@@ -7,5 +7,5 @@ output "local_role_arn" {
 }
 
 output "ingest_role_arn" {
-  value = aws_iam_role.ingest.arn
+  value = var.enable_github_oidc ? aws_iam_role.ingest[0].arn : null
 }

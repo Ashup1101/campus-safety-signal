@@ -148,3 +148,10 @@ def test_conditional_get_returns_304_as_unchanged(monkeypatch: pytest.MonkeyPatc
     page = fetch.polite_get("https://example.org/x", etag='"a"', last_modified="Sun")
     assert (page.status, page.body, page.etag, page.last_modified) == (304, b"", '"a"', "Sun")
     assert sent == [{"If-None-Match": '"a"', "If-Modified-Since": "Sun"}]
+
+
+def test_tls_context_trusts_mozillas_current_roots() -> None:
+    """certifi's roots are loaded too: the Lambda system store lacks the emSign root behind
+    emergency.iu.edu, which certifi (Mozilla's list) has."""
+    subjects = [str(cert["subject"]) for cert in fetch.tls_context().get_ca_certs()]
+    assert any("emSign Root CA - G1" in subject for subject in subjects)

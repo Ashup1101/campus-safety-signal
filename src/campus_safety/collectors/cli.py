@@ -40,5 +40,5 @@ def main(argv: Sequence[str] | None = None) -> int:
         result.items,
     )
     if result.failed:
-        log.warning("failed sources: %s", ", ".join(result.failed))
+        log.warning("failed sources: %s", result.reasons)
     return 1 if len(result.failed) == len(sources) else 0

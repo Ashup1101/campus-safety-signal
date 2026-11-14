@@ -13,3 +13,10 @@ variable "create_github_oidc_provider" {
   type        = bool
   default     = true
 }
+
+# The GitHub Actions ingest needs AWS's GitHub OIDC provider. This account's organization denies
+# iam:CreateOpenIDConnectProvider, so the daily capture runs in AWS instead (daily_ingest.tf).
+variable "enable_github_oidc" {
+  type    = bool
+  default = false
+}
