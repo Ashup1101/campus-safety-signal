@@ -39,6 +39,18 @@ _MONTHS = {
 _SINCE = re.compile(r"\b(?:since|after|from) (20\d\d)\b", re.IGNORECASE)
 _LAST = re.compile(r"\blast (\d{1,2}) (day|week|month|year)s?\b", re.IGNORECASE)
 _AT = re.compile(r"\b(?:at|near|on|around) ([A-Z][\w.'-]*(?: [A-Z0-9][\w.'-]*){0,3})")
+# "Kirkwood Avenue" must match IU's "400 BLK E KIRKWOOD": filter on the name, not the suffix.
+_STREET_WORDS = re.compile(
+    r"\s+(?:street|st|avenue|ave|road|rd|drive|dr|boulevard|blvd|lane|ln|pike|way|court|ct)\.?$",
+    re.IGNORECASE,
+)
+_SEASON = re.compile(r"\bthis (fall|spring|summer|semester|year|month)\b", re.IGNORECASE)
+# An honest "nothing here" answer needs no citation, as long as it states no facts.
+_NO_ANSWER = re.compile(
+    r"\b(?:does not|doesn't|do not|don't|cannot|can't|no) (?:provide|contain|include|"
+    r"mention|answer|information|record|data)",
+    re.IGNORECASE,
+)
 REFUSAL = (
     "I can't help with that. This service shares incident patterns, never details about "
     "people or sensitive cases. Follow official IU instructions; call 911 in an emergency."
@@ -181,10 +193,35 @@ def parse_filters(question: str, today: date) -> Filters:
     elif years := _YEAR.findall(question):
         year = int(years[0])
         since, until = date(year, 1, 1), date(year, 12, 31)
+    elif m := _SEASON.search(question):
+        since = _season_start(m[1].lower(), today)
     place = None
     if m := _AT.search(question):
-        place = m[1]
+        place = _STREET_WORDS.sub("", m[1]) or m[1]
     return Filters(since, until, place)
+
+
+def _season_start(word: str, today: date) -> date:
+    """Fall term starts Aug 1, spring Jan 1, summer May 1 (IU's calendar, roughly)."""
+    if word == "month":
+        return today.replace(day=1)
+    if word == "year":
+        return date(today.year, 1, 1)
+    if word == "semester":
+        word = "fall" if today.month >= 8 else "summer" if today.month >= 5 else "spring"
+    month = {"fall": 8, "spring": 1, "summer": 5}[word]
+    year = today.year if today.month >= month else today.year - 1
+    return date(year, month, 1)
+
+
+def is_no_answer(draft: str) -> bool:
+    """A short "the data does not say" answer: no citations, no numbers, no names."""
+    return (
+        len(draft) <= 300
+        and _NO_ANSWER.search(draft) is not None
+        and not _NUMBER.search(draft)
+        and not _NAME.search(draft)
+    )
 
 
 def problems(draft: str, hits: list[Hit]) -> list[str]:
@@ -194,6 +231,8 @@ def problems(draft: str, hits: list[Hit]) -> list[str]:
         return ["empty draft"]
     cited = [int(n) for n in _CITE.findall(draft)]
     if not cited:
+        if is_no_answer(draft):
+            return []
         return ["no citations"]
     if any(n < 1 or n > len(hits) for n in cited):
         found.append("citation outside the context")

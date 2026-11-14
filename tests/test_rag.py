@@ -280,3 +280,23 @@ def test_cli_build_ask_eval(
         in caplog.text
     )
     assert main(["--index", str(tmp_path / "nope.duckdb"), "ask", "x"]) == 1
+
+
+def test_real_model_findings_no_answer_street_names_and_seasons() -> None:
+    hits = [
+        index.Hit(
+            index.Document(
+                "i1", "official", "k", "Robbery at 400 BLK E KIRKWOOD", None, "KIRKWOOD", "robbery"
+            ),
+            1.0,
+        )
+    ]
+    honest = "The context does not provide information about robberies near Kirkwood this fall."
+    assert graph.problems(honest, hits) == []
+    assert graph.problems("There were no robberies in 2026.", hits) == ["no citations"]
+    filters = graph.parse_filters("Any robberies near Kirkwood Avenue this fall?", TODAY)
+    assert filters == graph.Filters(date(2026, 8, 1), None, "Kirkwood")
+    assert graph.parse_filters("thefts this spring", date(2026, 3, 2)).since == date(2026, 1, 1)
+    assert graph.parse_filters("thefts this semester", date(2026, 3, 2)).since == date(2026, 1, 1)
+    assert graph.parse_filters("thefts this fall", date(2026, 3, 2)).since == date(2025, 8, 1)
+    assert graph.parse_filters("thefts this month", TODAY).since == date(2026, 11, 1)
