@@ -1,5 +1,5 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
-	infra-check infra-plan infra-apply lambda-package transform demo-seed demo-drill demo-all-clear demo-replay \
+	infra-check infra-plan infra-apply lambda-package cloud-off cloud-on transform demo-seed demo-drill demo-all-clear demo-replay \
 	demo-assets demo demo-stop demo-walk demo-walk-home apps-check
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
@@ -91,6 +91,19 @@ infra-plan: $(TF) lambda-package
 	AWS_PROFILE='$(call env,AWS_PROFILE)' AWS_REGION='$(call env,AWS_REGION)' \
 		GITHUB_TOKEN="$$(gh auth token)" sh -c \
 		'$(TF) -chdir=infra init -input=false -lockfile=readonly && $(TF) -chdir=infra plan -input=false -out=tfplan'
+
+# Free-credit switch: cloud-off removes everything that runs or bills while idle (the daily
+# Lambda + schedule, and the alert and bronze-event plumbing if ever enabled); the lake bucket
+# and its data stay. cloud-on brings the daily capture back. The choice lives in a gitignored
+# infra/cloud.auto.tfvars, so a later plain infra-plan keeps it.
+cloud-off:
+	printf 'enable_daily_ingest  = false\nenable_alerts        = false\nenable_bronze_events = false\n' \
+		> infra/cloud.auto.tfvars
+	$(MAKE) infra-plan && $(MAKE) infra-apply
+
+cloud-on:
+	printf 'enable_daily_ingest = true\n' > infra/cloud.auto.tfvars
+	$(MAKE) infra-plan && $(MAKE) infra-apply
 
 # Applies exactly the reviewed plan file.
 infra-apply: $(TF)
