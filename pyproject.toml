@@ -66,7 +66,7 @@ en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/dow
 # pip-audit flags are exempt so a security fix never waits out the cooldown.
 [tool.uv]
 exclude-newer = "14 days"
-exclude-newer-package = { certifi = "0 days", filelock = "0 days", pyasn1 = "0 days", pypdf = "0 days", setuptools = "0 days", virtualenv = "0 days" }
+exclude-newer-package = { certifi = "0 days", filelock = "0 days", opentelemetry-api = "0 days", opentelemetry-proto = "0 days", opentelemetry-sdk = "0 days", opentelemetry-semantic-conventions = "0 days", pyasn1 = "0 days", pypdf = "0 days", setuptools = "0 days", virtualenv = "0 days" }
 
 [tool.ruff]
 line-length = 100
