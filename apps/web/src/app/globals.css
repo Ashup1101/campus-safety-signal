@@ -1,39 +1,63 @@
 @import "tailwindcss";
 
-/* Calm, friendly theme (shadcn/ui variables). Dark mode follows the system setting.
-   Activity and alert colors come from src/shared/tokens.json; red only for live official alerts. */
+/* Cream + crimson (the IU feel, not IU's marks). Light = cream paper, dark = warm ink for 2 a.m.
+   Brand crimson is identity only; live official alerts are told apart by structure and words
+   (see alerts.tsx), never by crimson. Values mirror tokens.json "brand" (contrast test). */
 
 :root {
-  --background: oklch(0.985 0.005 190);
-  --foreground: oklch(0.27 0.02 235);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.27 0.02 235);
-  --muted: oklch(0.965 0.008 200);
-  --muted-foreground: oklch(0.52 0.02 235);
-  --border: oklch(0.91 0.012 200);
-  --primary: oklch(0.56 0.075 185);
-  --primary-foreground: oklch(0.99 0 0);
-  --secondary: oklch(0.95 0.012 200);
-  --secondary-foreground: oklch(0.3 0.02 235);
-  --ring: oklch(0.62 0.075 185);
-  --radius: 1rem;
+  --background: #f5efe3;
+  --foreground: #1c1416;
+  --card: #fbf8f1;
+  --card-foreground: #1c1416;
+  --muted: #ece4d4;
+  --muted-foreground: #5c4f4a;
+  --border: #ddd2bf;
+  --primary: #9b1c31;
+  --primary-foreground: #f5efe3;
+  --secondary: #ece4d4;
+  --secondary-foreground: #2a1f21;
+  --ring: #9b1c31;
+  --radius: 0.875rem;
+  color-scheme: light;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --background: oklch(0.19 0.015 240);
-    --foreground: oklch(0.93 0.01 220);
-    --card: oklch(0.235 0.017 240);
-    --card-foreground: oklch(0.93 0.01 220);
-    --muted: oklch(0.27 0.017 240);
-    --muted-foreground: oklch(0.72 0.015 225);
-    --border: oklch(0.32 0.018 240);
-    --primary: oklch(0.72 0.08 185);
-    --primary-foreground: oklch(0.2 0.02 240);
-    --secondary: oklch(0.29 0.018 240);
-    --secondary-foreground: oklch(0.92 0.01 220);
-    --ring: oklch(0.72 0.08 185);
+    --background: #1c1416;
+    --foreground: #f5efe3;
+    --card: #251b1d;
+    --card-foreground: #f5efe3;
+    --muted: #2f2427;
+    --muted-foreground: #c9bba9;
+    --border: #3d2f32;
+    --primary: #e8667a;
+    --primary-foreground: #1c1416;
+    --secondary: #2f2427;
+    --secondary-foreground: #f5efe3;
+    --ring: #e8667a;
+    color-scheme: dark;
   }
+}
+
+/* Browser surfaces carry the palette too. */
+::selection {
+  background: color-mix(in oklab, var(--primary) 28%, transparent);
+}
+:focus-visible {
+  outline: 2px solid var(--ring);
+  outline-offset: 2px;
+}
+* {
+  scrollbar-color: var(--border) transparent;
+}
+
+/* Game day: a crimson and cream stripe marks anything live (hard stops, not a blend). */
+.stripe-live {
+  background: repeating-linear-gradient(-45deg, var(--primary) 0 8px, var(--background) 8px 16px);
+}
+.numerals {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
 }
 
 @theme inline {
