@@ -189,3 +189,40 @@ export function threadsOf(alerts: Alert[], now: number = Date.now()): AlertThrea
 export function checkInText(checkIn: { state: CheckInState; place: ShelterPlace | null }): string {
   return checkIn.state === "safe" ? "I'm safe" : `Sheltering at ${checkIn.place ?? "a safe place"}`;
 }
+
+export interface SketchPath {
+  id: string;
+  d: string; // SVG path in a width x height box
+  inArea: boolean;
+}
+
+// A tiny street sketch for an alert card: every known segment faint, the alert's area drawn last.
+// No tiles, so it costs nothing per card. Empty when the alert names no mapped street.
+export function areaSketch(features: SegmentFeature[], area: string[], width: number, height: number, pad = 10): SketchPath[] {
+  const points = features.flatMap((f) => f.geometry.coordinates.flat());
+  if (points.length === 0 || !features.some((f) => area.includes(f.id))) return [];
+  const lons = points.map((p) => p[0]);
+  const lats = points.map((p) => p[1]);
+  const [minX, maxX, minY, maxY] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)];
+  const kx = Math.cos((((minY + maxY) / 2) * Math.PI) / 180); // keep streets at their real angles
+  const spanX = (maxX - minX) * kx || 1e-9;
+  const spanY = maxY - minY || 1e-9;
+  const scale = Math.min((width - 2 * pad) / spanX, (height - 2 * pad) / spanY);
+  const ox = (width - spanX * scale) / 2;
+  const oy = (height - spanY * scale) / 2;
+  const xy = ([lon, lat]: number[]) =>
+    `${(ox + (lon - minX) * kx * scale).toFixed(1)},${(oy + (maxY - lat) * scale).toFixed(1)}`;
+  return features
+    .map((f) => ({
+      id: f.id,
+      inArea: area.includes(f.id),
+      d: f.geometry.coordinates.map((line) => `M${line.map(xy).join("L")}`).join(" "),
+    }))
+    .sort((a, b) => Number(a.inArea) - Number(b.inArea));
+}
+
+// "E Kirkwood Ave" from "E Kirkwood Ave, 400 block (Grant to Dunn)": the street names in an area.
+export function areaStreets(features: SegmentFeature[], area: string[]): string[] {
+  const names = features.filter((f) => area.includes(f.id)).map((f) => f.properties.name.split(",")[0]);
+  return [...new Set(names)];
+}

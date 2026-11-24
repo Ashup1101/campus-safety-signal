@@ -4,12 +4,15 @@ import { ClipboardCheck, ExternalLink, HeartHandshake, History, ShieldAlert, Shi
 import type { ReactNode } from "react";
 import { color, tokens } from "@/lib/client";
 import {
+  areaSketch,
+  areaStreets,
   checkInText,
   clockTime,
   toneOf,
   type Alert,
   type AlertThread,
   type CheckIn,
+  type SegmentFeature,
   type Tone,
 } from "@/shared/api";
 
@@ -30,10 +33,12 @@ function palette(tone: Tone, dark: boolean) {
 export function ThreadCard({
   thread,
   dark,
+  features = [],
   children,
 }: {
   thread: AlertThread;
   dark: boolean;
+  features?: SegmentFeature[];
   children?: ReactNode;
 }) {
   const { latest, closed, live, tone } = thread;
@@ -74,6 +79,7 @@ export function ThreadCard({
           </a>
         )}
       </div>
+      <AreaSketch features={features} area={thread.area} accent={shown.accent} />
       {children}
       {earlier.length > 0 && (
         <div className="mt-3 border-t pt-2" style={{ borderColor: `${shown.accent}40` }}>
@@ -133,5 +139,40 @@ export function AlertBanner({
         <X className="size-4" />
       </button>
     </div>
+  );
+}
+
+// The streets IU's text names, highlighted on a faint sketch of the demo streets. Text names the
+// streets too, so it never depends on color alone.
+export function AreaSketch({
+  features,
+  area,
+  accent,
+}: {
+  features: SegmentFeature[];
+  area: string[];
+  accent: string;
+}) {
+  const paths = areaSketch(features, area, 240, 120);
+  if (paths.length === 0) return null;
+  const streets = areaStreets(features, area).join(", ");
+  return (
+    <figure className="mt-3">
+      <svg viewBox="0 0 240 120" className="h-24 w-full rounded-lg bg-background/60" role="img" aria-label={`Map: ${streets}`}>
+        {paths.map((p) => (
+          <path
+            key={p.id}
+            d={p.d}
+            fill="none"
+            stroke={p.inArea ? accent : "currentColor"}
+            strokeOpacity={p.inArea ? 1 : 0.45}
+            strokeWidth={p.inArea ? 5 : 2.5}
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          />
+        ))}
+      </svg>
+      <figcaption className="mt-1 text-xs text-muted-foreground">Area named in the alert: {streets}</figcaption>
+    </figure>
   );
 }
