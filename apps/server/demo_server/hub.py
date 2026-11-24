@@ -20,6 +20,7 @@ from typing import Any, Protocol
 from campus_safety import events
 from campus_safety.official.alerts import OfficialAlert
 from demo_server.store import Account, Store
+from demo_server.threads import Threads
 
 SHARING = ("on", "paused", "off")
 CLIENTS = ("web", "ios")
@@ -84,6 +85,7 @@ class Hub:
         self._accounts: dict[str, Account] = {}
         self._sharing: dict[str, str] = {}
         self._location: dict[str, dict[str, Any]] = {}
+        self.threads = Threads()
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -223,9 +225,12 @@ class Hub:
         in one pass."""
         received = datetime.now(UTC)
         alert_id = uuid.uuid4().hex[:12]
-        self.store.add_alert(alert_id, alert, received)
+        thread_id, closed = self.threads.assign(alert, received)
+        self.store.add_alert(alert_id, alert, received, thread_id)
         body = {
             "id": alert_id,
+            "thread_id": thread_id,
+            "closed": closed,
             "source": alert.source,
             "kind": alert.kind,
             "status": alert.status,
