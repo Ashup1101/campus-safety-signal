@@ -10,6 +10,8 @@ import { clockTime, type Clock, type Tone } from "@/shared/api";
 
 interface LatencyRow {
   id: string;
+  thread_id: string;
+  check_ins: number; // a count only: who checked in and what they said never reach the console
   kind: string;
   verification: "official" | "drill" | "reconstruction";
   status: string;
@@ -59,7 +61,8 @@ function LatencyBoard({ rows, dark }: { rows: LatencyRow[]; dark: boolean }) {
             <th className="py-2 pr-3 font-medium">IU / official time</th>
             <th className="py-2 pr-3 font-medium">Server got it</th>
             <th className="py-2 pr-3 font-medium">Parent screen</th>
-            <th className="py-2 font-medium">iPhone</th>
+            <th className="py-2 pr-3 font-medium">iPhone</th>
+            <th className="py-2 font-medium">Family check-ins</th>
           </tr>
         </thead>
         <tbody>
@@ -93,9 +96,10 @@ function LatencyBoard({ rows, dark }: { rows: LatencyRow[]; dark: boolean }) {
                 <td className="py-2 pr-3">
                   {clockTime(row.web_at)} <span className="text-muted-foreground">{seconds(start, row.web_at)}</span>
                 </td>
-                <td className="py-2">
+                <td className="py-2 pr-3">
                   {clockTime(row.ios_at)} <span className="text-muted-foreground">{seconds(start, row.ios_at)}</span>
                 </td>
+                <td className="py-2 tabular-nums">{row.check_ins}</td>
               </tr>
             );
           })}

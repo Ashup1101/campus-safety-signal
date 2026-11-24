@@ -189,7 +189,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/latency")
     def latency(_: Console) -> list[dict[str, object]]:
-        return store.latency()
+        # Check-ins are counted, never shown: no names, states or places reach the console.
+        rows = store.latency()
+        return [{**row, "check_ins": len(hub.check_ins(str(row["thread_id"])))} for row in rows]
 
     @app.websocket("/ws")
     async def ws(websocket: WebSocket, token: str = "") -> None:

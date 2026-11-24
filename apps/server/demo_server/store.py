@@ -206,16 +206,16 @@ class Store:
         """Per alert: official time, server received, first shown on web and on iPhone."""
         rows = self._db.execute(
             """
-            select a.id, a.kind, a.verification, a.status, a.official_at, a.received_at,
-                   min(case when d.client = 'web' then d.shown_at end),
+            select a.id, a.thread_id, a.kind, a.verification, a.status, a.official_at,
+                   a.received_at, min(case when d.client = 'web' then d.shown_at end),
                    min(case when d.client = 'ios' then d.shown_at end)
             from alerts a left join deliveries d on d.alert_id = a.id
             group by a.id order by a.received_at desc limit ?
             """,
             (limit,),
         )
-        keys = ["id", "kind", "verification", "status", "official_at", "received_at"]
-        keys += ["web_at", "ios_at"]
+        keys = ["id", "thread_id", "kind", "verification", "status", "official_at"]
+        keys += ["received_at", "web_at", "ios_at"]
         return [dict(zip(keys, row, strict=True)) for row in rows]
 
     def replace_activity(self, rows: list[Activity]) -> None:
