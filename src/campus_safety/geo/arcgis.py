@@ -29,13 +29,14 @@ def query_url(
     fields: tuple[str, ...],
     bbox: tuple[float, float, float, float] | None = None,
     offset: int = 0,
+    order: str = "OBJECTID",
 ) -> str:
     params: dict[str, str | int] = {
         "where": "1=1",
         "outFields": ",".join(fields),
         "outSR": 4326,
         "f": "geojson",
-        "orderByFields": "OBJECTID",
+        "orderByFields": order,
         "resultOffset": offset,
         "resultRecordCount": PAGE_SIZE,
     }
@@ -64,14 +65,15 @@ def fetch_layer(
     layer: int,
     fields: tuple[str, ...],
     bbox: tuple[float, float, float, float] | None = None,
+    order: str = "OBJECTID",
 ) -> tuple[bytes, str, fetch.Page]:
     """All pages merged into one FeatureCollection (stable bytes, so unchanged layers hash the
     same). Returns (body, first-page URL, last page)."""
     found: list[dict[str, Any]] = []
-    first = query_url(service, layer, fields, bbox)
+    first = query_url(service, layer, fields, bbox, 0, order)
     page: fetch.Page | None = None
     for number in range(MAX_PAGES):
-        page = fetch.polite_get(query_url(service, layer, fields, bbox, number * PAGE_SIZE))
+        page = fetch.polite_get(query_url(service, layer, fields, bbox, number * PAGE_SIZE, order))
         batch = features(page.body)
         found.extend(batch)
         if len(batch) < PAGE_SIZE:
