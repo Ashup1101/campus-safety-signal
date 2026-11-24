@@ -18,6 +18,7 @@ import {
   type Alert,
   type CheckIn,
   type Clock,
+  type IncidentPoints,
   type SegmentFeature,
   type Segments,
   type Sharing,
@@ -60,6 +61,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
   const [banner, setBanner] = useState<Alert | null>(null);
   const [clock, setClock] = useState<Clock | null>(null);
   const [segments, setSegments] = useState<Segments | null>(null);
+  const [points, setPoints] = useState<IncidentPoints | null>(null);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
   const [selected, setSelected] = useState<SegmentFeature | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -82,6 +84,10 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
         setClock(map.clock);
         setAlerts(history);
       },
+      () => {},
+    );
+    api<IncidentPoints>("/api/incidents?days=90", token).then(
+      (found) => live && setPoints(found),
       () => {},
     );
     Notifications.requestPermissionsAsync().catch(() => {});
@@ -210,7 +216,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
         <Scoreboard tonight={tonight} windowLabel={window === "late_night" ? "Late nights" : "Event nights"} dark={dark} />
         <View className="mt-3 h-80 overflow-hidden rounded-xl">
-          <ActivityMap segments={segments} window={window} dark={dark} onSelect={setSelected} />
+          <ActivityMap segments={segments} window={window} dark={dark} onSelect={setSelected} points={points} />
         </View>
         <View className="mt-2 flex-row self-start rounded-full bg-muted p-1 dark:bg-muted-dark">
           <Chip label="Late nights" active={window === "late_night"} onPress={() => setChosen("late_night")} />
