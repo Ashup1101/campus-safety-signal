@@ -142,3 +142,39 @@ export function clockTime(iso: string | null): string {
   if (!iso) return "—";
   return new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
 }
+
+export interface AlertThread {
+  id: string;
+  alerts: Alert[]; // oldest first
+  latest: Alert;
+  closed: boolean; // the latest alert is the source's all-clear
+  tone: Tone; // the first alert's tone; a closed card is calm (never red)
+  area: string[];
+}
+
+function isAllClear(alert: Alert): boolean {
+  return alert.closed === true || alert.status.toLowerCase() === "normal";
+}
+
+// One card per incident thread, newest first. Alerts without a thread stand alone.
+export function threadsOf(alerts: Alert[]): AlertThread[] {
+  const groups = new Map<string, Alert[]>();
+  for (const alert of alerts) {
+    const key = alert.thread_id ?? alert.id;
+    groups.set(key, [...(groups.get(key) ?? []), alert]);
+  }
+  return [...groups.entries()]
+    .map(([id, group]) => {
+      const ordered = [...group].sort((a, b) => a.received_at.localeCompare(b.received_at));
+      const latest = ordered[ordered.length - 1];
+      return {
+        id,
+        alerts: ordered,
+        latest,
+        closed: isAllClear(latest),
+        tone: toneOf(ordered[0]),
+        area: [...new Set(ordered.flatMap((a) => a.area ?? []))].sort(),
+      };
+    })
+    .sort((a, b) => b.latest.received_at.localeCompare(a.latest.received_at));
+}
