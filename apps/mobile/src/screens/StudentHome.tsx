@@ -40,7 +40,7 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   return (
     <Pressable
       onPress={onPress}
-      className={`rounded-full px-3 py-1.5 ${active ? "bg-card dark:bg-card-dark" : ""}`}
+      className={`min-h-11 justify-center rounded-full px-4 ${active ? "bg-card dark:bg-card-dark" : ""}`}
     >
       <Text className="text-xs text-foreground dark:text-foreground-dark">{label}</Text>
     </Pressable>
@@ -190,7 +190,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             {connected ? "Connected · demo" : "Connecting…"}
           </Text>
         </View>
-        <Pressable onPress={onLeave} accessibilityLabel="Switch student" className="p-2">
+        <Pressable onPress={onLeave} accessibilityLabel="Switch student" hitSlop={8} className="min-h-11 min-w-11 items-center justify-center">
           <LogOut size={18} color={muted} />
         </Pressable>
       </View>
@@ -237,22 +237,22 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
           <View className="flex-row flex-wrap gap-2">
             {sharing !== "on" ? (
               <>
-                <Pressable onPress={() => changeSharing("on")} className="flex-row items-center rounded-full bg-primary px-4 py-2 dark:bg-primary-dark">
+                <Pressable onPress={() => changeSharing("on")} className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark">
                   <MapPin size={14} color="#ffffff" />
                   <Text className="ml-1.5 text-sm font-medium text-white">Share</Text>
                 </Pressable>
-                <Pressable onPress={() => changeSharing("on", true)} className="flex-row items-center rounded-full border border-border px-4 py-2 dark:border-border-dark">
+                <Pressable onPress={() => changeSharing("on", true)} className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark">
                   <House size={14} color={primary} />
                   <Text className="ml-1.5 text-sm text-foreground dark:text-foreground-dark">Share until I&apos;m home</Text>
                 </Pressable>
               </>
             ) : (
               <>
-                <Pressable onPress={() => changeSharing("paused")} className="flex-row items-center rounded-full border border-border px-4 py-2 dark:border-border-dark">
+                <Pressable onPress={() => changeSharing("paused")} className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark">
                   <PauseCircle size={14} color={primary} />
                   <Text className="ml-1.5 text-sm text-foreground dark:text-foreground-dark">Pause</Text>
                 </Pressable>
-                <Pressable onPress={() => changeSharing("off")} className="rounded-full px-4 py-2">
+                <Pressable onPress={() => changeSharing("off")} className="min-h-11 justify-center rounded-full px-4">
                   <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">Stop sharing</Text>
                 </Pressable>
               </>

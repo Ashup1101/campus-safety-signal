@@ -54,7 +54,7 @@ function LatencyBoard({ rows, dark }: { rows: LatencyRow[]; dark: boolean }) {
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-left text-sm">
+      <table className="numerals w-full text-left text-sm">
         <thead className="text-xs text-muted-foreground">
           <tr>
             <th className="py-2 pr-3 font-medium">Alert</th>

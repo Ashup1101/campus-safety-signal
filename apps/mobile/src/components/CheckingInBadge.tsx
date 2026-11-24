@@ -27,7 +27,9 @@ export function CheckingInBadge({
       <Pressable
         onPress={onPause}
         accessibilityRole="button"
-        className="ml-2 rounded-full bg-white/70 px-3 py-1 dark:bg-black/30"
+        accessibilityLabel="Pause sharing"
+        hitSlop={10}
+        className="ml-2 min-h-9 justify-center rounded-full bg-white/70 px-4 dark:bg-black/30"
       >
         <Text className="text-xs font-medium" style={{ color: accent }}>
           Pause
