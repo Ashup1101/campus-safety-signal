@@ -5,9 +5,10 @@ import contextlib
 import json
 import secrets
 from collections.abc import AsyncIterator
+from datetime import date
 from typing import Annotated, Any, Literal
 
-from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
+from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -16,7 +17,7 @@ from pydantic import BaseModel
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
-from demo_server import activity
+from demo_server import activity, points
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
@@ -150,6 +151,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "attribution": geojson["attribution"],
             "clock": hub.clock.state(),
         }
+
+    @app.get("/api/incidents")
+    def incident_points(_: Me, days: Annotated[int, Query(ge=1, le=1095)] = 90) -> dict[str, Any]:
+        return points.recent(settings.warehouse, days, date.today())
 
     @app.get("/api/clock")
     def get_clock() -> dict[str, Any]:

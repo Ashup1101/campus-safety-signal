@@ -5,7 +5,15 @@ import { layers, namedFlavor } from "@protomaps/basemaps";
 import type { ExpressionSpecification, GeoJSONSource, Map as MapLibre, StyleSpecification } from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { SERVER, color, tokens } from "@/lib/client";
-import { levelFor, type Segments, type Student, type TimeWindow, type Zone } from "@/shared/api";
+import {
+  levelFor,
+  pointText,
+  type IncidentPoints,
+  type Segments,
+  type Student,
+  type TimeWindow,
+  type Zone,
+} from "@/shared/api";
 
 const CENTER: [number, number] = [-86.5245, 39.1678];
 const BOUNDS: [number, number, number, number] = [-86.548, 39.15, -86.495, 39.188];
@@ -75,6 +83,19 @@ function segmentData(segments: Segments | null, window: TimeWindow) {
   };
 }
 
+// Dots: filled = at an address; ring = somewhere on a block or street stretch (less precise).
+const DOT = { light: "#3a2326", dark: "#f3ede1" };
+
+function pointData(points: IncidentPoints | null) {
+  return {
+    type: "FeatureCollection" as const,
+    features: (points?.features ?? []).map((p) => ({
+      ...p,
+      properties: { text: pointText(p.properties), exact: p.properties.precision === "address" },
+    })),
+  };
+}
+
 function studentData(students: Student[]) {
   return {
     type: "FeatureCollection" as const,
@@ -102,12 +123,14 @@ function zoneData(zones: Zone[]) {
 export function ActivityMap({
   segments,
   window,
+  points = null,
   students = [],
   zones = [],
   dark,
 }: {
   segments: Segments | null;
   window: TimeWindow;
+  points?: IncidentPoints | null;
   students?: Student[];
   zones?: Zone[];
   dark: boolean;
@@ -150,6 +173,7 @@ export function ActivityMap({
         const tone = dark ? "dark" : "light";
         m.addSource("zones", { type: "geojson", data: zoneData([]) });
         m.addSource("segments", { type: "geojson", data: segmentData(null, "late_night") });
+        m.addSource("points", { type: "geojson", data: pointData(null) });
         m.addSource("students", { type: "geojson", data: studentData([]) });
         m.addLayer({
           id: "zones-fill",
@@ -219,6 +243,17 @@ export function ActivityMap({
           },
         });
         m.addLayer({
+          id: "points",
+          type: "circle",
+          source: "points",
+          paint: {
+            "circle-radius": ["interpolate", ["linear"], ["zoom"], 13, 2.5, 16, 5],
+            "circle-color": ["case", ["get", "exact"], DOT[tone], "rgba(0,0,0,0)"],
+            "circle-stroke-color": DOT[tone],
+            "circle-stroke-width": 1.5,
+          },
+        });
+        m.addLayer({
           id: "students",
           type: "circle",
           source: "students",
@@ -256,8 +291,17 @@ export function ActivityMap({
           popup.append(title, body);
           new maplibre.Popup({ closeButton: false }).setLngLat(event.lngLat).setDOMContent(popup).addTo(m);
         });
-        m.on("mouseenter", "segments-line", () => (m.getCanvas().style.cursor = "pointer"));
-        m.on("mouseleave", "segments-line", () => (m.getCanvas().style.cursor = ""));
+        m.on("click", "points", (event) => {
+          const text = event.features?.[0]?.properties?.text;
+          if (!text) return;
+          const popup = document.createElement("div");
+          popup.textContent = String(text);
+          new maplibre.Popup({ closeButton: false }).setLngLat(event.lngLat).setDOMContent(popup).addTo(m);
+        });
+        for (const layer of ["segments-line", "points"]) {
+          m.on("mouseenter", layer, () => (m.getCanvas().style.cursor = "pointer"));
+          m.on("mouseleave", layer, () => (m.getCanvas().style.cursor = ""));
+        }
         map.current = m;
         setReady(true);
       });
@@ -277,6 +321,11 @@ export function ActivityMap({
 
   useEffect(() => {
     if (!ready) return;
+    (map.current?.getSource("points") as GeoJSONSource | undefined)?.setData(pointData(points));
+  }, [ready, points]);
+
+  useEffect(() => {
+    if (!ready) return;
     (map.current?.getSource("students") as GeoJSONSource | undefined)?.setData(studentData(students));
   }, [ready, students]);
 
@@ -288,7 +337,7 @@ export function ActivityMap({
   return <div ref={container} className="h-full min-h-[420px] w-full overflow-hidden rounded-xl" />;
 }
 
-export function Legend({ dark, window }: { dark: boolean; window: TimeWindow }) {
+export function Legend({ dark, window, dots = false }: { dark: boolean; window: TimeWindow; dots?: boolean }) {
   const levels = ["quiet", "elevated", "high"] as const;
   return (
     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -307,6 +356,17 @@ export function Legend({ dark, window }: { dark: boolean; window: TimeWindow }) 
           {tokens.activity[level].label}
         </span>
       ))}
+      {dots && (
+        <span className="inline-flex items-center gap-1.5">
+          <span className="inline-block size-2.5 rounded-full" style={{ background: DOT[dark ? "dark" : "light"] }} />
+          address
+          <span
+            className="ml-1 inline-block size-2.5 rounded-full border-[1.5px]"
+            style={{ borderColor: DOT[dark ? "dark" : "light"] }}
+          />
+          block or street stretch
+        </span>
+      )}
       <span>From past incidents only, never anyone&apos;s movements.</span>
     </div>
   );

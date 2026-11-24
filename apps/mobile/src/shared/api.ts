@@ -94,6 +94,46 @@ export interface Segments {
   clock: Clock;
 }
 
+// Map dots: recent placed incidents with category, day and precision only (never text or names).
+export type Precision = "segment" | "address" | "block";
+export const RECENT_DAYS = [30, 90, 365] as const;
+
+export interface IncidentPoint {
+  type: "Feature";
+  properties: { category: string; day: string; precision: Precision };
+  geometry: { type: "Point"; coordinates: [number, number] };
+}
+
+export interface IncidentPoints {
+  type: "FeatureCollection";
+  days: number;
+  attribution: string;
+  features: IncidentPoint[];
+}
+
+const PLACED: Record<Precision, string> = {
+  address: "at this address",
+  block: "somewhere on this block",
+  segment: "somewhere on this street stretch",
+};
+
+export function daysLabel(days: number): string {
+  return days === 365 ? "1 year" : `${days} days`;
+}
+
+// "Theft, Nov 3, 2026: somewhere on this block". The day is a calendar day, never shifted.
+export function pointText(p: IncidentPoint["properties"]): string {
+  const [y, m, d] = p.day.split("-").map(Number);
+  const day = new Date(Date.UTC(y, m - 1, d)).toLocaleDateString("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    timeZone: "UTC",
+  });
+  const kind = p.category || "incident";
+  return `${kind[0].toUpperCase()}${kind.slice(1)}, ${day}: ${PLACED[p.precision]}`;
+}
+
 export type ServerMessage =
   | {
       type: "hello";

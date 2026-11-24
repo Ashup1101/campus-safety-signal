@@ -11,11 +11,14 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { api, color, tokens, useDark, useSession, useSocket } from "@/lib/client";
 import {
   clockTime,
+  daysLabel,
+  RECENT_DAYS,
   threadsOf,
   toneOf,
   type Alert,
   type CheckIn,
   type Clock,
+  type IncidentPoints,
   type Segments,
   type Student,
   type TimeWindow,
@@ -67,6 +70,8 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
   const [zones, setZones] = useState<Zone[]>([]);
   const [clock, setClock] = useState<Clock | null>(null);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
+  const [days, setDays] = useState<number>(90); // 0 = dots off
+  const [points, setPoints] = useState<IncidentPoints | null>(null);
   const [permission, setPermission] = useState<string>("default");
 
   useEffect(() => {
@@ -87,6 +92,15 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
       live = false;
     };
   }, [token]);
+
+  useEffect(() => {
+    if (!token || !days) return;
+    let live = true;
+    api<IncidentPoints>(`/api/incidents?days=${days}`, token).then((found) => live && setPoints(found));
+    return () => {
+      live = false;
+    };
+  }, [token, days]);
 
   const nameOf = (id: string) => students.find((s) => s.id === id)?.name ?? "Your student";
 
@@ -195,9 +209,37 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
           </CardHeader>
           <CardContent className="flex flex-1 flex-col gap-3">
             <div className="h-[460px] lg:h-full">
-              <ActivityMap segments={segments} window={window} students={students} zones={zones} dark={dark} />
+              <ActivityMap
+                segments={segments}
+                window={window}
+                points={days ? points : null}
+                students={students}
+                zones={zones}
+                dark={dark}
+              />
             </div>
-            <Legend dark={dark} window={window} />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
+              <span>Incident dots:</span>
+              <div className="flex gap-1 rounded-full bg-muted p-1" role="group" aria-label="Incident dots">
+                {[0, ...RECENT_DAYS].map((d) => (
+                  <Button
+                    key={d}
+                    size="sm"
+                    variant={d === days ? "outline" : "ghost"}
+                    aria-pressed={d === days}
+                    onClick={() => setDays(d)}
+                  >
+                    {d ? daysLabel(d) : "Off"}
+                  </Button>
+                ))}
+              </div>
+              {days > 0 && points && (
+                <span className="tabular-nums">
+                  {points.features.length} placed in the last {daysLabel(days)}
+                </span>
+              )}
+            </div>
+            <Legend dark={dark} window={window} dots={days > 0} />
           </CardContent>
         </Card>
         <div className="flex flex-col gap-4">
