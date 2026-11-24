@@ -17,6 +17,10 @@
   --secondary: #ece4d4;
   --secondary-foreground: #2a1f21;
   --ring: #9b1c31;
+  --accent: #ece4d4;
+  --accent-foreground: #1c1416;
+  --destructive: #b42318;
+  --input: #ddd2bf;
   --radius: 0.875rem;
   color-scheme: light;
 }
@@ -35,6 +39,10 @@
     --secondary: #2f2427;
     --secondary-foreground: #f5efe3;
     --ring: #e8667a;
+    --accent: #2f2427;
+    --accent-foreground: #f5efe3;
+    --destructive: #f87171;
+    --input: #3d2f32;
     color-scheme: dark;
   }
 }
@@ -73,6 +81,10 @@
   --color-secondary: var(--secondary);
   --color-secondary-foreground: var(--secondary-foreground);
   --color-ring: var(--ring);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-input: var(--input);
   --radius-lg: var(--radius);
   --radius-md: calc(var(--radius) - 4px);
   --radius-xl: calc(var(--radius) + 4px);
