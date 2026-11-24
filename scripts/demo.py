@@ -18,6 +18,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 RUN = ROOT / "data" / "demo" / "run"
 WEB, MOBILE = ROOT / "apps" / "web", ROOT / "apps" / "mobile"
+# Homebrew's keg-only Node 24 (native arm64); the shell's default node may be an older x86 build.
+NODE24 = Path("/opt/homebrew/opt/node@24/bin")
 
 PROCESSES: dict[str, tuple[list[str], Path, dict[str, str]]] = {
     "server": (
@@ -46,10 +48,32 @@ WALK_HOME = [
 SPEED_M_PER_S = 6
 
 
+def node_path(path: str, node_bin: Path = NODE24) -> str:
+    """PATH for the web and mobile processes: Node 24 first when it is installed."""
+    return f"{node_bin}{os.pathsep}{path}" if node_bin.is_dir() else path
+
+
 def simulator() -> bool:
     if shutil.which("xcrun") is None:
         return False
     return subprocess.run(["xcrun", "simctl", "help"], capture_output=True).returncode == 0  # noqa: S607
+
+
+def simulator_name(env: dict[str, str]) -> str:
+    """The one iPhone the demo boots; Expo opens the app on the booted device."""
+    return env.get("DEMO_SIMULATOR", "iPhone 17")
+
+
+# Xcode 27 replaced the Simulator app with Device Hub; older Xcodes still ship Simulator.
+SIMULATOR_APPS = ("Simulator", "DeviceHub")
+
+
+def boot_simulator(name: str) -> None:
+    # Fails harmlessly when it is already booted; Expo would otherwise pick its own device.
+    subprocess.run(["xcrun", "simctl", "boot", name], capture_output=True)  # noqa: S603, S607
+    for app in SIMULATOR_APPS:
+        if subprocess.run(["open", "-a", app], capture_output=True).returncode == 0:  # noqa: S603, S607
+            break
 
 
 def start() -> int:
@@ -59,13 +83,23 @@ def start() -> int:
         if name == "mobile" and not simulator():
             print("mobile: skipped (no iPhone Simulator; install Xcode from the App Store)")
             continue
+        if name == "mobile":
+            boot_simulator(simulator_name(dict(os.environ)))
+        process_env = {**os.environ, **env}
+        if name != "server":
+            process_env["PATH"] = node_path(process_env.get("PATH", ""))
         if name != "server" and not (cwd / "node_modules").exists():
-            subprocess.run(["npm", "ci", "--no-fund", "--no-audit"], cwd=cwd, check=True)  # noqa: S607
+            subprocess.run(
+                ["npm", "ci", "--no-fund", "--no-audit"],  # noqa: S607
+                cwd=cwd,
+                env=process_env,
+                check=True,
+            )
         with (RUN / f"{name}.log").open("w") as log:
             process = subprocess.Popen(  # noqa: S603 (fixed commands above)
                 ["nice", "-n", "10", *command],  # noqa: S607
                 cwd=cwd,
-                env={**os.environ, **env},
+                env=process_env,
                 stdout=log,
                 stderr=subprocess.STDOUT,
                 start_new_session=True,
@@ -90,7 +124,8 @@ def stop(quiet: bool = False) -> int:
     has_simulator = simulator()
     if has_simulator:
         subprocess.run(["xcrun", "simctl", "shutdown", "all"], capture_output=True)  # noqa: S607
-        subprocess.run(["osascript", "-e", 'quit app "Simulator"'], capture_output=True)  # noqa: S607
+        for app in SIMULATOR_APPS:
+            subprocess.run(["osascript", "-e", f'quit app "{app}"'], capture_output=True)  # noqa: S603, S607
     if not quiet:
         closed = ", Simulator shut down" if has_simulator else ""
         print(f"demo stopped ({len(groups)} process groups{closed})")
