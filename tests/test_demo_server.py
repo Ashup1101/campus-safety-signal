@@ -5,7 +5,7 @@ import asyncio
 import logging
 import sqlite3
 import time
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
@@ -310,3 +310,31 @@ def test_segments_come_from_the_city_street_network_when_the_warehouse_has_it(
     assert features["street_3"]["name"] == "E Kirkwood Ave, 400 block (Grant to Dunn)"
     assert features["street_3"]["levels"]["late_night"]["reason"].startswith("1 shooting")
     assert features["street_8"]["levels"]["late_night"]["level"] == "quiet"
+
+
+def test_incident_dots_carry_category_day_and_precision_only(tmp_path: Path) -> None:
+    from test_demo_activity import city_warehouse
+
+    today = datetime.now()
+    db = city_warehouse(
+        tmp_path / "w.duckdb",
+        [
+            ("ROBBERY", "high", today - timedelta(days=10)),
+            ("THEFT FROM BUILDING LESS THAN $750", "low", today - timedelta(days=200)),
+        ],
+    )
+    settings = Settings(data_dir=tmp_path / "demo", warehouse=db, tiles=tmp_path / "tiles")
+    client = TestClient(create_app(settings))
+    mine = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
+    recent = client.get("/api/incidents?days=90", headers=mine).json()
+    assert [f["properties"] for f in recent["features"]] == [
+        {
+            "category": "robbery",
+            "day": (today - timedelta(days=10)).date().isoformat(),
+            "precision": "segment",
+        }
+    ]
+    assert recent["features"][0]["geometry"] == {"type": "Point", "coordinates": [-86.529, 39.1666]}
+    assert len(client.get("/api/incidents?days=365", headers=mine).json()["features"]) == 2
+    assert client.get("/api/incidents?days=0", headers=mine).status_code == 422
+    assert client.get("/api/incidents?days=90").status_code == 401

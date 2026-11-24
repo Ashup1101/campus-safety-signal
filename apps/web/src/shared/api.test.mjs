@@ -2,7 +2,7 @@
 // runner loads the TypeScript file directly (type stripping, Node 24). Made-up alerts and streets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { THREAD_GAP_MS, areaSketch, areaStreets, checkInText, threadsOf } from "./api.ts";
+import { THREAD_GAP_MS, areaSketch, areaStreets, checkInText, daysLabel, pointText, threadsOf } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -110,4 +110,11 @@ test("the sketch draws every street, the alert's streets last, inside the box", 
 test("check-in text says only what the student chose", () => {
   assert.equal(checkInText({ state: "safe", place: null }), "I'm safe");
   assert.equal(checkInText({ state: "sheltering", place: "the library" }), "Sheltering at the library");
+});
+
+test("a dot says what, when and how precisely it is placed", () => {
+  assert.equal(pointText({ category: "theft", day: "2026-11-03", precision: "block" }), "Theft, Nov 3, 2026: somewhere on this block");
+  assert.equal(pointText({ category: "traffic incident", day: "2026-01-31", precision: "segment" }), "Traffic incident, Jan 31, 2026: somewhere on this street stretch");
+  assert.equal(pointText({ category: "", day: "2025-12-01", precision: "address" }), "Incident, Dec 1, 2025: at this address");
+  assert.deepEqual([30, 90, 365].map(daysLabel), ["30 days", "90 days", "1 year"]);
 });

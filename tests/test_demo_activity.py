@@ -127,10 +127,15 @@ def city_warehouse(path: Path, points: list[tuple[str, str, datetime]]) -> Path:
         )
         con.execute(
             "CREATE TABLE gold.incident_points (incident_type VARCHAR, severity_tier VARCHAR,"
-            " occurred_from TIMESTAMP, street_objectid BIGINT)"
+            " date_reported DATE, occurred_from TIMESTAMP, precision VARCHAR, lat DOUBLE,"
+            " lon DOUBLE, street_objectid BIGINT)"
         )
         for kind, tier, at in points:
-            con.execute("INSERT INTO gold.incident_points VALUES (?, ?, ?, 3)", [kind, tier, at])
+            con.execute(
+                "INSERT INTO gold.incident_points"
+                " VALUES (?, ?, ?, ?, 'segment', 39.1666, -86.529, 3)",
+                [kind, tier, at.date(), at],
+            )
     return path
 
 
