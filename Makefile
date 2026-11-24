@@ -165,5 +165,5 @@ demo-walk-home:
 
 # TypeScript checks for both apps (also in CI). Installs node packages only if missing.
 apps-check:
-	cd apps/web && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck && npm run lint
+	cd apps/web && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck && npm run lint && npm test
 	cd apps/mobile && { test -d node_modules || npm ci --no-fund --no-audit; } && npm run typecheck
