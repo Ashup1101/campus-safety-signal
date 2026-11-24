@@ -1,10 +1,20 @@
 import { Fragment } from "react";
 import { Text, View } from "react-native";
 import MapView, { Marker, Polyline } from "react-native-maps";
-import { levelFor, type SegmentFeature, type Segments, type TimeWindow } from "../shared/api";
+import {
+  levelFor,
+  pointText,
+  type IncidentPoints,
+  type SegmentFeature,
+  type Segments,
+  type TimeWindow,
+} from "../shared/api";
 import tokens from "../shared/tokens.json";
 
 const REGION = { latitude: 39.1672, longitude: -86.524, latitudeDelta: 0.016, longitudeDelta: 0.016 };
+// Native markers are costly on a phone: the newest dots only (the server sends newest first).
+export const MAX_DOTS = 150;
+const DOT = { light: "#3a2326", dark: "#f3ede1" };
 
 
 function path(line: number[][]) {
@@ -17,18 +27,21 @@ function middle(feature: SegmentFeature) {
   return { latitude, longitude };
 }
 
-// Activity streets: teal / amber / deep orange over a crisp casing (no glow, same as the web);
-// High is also thicker and labeled.
+// Activity streets: teal / amber / deep orange (no glow, same as the web); Elevated and High get a
+// crisp casing (quiet streets skip it: about 1,300 generated streets would double the overlays).
+// High is also thicker and labeled. Dots: filled = address, ring = block or street stretch.
 export function ActivityMap({
   segments,
   window,
   dark,
   onSelect,
+  points = null,
 }: {
   segments: Segments | null;
   window: TimeWindow;
   dark: boolean;
   onSelect: (feature: SegmentFeature) => void;
+  points?: IncidentPoints | null;
 }) {
   const features = segments?.features ?? [];
   const tone = dark ? "dark" : "light";
@@ -45,12 +58,14 @@ export function ActivityMap({
         const color = tokens.activity[level][tone];
         return feature.geometry.coordinates.map((line, i) => (
           <Fragment key={`${feature.id}-${i}`}>
-            <Polyline
-              coordinates={path(line)}
-              strokeColor={dark ? "#160f11" : "#fbf8f1"}
-              strokeWidth={tokens.activity[level].width + (level === "high" ? 4 : level === "elevated" ? 3 : 2)}
-              lineCap="round"
-            />
+            {level !== "quiet" && (
+              <Polyline
+                coordinates={path(line)}
+                strokeColor={dark ? "#160f11" : "#fbf8f1"}
+                strokeWidth={tokens.activity[level].width + (level === "high" ? 4 : 3)}
+                lineCap="round"
+              />
+            )}
             <Polyline
               coordinates={path(line)}
               strokeColor={color}
@@ -77,6 +92,22 @@ export function ActivityMap({
             </View>
           </Marker>
         ))}
+      {(points?.features ?? []).slice(0, MAX_DOTS).map((p, i) => (
+        <Marker
+          key={`dot-${i}`}
+          coordinate={{ latitude: p.geometry.coordinates[1], longitude: p.geometry.coordinates[0] }}
+          title={pointText(p.properties)}
+          tracksViewChanges={false}
+        >
+          <View
+            className="size-2.5 rounded-full border-[1.5px]"
+            style={{
+              borderColor: DOT[tone],
+              backgroundColor: p.properties.precision === "address" ? DOT[tone] : "transparent",
+            }}
+          />
+        </Marker>
+      ))}
     </MapView>
   );
 }
