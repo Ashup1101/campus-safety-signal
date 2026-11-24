@@ -5,14 +5,16 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
-import { AlertBanner, AlertCard } from "../components/AlertCard";
+import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCard";
 import { CheckingInBadge } from "../components/CheckingInBadge";
 import { api, useSocket, type Session } from "../client";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
   levelFor,
+  threadsOf,
   toneOf,
   type Alert,
+  type CheckIn,
   type Clock,
   type SegmentFeature,
   type Segments,
@@ -52,6 +54,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
   const [sharing, setSharing] = useState<Sharing>("off");
   const [untilHome, setUntilHome] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [banner, setBanner] = useState<Alert | null>(null);
   const [clock, setClock] = useState<Clock | null>(null);
   const [segments, setSegments] = useState<Segments | null>(null);
@@ -83,7 +86,16 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
       case "hello":
         setViewers(message.viewers ?? []);
         setSharing(message.sharing ?? "off");
+        setCheckIns(message.check_ins ?? []);
         setClock(message.clock);
+        break;
+      case "check_in": {
+        const latest = message.check_in;
+        setCheckIns((list) => [...list.filter((c) => c.thread_id !== latest.thread_id), latest]);
+        break;
+      }
+      case "check_in_cleared":
+        setCheckIns((list) => list.filter((c) => c.thread_id !== message.thread_id));
         break;
       case "viewers":
         setViewers(message.labels);
@@ -253,7 +265,17 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             No alerts. Official IU alerts appear here the moment they are sent.
           </Text>
         ) : (
-          alerts.map((alert) => <AlertCard key={alert.id} alert={alert} dark={dark} />)
+          threadsOf(alerts).map((thread) => (
+            <ThreadCard key={thread.id} thread={thread} dark={dark} features={segments?.features}>
+              {thread.live && (
+                <CheckInControls
+                  current={checkIns.find((c) => c.thread_id === thread.id) ?? null}
+                  dark={dark}
+                  onSend={(state, place) => send({ type: "check_in", thread_id: thread.id, state, place })}
+                />
+              )}
+            </ThreadCard>
+          ))
         )}
       </ScrollView>
     </SafeAreaView>
