@@ -180,7 +180,7 @@ export function AreaSketch({
   const streets = areaStreets(features, area).join(", ");
   return (
     <figure className="mt-3">
-      <svg viewBox="0 0 240 120" className="h-24 w-full rounded-lg bg-background/60" role="img" aria-label={`Map: ${streets}`}>
+      <svg viewBox="0 0 240 120" className="h-24 w-full rounded-lg bg-background/60" aria-hidden>
         {paths.map((p) => (
           <path
             key={p.id}

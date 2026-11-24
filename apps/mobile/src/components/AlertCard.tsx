@@ -76,7 +76,7 @@ function AreaSketch({ features, area, accent, faint }: { features: SegmentFeatur
   if (paths.length === 0) return null;
   const streets = areaStreets(features, area).join(", ");
   return (
-    <View className="mt-3" accessible accessibilityLabel={`Map: ${streets}`}>
+    <View className="mt-3">
       <View className="overflow-hidden rounded-lg bg-background/60 dark:bg-background-dark/60">
         <Svg width="100%" height={96} viewBox="0 0 240 120">
           {paths.map((p) => (
@@ -159,6 +159,7 @@ export function ThreadCard({
             onPress={() => Linking.openURL(latest.link ?? "")}
             accessibilityRole="link"
             accessibilityLabel="Open the official source"
+            hitSlop={12}
             className="ml-2 flex-row items-center"
           >
             <ExternalLink size={12} color={shown.accent} />
@@ -203,7 +204,7 @@ export function AlertBanner({ alert, dark, onClose }: { alert: Alert; dark: bool
         </Text>
         <Text className="text-sm text-foreground dark:text-foreground-dark">{alert.text}</Text>
       </View>
-      <Pressable onPress={onClose} accessibilityLabel="Dismiss" className="p-1">
+      <Pressable onPress={onClose} accessibilityLabel="Dismiss" hitSlop={12} className="p-1">
         <X size={16} color={accent} />
       </Pressable>
     </View>
@@ -231,7 +232,7 @@ export function CheckInControls({
         <Text className="ml-2 flex-1 text-sm text-foreground dark:text-foreground-dark">
           Sent to your family: {checkInText(current)}
         </Text>
-        <Pressable onPress={() => setChanging(true)} accessibilityRole="button" accessibilityLabel="Change check-in" className="px-2 py-1">
+        <Pressable onPress={() => setChanging(true)} accessibilityRole="button" accessibilityLabel="Change check-in" hitSlop={8} className="min-h-11 justify-center px-3">
           <Text className="text-sm font-medium" style={{ color: primary }}>
             Change
           </Text>
@@ -254,7 +255,7 @@ export function CheckInControls({
           onPress={() => send("safe")}
           accessibilityRole="button"
           accessibilityLabel="Tell my family I'm safe"
-          className="flex-row items-center rounded-full bg-primary px-4 py-2 dark:bg-primary-dark"
+          className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark"
         >
           <HeartHandshake size={14} color="#ffffff" />
           <Text className="ml-1.5 text-sm font-medium text-white">I&apos;m safe</Text>
@@ -264,7 +265,7 @@ export function CheckInControls({
           accessibilityRole="button"
           accessibilityLabel="Tell my family where I'm sheltering"
           accessibilityState={{ expanded: picking }}
-          className="flex-row items-center rounded-full border border-border px-4 py-2 dark:border-border-dark"
+          className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark"
         >
           <House size={14} color={primary} />
           <Text className="ml-1.5 text-sm text-foreground dark:text-foreground-dark">I&apos;m sheltering at…</Text>
@@ -278,7 +279,7 @@ export function CheckInControls({
               onPress={() => send("sheltering", place)}
               accessibilityRole="button"
               accessibilityLabel={`Sheltering at ${place}`}
-              className="rounded-full bg-card px-3 py-1.5 dark:bg-card-dark"
+              className="min-h-11 justify-center rounded-full bg-card px-4 dark:bg-card-dark"
             >
               <Text className="text-sm text-foreground dark:text-foreground-dark">{place}</Text>
             </Pressable>
