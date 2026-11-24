@@ -3,7 +3,7 @@
 import { Bell, HeartHandshake, MapPin, PauseCircle, Shield, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ActivityMap, Legend } from "@/components/activity-map";
-import { AlertBanner, ThreadCard } from "@/components/alerts";
+import { AlertBanner, CheckInLine, ThreadCard } from "@/components/alerts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +13,7 @@ import {
   threadsOf,
   toneOf,
   type Alert,
+  type CheckIn,
   type Clock,
   type Segments,
   type Student,
@@ -58,6 +59,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
   const token = session?.token;
   const [students, setStudents] = useState<Student[]>([]);
   const [alerts, setAlerts] = useState<Alert[]>([]);
+  const [checkIns, setCheckIns] = useState<CheckIn[]>([]);
   const [banner, setBanner] = useState<Alert | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const [segments, setSegments] = useState<Segments | null>(null);
@@ -91,7 +93,19 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
     switch (message.type) {
       case "hello":
         setStudents(message.students ?? []);
+        setCheckIns(message.check_ins ?? []);
         setClock(message.clock);
+        break;
+      case "check_in": {
+        const latest = message.check_in;
+        setCheckIns((list) => [
+          ...list.filter((c) => !(c.thread_id === latest.thread_id && c.student_id === latest.student_id)),
+          latest,
+        ]);
+        break;
+      }
+      case "check_in_cleared":
+        setCheckIns((list) => list.filter((c) => c.thread_id !== message.thread_id));
         break;
       case "alert":
         setAlerts((list) => [message.alert, ...list]);
@@ -222,7 +236,13 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               ) : (
                 <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto">
                   {threadsOf(alerts).map((thread) => (
-                    <ThreadCard key={thread.id} thread={thread} dark={dark} />
+                    <ThreadCard key={thread.id} thread={thread} dark={dark}>
+                      {checkIns
+                        .filter((c) => c.thread_id === thread.id)
+                        .map((c) => (
+                          <CheckInLine key={c.student_id} checkIn={c} />
+                        ))}
+                    </ThreadCard>
                   ))}
                 </ul>
               )}

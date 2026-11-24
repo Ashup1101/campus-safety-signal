@@ -43,3 +43,15 @@ def test_server_and_apps_share_the_check_in_lists() -> None:
     assert places and states
     assert tuple(re.findall(r'"([^"]+)"', places.group(1))) == SHELTER_PLACES
     assert tuple(re.findall(r'"([^"]+)"', states.group(1))) == CHECK_IN_STATES
+
+
+def test_apps_and_server_agree_on_when_a_thread_stops_being_live() -> None:
+    import re
+
+    from demo_server.threads import THREAD_GAP
+
+    api = (ROOT / "apps" / "web" / "src" / "shared" / "api.ts").read_text()
+    found = re.search(r"THREAD_GAP_MS = (\d+) \* (\d+) \* (\d+) \* (\d+);", api)
+    assert found
+    hours, minutes, seconds, ms = (int(g) for g in found.groups())
+    assert hours * minutes * seconds * ms == THREAD_GAP.total_seconds() * 1000
