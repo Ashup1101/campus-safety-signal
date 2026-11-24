@@ -35,7 +35,7 @@ jobs:
           node-version: 24
       - name: web (typecheck + lint)
         working-directory: apps/web
-        run: npm ci --no-fund --no-audit && npm run typecheck && npm run lint
+        run: npm ci --no-fund --no-audit && npm run typecheck && npm run lint && npm test
       - name: mobile (typecheck)
         working-directory: apps/mobile
         run: npm ci --no-fund --no-audit && npm run typecheck
