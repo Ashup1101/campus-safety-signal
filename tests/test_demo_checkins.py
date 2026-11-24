@@ -136,3 +136,35 @@ def test_a_newer_check_in_replaces_the_older_and_the_all_clear_forgets_it(
     for value in ("sheltering", "the library"):
         assert value not in dump
         assert value not in caplog.text
+
+
+def test_console_sees_check_in_counts_never_content(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    settings = Settings(
+        data_dir=tmp_path / "demo",
+        warehouse=tmp_path / "missing.duckdb",
+        manual=tmp_path / "missing.yaml",
+        tiles=tmp_path / "tiles",
+    )
+    client = TestClient(create_app(settings))
+    with client:
+        tokens = {
+            a: client.post("/api/login", json={"account_id": a}).json()["token"]
+            for a in ("console", "student_sam")
+        }
+        console = {"Authorization": f"Bearer {tokens['console']}"}
+        with client.websocket_connect(f"/ws?token={tokens['student_sam']}") as sam:
+            sam.receive_json()
+            client.post("/api/drill", json={"action": "drill"}, headers=console)
+            thread = sam.receive_json()["alert"]["thread_id"]
+            sam.send_json(
+                {"type": "check_in", "thread_id": thread, "state": "sheltering", "place": "my room"}
+            )
+            assert sam.receive_json()["type"] == "check_in"
+            board = client.get("/api/latency", headers=console).json()
+    assert board[0]["thread_id"] == thread and board[0]["check_ins"] == 1
+    assert "my room" not in str(board) and "sheltering" not in str(board)
