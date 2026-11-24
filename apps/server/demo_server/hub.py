@@ -25,6 +25,9 @@ from demo_server.threads import Threads
 
 SHARING = ("on", "paused", "off")
 CLIENTS = ("web", "ios")
+CHECK_IN_STATES = ("safe", "sheltering")
+# Same fixed list as SHELTER_PLACES in apps/*/src/shared/api.ts (no free text, so no names).
+SHELTER_PLACES = ("my room", "a campus building", "a friend's place", "the library", "off campus")
 
 log = logging.getLogger(__name__)
 
