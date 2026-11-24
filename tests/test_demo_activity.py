@@ -1,8 +1,11 @@
 """Activity levels per street segment and time window. Made-up incidents."""
 
+import json
 import re
 from datetime import date, datetime
+from pathlib import Path
 
+import duckdb
 import pytest
 from build_demo_segments import SEGMENTS
 
@@ -100,3 +103,62 @@ def test_category(incident_type: str, category: str) -> None:
 
 def test_plural() -> None:
     assert [plural("robbery", 2), plural("theft", 1)] == ["robberies", "theft"]
+
+
+def city_warehouse(path: Path, points: list[tuple[str, str, datetime]]) -> Path:
+    """A warehouse with one city street piece (the hand-drawn 400 block's line) and points."""
+    hand = next(
+        f for f in activity.load_geojson()["features"] if f["properties"]["id"] == "kirkwood_400"
+    )
+    line = {"type": "LineString", "coordinates": hand["geometry"]["coordinates"][0]}
+    with duckdb.connect(str(path)) as con:
+        con.execute("CREATE SCHEMA silver; CREATE SCHEMA gold")
+        con.execute(
+            "CREATE TABLE silver.geo_streets (objectid BIGINT, fullname VARCHAR, lowadd INT,"
+            " highadd INT, lowxst VARCHAR, highxst VARCHAR, geometry VARCHAR)"
+        )
+        con.execute(
+            "INSERT INTO silver.geo_streets VALUES (3, 'E Kirkwood AVE', 400, 499, 'S Grant St',"
+            " 'S Dunn St', ?), (8, 'S Dunn ST', 100, 199, 'E Kirkwood Ave', 'E 4th St', ?)",
+            [
+                json.dumps(line),
+                '{"type":"LineString","coordinates":[[-86.5283,39.1666],[-86.5283,39.1650]]}',
+            ],
+        )
+        con.execute(
+            "CREATE TABLE gold.incident_points (incident_type VARCHAR, severity_tier VARCHAR,"
+            " occurred_from TIMESTAMP, street_objectid BIGINT)"
+        )
+        for kind, tier, at in points:
+            con.execute("INSERT INTO gold.incident_points VALUES (?, ?, ?, 3)", [kind, tier, at])
+    return path
+
+
+def test_hand_drawn_segments_when_the_warehouse_has_no_street_network(tmp_path: Path) -> None:
+    geojson = activity.load_segments(tmp_path / "missing.duckdb")
+    assert [f["id"] for f in geojson["features"]] == [s["id"] for s in SEGMENTS]
+    assert not activity.is_generated(geojson)
+
+
+def test_generated_segments_count_incident_points_and_hand_entered_incidents(
+    tmp_path: Path,
+) -> None:
+    db = city_warehouse(
+        tmp_path / "w.duckdb",
+        [
+            ("ROBBERY", "high", datetime(2026, 3, 3, 23, 0)),
+            ("THEFT FROM BUILDING LESS THAN $750", "low", datetime(2026, 3, 4, 23, 30)),
+        ],
+    )
+    geojson = activity.load_segments(db)
+    assert activity.is_generated(geojson)
+    assert [f["id"] for f in geojson["features"]] == ["street_3", "street_8"]
+    hand_entered = [shooting(datetime(2026, 4, 26, 0, 25))]  # on hand-drawn kirkwood_400
+    incidents = activity.point_incidents(db) + activity.translate(
+        hand_entered, activity.load_geojson(), geojson
+    )
+    assert [i.segments for i in incidents] == [("street_3",)] * 3  # never the cross street
+    rows = activity.levels(["street_3", "street_8"], incidents, NOW, NIGHTS)
+    late = by_window(rows, "street_3")["late_night"]
+    assert (late.level, late.incidents, late.serious) == ("high", 3, 2)
+    assert by_window(rows, "street_8")["late_night"].level == "quiet"

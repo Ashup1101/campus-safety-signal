@@ -288,3 +288,25 @@ def test_console_replay_and_clock(client: TestClient) -> None:
         assert client.post("/api/clock", json={"preset": "live"}, headers=headers).json()["live"]
         coverage = client.get("/api/coverage", headers=headers).json()
         assert "iu_log_2017_2024" in {g["gap_id"] for g in coverage["gaps"]}
+
+
+def test_segments_come_from_the_city_street_network_when_the_warehouse_has_it(
+    tmp_path: Path,
+) -> None:
+    from test_demo_activity import city_warehouse
+
+    manual = tmp_path / "incidents.yaml"
+    manual.write_text(REPLAYS)  # a hand-entered shooting on the hand-drawn kirkwood_400
+    settings = Settings(
+        data_dir=tmp_path / "demo",
+        warehouse=city_warehouse(tmp_path / "w.duckdb", []),
+        manual=manual,
+        tiles=tmp_path / "tiles",
+    )
+    client = TestClient(create_app(settings))
+    mine = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
+    found = client.get("/api/segments", headers=mine)
+    features = {f["id"]: f["properties"] for f in found.json()["features"]}
+    assert features["street_3"]["name"] == "E Kirkwood Ave, 400 block (Grant to Dunn)"
+    assert features["street_3"]["levels"]["late_night"]["reason"].startswith("1 shooting")
+    assert features["street_8"]["levels"]["late_night"]["level"] == "quiet"

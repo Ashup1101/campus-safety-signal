@@ -80,6 +80,7 @@ def generate(streets: Iterable[Mapping[str, Any]]) -> dict[str, Any]:
     found = (feature(r) for r in sorted(streets, key=lambda r: int(r["objectid"])))
     return {
         "type": "FeatureCollection",
+        "generated": True,
         "attribution": ATTRIBUTION,
         "note": NOTE,
         "features": [f for f in found if f is not None],

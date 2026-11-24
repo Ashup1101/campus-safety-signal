@@ -27,6 +27,7 @@ CORNER_M = 30.0  # a piece's end this close to the cross street is the corner
 MIN_ALONG_M = 10.0  # the stretch must run at least this far to the named side
 SAME_CORNER_M = 100.0  # candidates farther apart mean the streets meet twice: unclear
 MAX_BLOCK_M = 400.0  # a hundred block whose address points spread farther is unclear
+NEAR_PIECE_M = 50.0  # an address or block counts on its street's piece this close (for levels)
 
 COLUMNS: Columns = (
     ("location_text", "VARCHAR"),
@@ -147,7 +148,7 @@ def _meters(a: Point, b: Point) -> float:
     return math.hypot((a[0] - b[0]) * M_PER_DEG_LON, (a[1] - b[1]) * M_PER_DEG_LAT)
 
 
-def _midpoint(lines: tuple[tuple[Point, ...], ...]) -> Point:
+def midpoint(lines: tuple[tuple[Point, ...], ...]) -> Point:
     """The point halfway along the piece."""
     steps = [(a, b, _meters(a, b)) for line in lines for a, b in itertools.pairwise(line)]
     remaining = sum(length for *_, length in steps) / 2
@@ -157,6 +158,28 @@ def _midpoint(lines: tuple[tuple[Point, ...], ...]) -> Point:
             return a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
         remaining -= length
     return lines[0][0]
+
+
+def distance_to_lines(point: Point, lines: tuple[tuple[Point, ...], ...]) -> float:
+    """Meters from point to the nearest spot on the lines."""
+    best = math.inf
+    for line in lines:
+        for a, b in itertools.pairwise(line):
+            ax, ay = (a[0] - point[0]) * M_PER_DEG_LON, (a[1] - point[1]) * M_PER_DEG_LAT
+            bx, by = (b[0] - point[0]) * M_PER_DEG_LON, (b[1] - point[1]) * M_PER_DEG_LAT
+            dx, dy = bx - ax, by - ay
+            span = dx * dx + dy * dy
+            t = 0.0 if span == 0 else max(0.0, min(1.0, -(ax * dx + ay * dy) / span))
+            best = min(best, math.hypot(ax + t * dx, ay + t * dy))
+    return best
+
+
+def _on_street(network: Network, street: str, lat: float, lon: float) -> int | None:
+    """The street's centerline piece nearest to a point, when it is close enough."""
+    pieces = network.by_street.get(street, [])
+    near = [(distance_to_lines((lon, lat), p.lines), p.objectid) for p in pieces]
+    best = min(near, default=None)
+    return best[1] if best and best[0] <= NEAR_PIECE_M else None
 
 
 def _toward(side: str, corner: Point, point: Point) -> float:
@@ -177,7 +200,7 @@ def place_segment(text: str, network: Network) -> Placement | None:
         corner = min(piece.ends, key=lambda end: min(_meters(end, c) for c in cross))
         if min(_meters(corner, c) for c in cross) > CORNER_M:
             continue
-        middle = _midpoint(piece.lines)
+        middle = midpoint(piece.lines)
         along = _toward(segment.side, corner, middle)
         if along >= MIN_ALONG_M:
             found.append((along, piece.objectid, corner, middle))
@@ -201,7 +224,7 @@ def place_address(text: str, network: Network) -> Placement | None:
     if len(points) != 1:
         return None
     lat, lon = points.pop()
-    return Placement("address", lat, lon, None)
+    return Placement("address", lat, lon, _on_street(network, address.street, lat, lon))
 
 
 def place_block(text: str, network: Network) -> Placement | None:
@@ -222,7 +245,8 @@ def place_block(text: str, network: Network) -> Placement | None:
     west, east = min(p.lon for p in points), max(p.lon for p in points)
     if _meters((west, south), (east, north)) > MAX_BLOCK_M:
         return None
-    return Placement("block", round((south + north) / 2, 6), round((west + east) / 2, 6), None)
+    lat, lon = round((south + north) / 2, 6), round((west + east) / 2, 6)
+    return Placement("block", lat, lon, _on_street(network, block.street, lat, lon))
 
 
 PLACERS = {"street_segment": place_segment, "address": place_address, "block": place_block}
@@ -243,7 +267,11 @@ def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[o
                     placed.lat,
                     placed.lon,
                     placed.street_objectid,
-                    *(network.streets_from if placed.street_objectid else network.addresses_from),
+                    *(
+                        network.streets_from
+                        if placed.precision == "segment"
+                        else network.addresses_from
+                    ),
                 )
             )
     return found
