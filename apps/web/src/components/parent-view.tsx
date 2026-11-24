@@ -3,13 +3,14 @@
 import { Bell, HeartHandshake, MapPin, PauseCircle, Shield, UserRound } from "lucide-react";
 import { useEffect, useState } from "react";
 import { ActivityMap, Legend } from "@/components/activity-map";
-import { AlertBanner, AlertCard } from "@/components/alerts";
+import { AlertBanner, ThreadCard } from "@/components/alerts";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, color, tokens, useDark, useSession, useSocket } from "@/lib/client";
 import {
   clockTime,
+  threadsOf,
   toneOf,
   type Alert,
   type Clock,
@@ -220,8 +221,8 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
                 <p className="text-sm text-muted-foreground">No alerts. Official IU alerts appear here the moment they are sent.</p>
               ) : (
                 <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto">
-                  {alerts.map((alert) => (
-                    <AlertCard key={alert.id} alert={alert} dark={dark} />
+                  {threadsOf(alerts).map((thread) => (
+                    <ThreadCard key={thread.id} thread={thread} dark={dark} />
                   ))}
                 </ul>
               )}
