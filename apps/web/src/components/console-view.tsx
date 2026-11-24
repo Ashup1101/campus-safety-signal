@@ -34,7 +34,16 @@ interface Coverage {
   gaps: { gap_id: string; source: string; start: string | null; end: string | null; fields: string[]; reason: string }[];
   iu_crime_log: { kind: "covered" | "gap"; start: string; end: string; days: number }[];
   bpd_calls_per_year: { year: number; calls: number }[];
+  geocoding: { kind: keyof typeof KINDS; incidents: number; placed: number }[];
 }
+
+const KINDS = {
+  street_segment: "Street stretches (corner and side)",
+  address: "Addresses",
+  block: "Blocks",
+  place: "Buildings (no public source yet)",
+  catch_all: "General areas (never mapped)",
+};
 
 function seconds(from: string | null, to: string | null): string {
   if (!from || !to) return "";
@@ -158,6 +167,30 @@ function CoveragePanel({ coverage, dark }: { coverage: Coverage | null; dark: bo
           </li>
         ))}
       </ul>
+      {coverage.geocoding.length > 0 && (
+        <div>
+          <div className="mb-2 flex justify-between text-xs text-muted-foreground">
+            <span>IU crime log incidents placed on the map (sensitive ones never)</span>
+            <span>teal = placed</span>
+          </div>
+          <ul className="flex flex-col gap-2 text-xs">
+            {coverage.geocoding.map((g) => {
+              const share = g.incidents ? Math.round((g.placed / g.incidents) * 100) : 0;
+              return (
+                <li key={g.kind} className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1">
+                  <span>{KINDS[g.kind]}</span>
+                  <span className="tabular-nums text-muted-foreground">
+                    {g.placed.toLocaleString()} of {g.incidents.toLocaleString()} ({share}%)
+                  </span>
+                  <div className="col-span-2 h-1.5 overflow-hidden rounded-full bg-muted">
+                    <div className="h-full" style={{ width: `${share}%`, background: color(tokens.activity.quiet, dark) }} />
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      )}
       <div>
         <div className="mb-1 text-xs text-muted-foreground">
           BPD calls for service per year (district only, no street address)
