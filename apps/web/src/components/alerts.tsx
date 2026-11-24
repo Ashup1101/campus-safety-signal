@@ -70,10 +70,10 @@ export function ThreadCard({
             Live
           </span>
         )}
-        <span className="ml-auto font-normal text-muted-foreground">{clockTime(latest.received_at)}</span>
+        <span className="numerals ml-auto font-normal text-muted-foreground">{clockTime(latest.received_at)}</span>
       </div>
       <p className="text-base font-medium leading-snug">{latest.text}</p>
-      <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+      <div className="numerals mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>
           Sent {clockTime(latest.official_at)} · received {clockTime(latest.received_at)}
         </span>
@@ -115,7 +115,7 @@ export function CheckInLine({ checkIn }: { checkIn: CheckIn }) {
       <span>
         <span className="font-medium">{checkIn.student_name}:</span> {checkInText(checkIn)}
       </span>
-      <span className="ml-auto text-xs text-muted-foreground">{clockTime(checkIn.at)}</span>
+      <span className="numerals ml-auto text-xs text-muted-foreground">{clockTime(checkIn.at)}</span>
     </div>
   );
 }
