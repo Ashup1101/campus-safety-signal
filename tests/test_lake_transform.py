@@ -407,3 +407,28 @@ def test_locations_are_placed_on_the_city_network(tmp_path: Path) -> None:
         ("900013|VEHICLE THEFT", "address", 39.1775, -86.5119),
         ("900014|VEHICLE THEFT", "block", 39.1775, -86.5119),
     ]
+
+
+def test_incident_points_hold_real_placed_non_sensitive_incidents_only(tmp_path: Path) -> None:
+    lake = FileLake(tmp_path / "lake")
+    snapshot(
+        lake,
+        0,
+        bloomington(
+            incident(case="900010", offense="VEHICLE THEFT", location="10TH STREET/EAST OF JORDA"),
+            incident(case="900011", offense="VEHICLE THEFT", location="14TH STREET/WEST OF JORDAN"),
+            incident(
+                case="900012", offense="RAPE - INTERCOURSE", location="10TH STREET/EAST OF JORDA"
+            ),
+        ),
+    )
+    city_layer(lake, "city_gis_streets", *STREETS)
+    transform(lake, tmp_path / "work")
+    path = tmp_path / "lake" / "gold" / "incident_points.parquet"
+    assert [c[0] for c in rows(path, "DESCRIBE SELECT * FROM $t")] == [
+        "incident_id", "incident_type", "severity_tier", "date_reported", "occurred_from",
+        "time_precision", "precision", "lat", "lon", "street_objectid",
+    ]  # fmt: skip
+    assert rows(path, "SELECT incident_type, precision, lat, lon, street_objectid FROM $t") == [
+        ("VEHICLE THEFT", "segment", 39.17, -86.5125, 2)
+    ]
