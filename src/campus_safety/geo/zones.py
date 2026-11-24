@@ -7,12 +7,12 @@ zone with a centroid for map labels. Polygons stay as GeoJSON text; nothing fine
 ever inferred for a call.
 """
 
-import hashlib
 import json
 from datetime import UTC
 from typing import Any
 
 from campus_safety import fetch
+from campus_safety.geo import arcgis
 from campus_safety.lake import bronze
 from campus_safety.lake.parquet import Columns
 from campus_safety.lake.storage import Lake
@@ -45,20 +45,7 @@ def pull(lake: Lake, run_id: str) -> tuple[bool, int]:
     """Fetch the layer; store it if it differs from the newest copy. Returns (stored, zones)."""
     page = fetch.polite_get(URL)
     zones = len(_features(page.body))
-    found = bronze.manifests(lake, SOURCE)
-    if found and found[-1].sha256 == hashlib.sha256(page.body).hexdigest():
-        return False, zones
-    bronze.write(
-        lake,
-        source=SOURCE,
-        body=page.body,
-        url=URL,
-        fetched_at=page.fetched_at,
-        http_status=page.status,
-        run_id=run_id,
-        ext="geojson",
-    )
-    return True, zones
+    return arcgis.store_if_changed(lake, SOURCE, page.body, URL, page, run_id), zones
 
 
 def _features(body: bytes) -> list[dict[str, Any]]:
