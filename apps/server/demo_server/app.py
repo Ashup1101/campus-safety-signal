@@ -16,6 +16,7 @@ from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
 from demo_server import activity
+from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
 from demo_server.seed import Settings, seed
@@ -115,7 +116,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/alerts")
     def alerts(me: Me) -> list[dict[str, object]]:
-        return store.alerts(include_test=me.is_test)
+        rows = store.alerts(include_test=me.is_test)
+        return [{**row, "area": area_for(str(row["text"]), names)} for row in rows]
 
     @app.get("/api/zones")
     def zones(me: Me) -> list[dict[str, object]]:

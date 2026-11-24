@@ -19,6 +19,7 @@ from typing import Any, Protocol
 
 from campus_safety import events
 from campus_safety.official.alerts import OfficialAlert
+from demo_server.area import area_for
 from demo_server.store import Account, Store
 from demo_server.threads import Threads
 
@@ -231,6 +232,7 @@ class Hub:
             "id": alert_id,
             "thread_id": thread_id,
             "closed": closed,
+            "area": area_for(alert.text, self._segments),
             "source": alert.source,
             "kind": alert.kind,
             "status": alert.status,
