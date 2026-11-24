@@ -33,13 +33,11 @@ function palette(tone: Tone, dark: boolean) {
 export function ThreadCard({
   thread,
   dark,
-  variant = "gameday",
   features = [],
   children,
 }: {
   thread: AlertThread;
   dark: boolean;
-  variant?: "gameday" | "strava";
   features?: SegmentFeature[];
   children?: ReactNode;
 }) {
@@ -60,7 +58,7 @@ export function ThreadCard({
   const earlier = thread.alerts.slice(0, -1).reverse();
   return (
     <li className="overflow-hidden rounded-xl border" style={{ borderColor: shown.accent, background: shown.soft }}>
-      {variant === "gameday" && live && <div className="stripe-live h-1.5" aria-hidden />}
+      {live && <div className="stripe-live h-1.5" aria-hidden />}
       <div className="p-4">
       <div className="mb-1.5 flex items-center gap-2 text-xs font-medium" style={{ color: shown.accent }}>
         <Icon className="size-4" />
@@ -74,17 +72,7 @@ export function ThreadCard({
         )}
         <span className="ml-auto font-normal text-muted-foreground">{clockTime(latest.received_at)}</span>
       </div>
-      <p className={variant === "gameday" ? "text-base font-medium leading-snug" : "text-sm leading-relaxed"}>{latest.text}</p>
-      {variant === "strava" && (
-        <div className="numerals mt-2 flex gap-4 text-xs text-muted-foreground">
-          <span>
-            <span className="text-base font-semibold text-foreground">{thread.alerts.length}</span> {thread.alerts.length === 1 ? "message" : "messages"}
-          </span>
-          <span>
-            <span className="text-base font-semibold text-foreground">{thread.area.length}</span> {thread.area.length === 1 ? "street segment" : "street segments"}
-          </span>
-        </div>
-      )}
+      <p className="text-base font-medium leading-snug">{latest.text}</p>
       <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span>
           Sent {clockTime(latest.official_at)} · received {clockTime(latest.received_at)}

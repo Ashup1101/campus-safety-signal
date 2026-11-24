@@ -2,50 +2,10 @@
 
 import { useSyncExternalStore } from "react";
 import { tokens } from "@/lib/client";
-import { levelFor, type AlertThread, type Level, type Segments, type TimeWindow } from "@/shared/api";
+import { type Tonight } from "@/shared/api";
+export { tonightOf } from "@/shared/api";
 
-// Two candidate looks the owner is comparing (v2): "gameday" (scoreboard, candy stripe on anything
-// live) and "strava" (activity stat tiles). Same data, same rules; only presentation differs.
-export type Look = "gameday" | "strava";
-const LOOKS: { id: Look; label: string }[] = [
-  { id: "gameday", label: "Game day" },
-  { id: "strava", label: "Strava" },
-];
-
-const LOOK_EVENT = "look-change";
-
-function readLook(): Look {
-  const fromUrl = new URLSearchParams(window.location.search).get("look");
-  let saved: string | null = null;
-  try {
-    saved = localStorage.getItem("look");
-  } catch {}
-  const chosen = fromUrl ?? saved;
-  return chosen === "strava" ? "strava" : "gameday";
-}
-
-function subscribeLook(onChange: () => void) {
-  window.addEventListener(LOOK_EVENT, onChange);
-  window.addEventListener("storage", onChange);
-  return () => {
-    window.removeEventListener(LOOK_EVENT, onChange);
-    window.removeEventListener("storage", onChange);
-  };
-}
-
-export function useLook(): [Look, (look: Look) => void] {
-  const look = useSyncExternalStore(subscribeLook, readLook, () => "gameday" as Look);
-  const choose = (next: Look) => {
-    try {
-      localStorage.setItem("look", next);
-    } catch {}
-    const url = new URL(window.location.href);
-    url.searchParams.set("look", next);
-    window.history.replaceState(null, "", url);
-    window.dispatchEvent(new Event(LOOK_EVENT));
-  };
-  return [look, choose];
-}
+// Game day look (owner's pick, 2026-11-23): a scoreboard strip, crimson and cream stripe on anything live.
 
 // The current time, refreshed every 30 s, for "minutes ago" figures (no clock reads during render).
 let nowValue = 0;
@@ -59,53 +19,6 @@ function subscribeNow(onChange: () => void) {
 }
 export function useNow(): number {
   return useSyncExternalStore(subscribeNow, () => nowValue, () => 0);
-}
-
-export function LookSwitch({ look, onChange }: { look: Look; onChange: (look: Look) => void }) {
-  return (
-    <div role="radiogroup" aria-label="Look" className="flex gap-1 rounded-full bg-muted p-1 text-sm">
-      {LOOKS.map((option) => (
-        <button
-          key={option.id}
-          role="radio"
-          aria-checked={option.id === look}
-          onClick={() => onChange(option.id)}
-          className={`rounded-full px-3 py-1.5 transition-[background-color,color,transform] duration-100 active:scale-[0.97] ${
-            option.id === look ? "bg-card font-medium text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-          }`}
-        >
-          {option.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-const RANK: Record<Level, number> = { quiet: 0, elevated: 1, high: 2 };
-
-function minutesSince(iso: string | undefined, now: number): number | null {
-  if (!iso) return null;
-  return Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
-}
-
-export interface Tonight {
-  high: number;
-  elevated: number;
-  top: { name: string; level: Level; reason: string } | null;
-  live: number;
-  lastMinutes: number | null;
-}
-
-export function tonightOf(segments: Segments | null, window: TimeWindow, threads: AlertThread[], now: number): Tonight {
-  const levels = (segments?.features ?? []).map((f) => ({ f, l: levelFor(f, window) }));
-  const top = [...levels].sort((a, b) => RANK[b.l.level] - RANK[a.l.level])[0];
-  return {
-    high: levels.filter((x) => x.l.level === "high").length,
-    elevated: levels.filter((x) => x.l.level === "elevated").length,
-    top: top && top.l.level !== "quiet" ? { name: top.f.properties.name.split(" (")[0], level: top.l.level, reason: top.l.reason } : null,
-    live: threads.filter((t) => t.live).length,
-    lastMinutes: minutesSince(threads[0]?.latest.received_at, now),
-  };
 }
 
 function ago(minutes: number | null): string {
@@ -134,55 +47,6 @@ export function Scoreboard({ tonight, windowLabel }: { tonight: Tonight; windowL
           </div>
         ))}
       </div>
-    </section>
-  );
-}
-
-// Strava: activity tiles plus the top segment, like a segment leaderboard row.
-export function ActivityTiles({ tonight, windowLabel, dark }: { tonight: Tonight; windowLabel: string; dark: boolean }) {
-  const tiles = [
-    { label: "High streets", value: tonight.high, level: "high" as const },
-    { label: "Elevated streets", value: tonight.elevated, level: "elevated" as const },
-    { label: "Live alerts", value: tonight.live, level: null },
-  ];
-  return (
-    <section aria-label="Tonight" className="rounded-2xl border bg-card p-4">
-      <div className="flex items-baseline justify-between gap-3">
-        <h2 className="text-base font-semibold">Tonight around campus</h2>
-        <span className="text-xs text-muted-foreground">{windowLabel}</span>
-      </div>
-      <div className="mt-3 grid grid-cols-3 gap-3">
-        {tiles.map((tile) => (
-          <div key={tile.label} className="rounded-xl bg-muted px-3 py-3">
-            <div className="numerals text-3xl font-semibold leading-none">{tile.value}</div>
-            <div className="mt-1.5 flex items-center gap-1.5 text-xs text-muted-foreground">
-              {tile.level && (
-                <span
-                  aria-hidden
-                  className="h-1 w-4 rounded-full"
-                  style={{ background: dark ? tokens.activity[tile.level].dark : tokens.activity[tile.level].light }}
-                />
-              )}
-              {tile.label}
-            </div>
-          </div>
-        ))}
-      </div>
-      {tonight.top && (
-        <div className="mt-3 flex items-center gap-3 rounded-xl border px-3 py-2.5">
-          <span
-            aria-hidden
-            className="h-8 w-1.5 shrink-0 rounded-full"
-            style={{ background: dark ? tokens.activity[tonight.top.level].dark : tokens.activity[tonight.top.level].light }}
-          />
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {tonight.top.name} · {tokens.activity[tonight.top.level].label}
-            </div>
-            <div className="truncate text-xs text-muted-foreground">{tonight.top.reason}</div>
-          </div>
-        </div>
-      )}
     </section>
   );
 }

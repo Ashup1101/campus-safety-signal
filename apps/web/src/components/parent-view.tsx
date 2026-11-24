@@ -4,7 +4,7 @@ import { Bell, HeartHandshake, MapPin, PauseCircle, Shield, UserRound } from "lu
 import { useEffect, useState } from "react";
 import { ActivityMap, Legend } from "@/components/activity-map";
 import { AlertBanner, CheckInLine, ThreadCard } from "@/components/alerts";
-import { ActivityTiles, LookSwitch, Scoreboard, tonightOf, useLook, useNow } from "@/components/look";
+import { Scoreboard, tonightOf, useNow } from "@/components/look";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -147,7 +147,6 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
   const window: TimeWindow =
     chosen ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
   const warm = { color: color(tokens.warm, dark), background: dark ? tokens.warm.softDark : tokens.warm.softLight };
-  const [look, setLook] = useLook();
   const now = useNow();
   const threads = threadsOf(alerts, now);
   const tonight = tonightOf(segments, window, threads, now);
@@ -164,7 +163,6 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
           <h1 className="text-xl font-semibold tracking-[-0.01em]">Campus Safety Signal</h1>
           <p className="text-xs text-muted-foreground">Parent view · local demo · test accounts only</p>
         </div>
-        <LookSwitch look={look} onChange={setLook} />
         <Badge variant={connected ? "default" : "outline"}>{connected ? "Connected" : "Connecting…"}</Badge>
         <div className="flex gap-1 rounded-full bg-muted p-1">
           {PARENTS.map((p) => (
@@ -176,11 +174,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
       </header>
       {error && <p className="mx-5 rounded-xl bg-muted p-4 text-sm">{error}</p>}
       <div className="px-5 pb-4">
-        {look === "gameday" ? (
-          <Scoreboard tonight={tonight} windowLabel={windowLabel} />
-        ) : (
-          <ActivityTiles tonight={tonight} windowLabel={windowLabel} dark={dark} />
-        )}
+        <Scoreboard tonight={tonight} windowLabel={windowLabel} />
       </div>
       <main className="grid flex-1 gap-4 px-5 pb-6 lg:grid-cols-[2fr_1fr]">
         <Card className="flex flex-col">
@@ -252,7 +246,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               ) : (
                 <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto overscroll-contain">
                   {threads.map((thread) => (
-                    <ThreadCard key={thread.id} thread={thread} dark={dark} variant={look} features={segments?.features}>
+                    <ThreadCard key={thread.id} thread={thread} dark={dark} features={segments?.features}>
                       {checkIns
                         .filter((c) => c.thread_id === thread.id)
                         .map((c) => (

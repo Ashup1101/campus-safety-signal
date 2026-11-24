@@ -226,3 +226,31 @@ export function areaStreets(features: SegmentFeature[], area: string[]): string[
   const names = features.filter((f) => area.includes(f.id)).map((f) => f.properties.name.split(",")[0]);
   return [...new Set(names)];
 }
+
+// What the scoreboard shows: the busiest street in the window, live alerts, minutes since the last.
+const RANK: Record<Level, number> = { quiet: 0, elevated: 1, high: 2 };
+
+function minutesSince(iso: string | undefined, now: number): number | null {
+  if (!iso) return null;
+  return Math.max(0, Math.round((now - Date.parse(iso)) / 60_000));
+}
+
+export interface Tonight {
+  high: number;
+  elevated: number;
+  top: { name: string; level: Level; reason: string } | null;
+  live: number;
+  lastMinutes: number | null;
+}
+
+export function tonightOf(segments: Segments | null, window: TimeWindow, threads: AlertThread[], now: number): Tonight {
+  const levels = (segments?.features ?? []).map((f) => ({ f, l: levelFor(f, window) }));
+  const top = [...levels].sort((a, b) => RANK[b.l.level] - RANK[a.l.level])[0];
+  return {
+    high: levels.filter((x) => x.l.level === "high").length,
+    elevated: levels.filter((x) => x.l.level === "elevated").length,
+    top: top && top.l.level !== "quiet" ? { name: top.f.properties.name.split(" (")[0], level: top.l.level, reason: top.l.reason } : null,
+    live: threads.filter((t) => t.live).length,
+    lastMinutes: minutesSince(threads[0]?.latest.received_at, now),
+  };
+}

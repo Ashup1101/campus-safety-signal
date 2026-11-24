@@ -13,7 +13,7 @@ const STUDENTS = [
 export function Login({ onSession }: { onSession: (session: Session) => void }) {
   const dark = useColorScheme() === "dark";
   const [error, setError] = useState<string | null>(null);
-  const primary = dark ? "#6cc6b8" : "#3f9a8e";
+  const primary = dark ? "#e8667a" : "#9b1c31";
   const choose = (id: string) =>
     login(id).then(onSession, () => setError("The demo server is not running. Start it with `make demo`."));
   return (
