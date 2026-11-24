@@ -27,6 +27,7 @@ import {
   type Tone,
 } from "../shared/api";
 import tokens from "../shared/tokens.json";
+import { Stripe } from "./Scoreboard";
 
 const ICONS: Record<Tone, typeof ShieldAlert> = {
   official: ShieldAlert,
@@ -129,9 +130,11 @@ export function ThreadCard({
   return (
     <View
       accessibilityLabel={`${label}. ${latest.text}`}
-      className="mb-3 rounded-xl border p-4"
+      className="mb-3 overflow-hidden rounded-xl border"
       style={{ borderColor: shown.accent, backgroundColor: shown.soft }}
     >
+      {live && <Stripe dark={dark} />}
+      <View className="p-4">
       <View className="mb-1.5 flex-row items-center">
         <Icon size={16} color={shown.accent} />
         <Text className="ml-1.5 text-xs font-semibold" style={{ color: shown.accent }}>
@@ -149,7 +152,7 @@ export function ThreadCard({
           {clockTime(latest.received_at)}
         </Text>
       </View>
-      <Text className="text-sm leading-5 text-foreground dark:text-foreground-dark">{latest.text}</Text>
+      <Text className="text-base font-medium leading-6 text-foreground dark:text-foreground-dark">{latest.text}</Text>
       <View className="mt-2 flex-row flex-wrap items-center">
         <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
           Sent {clockTime(latest.official_at)} · received {clockTime(latest.received_at)}
@@ -169,7 +172,7 @@ export function ThreadCard({
           </Pressable>
         )}
       </View>
-      <AreaSketch features={features} area={thread.area} accent={shown.accent} faint={dark ? "#a9b4c2" : "#66717f"} />
+      <AreaSketch features={features} area={thread.area} accent={shown.accent} faint={dark ? "#c9bba9" : "#5c4f4a"} />
       {children}
       {earlier.length > 0 && (
         <View className="mt-3 border-t pt-2" style={{ borderColor: shown.accent + "40" }}>
@@ -183,6 +186,7 @@ export function ThreadCard({
           ))}
         </View>
       )}
+      </View>
     </View>
   );
 }
@@ -224,7 +228,7 @@ export function CheckInControls({
 }) {
   const [picking, setPicking] = useState(false);
   const [changing, setChanging] = useState(false);
-  const primary = dark ? "#6cc6b8" : "#3f9a8e";
+  const primary = dark ? "#e8667a" : "#9b1c31";
   if (current && !changing) {
     return (
       <View className="mt-3 flex-row items-center rounded-lg bg-background/60 px-3 py-2 dark:bg-background-dark/60">
@@ -257,8 +261,8 @@ export function CheckInControls({
           accessibilityLabel="Tell my family I'm safe"
           className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark"
         >
-          <HeartHandshake size={14} color="#ffffff" />
-          <Text className="ml-1.5 text-sm font-medium text-white">I&apos;m safe</Text>
+          <HeartHandshake size={14} color={dark ? "#1c1416" : "#f5efe3"} />
+          <Text className="ml-1.5 text-sm font-medium text-primary-foreground dark:text-primary-foreground-dark">I&apos;m safe</Text>
         </Pressable>
         <Pressable
           onPress={() => setPicking((open) => !open)}

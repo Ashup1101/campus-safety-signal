@@ -7,11 +7,13 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCard";
 import { CheckingInBadge } from "../components/CheckingInBadge";
+import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
   levelFor,
   threadsOf,
+  tonightOf,
   toneOf,
   type Alert,
   type CheckIn,
@@ -61,7 +63,14 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
   const [selected, setSelected] = useState<SegmentFeature | null>(null);
   const [note, setNote] = useState<string | null>(null);
+  const [now, setNow] = useState(() => Date.now());
   const here = useRef<LatLon | null>(null);
+
+  // "Minutes ago" figures refresh every 30 s.
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 30_000);
+    return () => clearInterval(timer);
+  }, []);
   const lastHeadsUp = useRef<string | null>(null);
 
   useEffect(() => {
@@ -175,8 +184,10 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
 
   const window: TimeWindow =
     chosen ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
-  const primary = dark ? "#6cc6b8" : "#3f9a8e";
-  const muted = dark ? "#a9b4c2" : "#66717f";
+  const threads = threadsOf(alerts, now);
+  const tonight = tonightOf(segments, window, threads, now);
+  const primary = dark ? "#e8667a" : "#9b1c31";
+  const muted = dark ? "#c9bba9" : "#5c4f4a";
 
   return (
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark" edges={["top"]}>
@@ -197,6 +208,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
+        <Scoreboard tonight={tonight} windowLabel={window === "late_night" ? "Late nights" : "Event nights"} dark={dark} />
         <View className="mt-3 h-80 overflow-hidden rounded-xl">
           <ActivityMap segments={segments} window={window} dark={dark} onSelect={setSelected} />
         </View>
@@ -238,8 +250,8 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             {sharing !== "on" ? (
               <>
                 <Pressable onPress={() => changeSharing("on")} className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark">
-                  <MapPin size={14} color="#ffffff" />
-                  <Text className="ml-1.5 text-sm font-medium text-white">Share</Text>
+                  <MapPin size={14} color={dark ? "#1c1416" : "#f5efe3"} />
+                  <Text className="ml-1.5 text-sm font-medium text-primary-foreground dark:text-primary-foreground-dark">Share</Text>
                 </Pressable>
                 <Pressable onPress={() => changeSharing("on", true)} className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark">
                   <House size={14} color={primary} />
@@ -265,7 +277,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             No alerts. Official IU alerts appear here the moment they are sent.
           </Text>
         ) : (
-          threadsOf(alerts).map((thread) => (
+          threads.map((thread) => (
             <ThreadCard key={thread.id} thread={thread} dark={dark} features={segments?.features}>
               {thread.live && (
                 <CheckInControls
@@ -277,6 +289,9 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             </ThreadCard>
           ))
         )}
+        <Text className="mt-6 text-center text-xs text-muted-foreground dark:text-muted-foreground-dark">
+          Not an official IU service. Built from public data.
+        </Text>
       </ScrollView>
     </SafeAreaView>
   );
