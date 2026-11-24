@@ -11,7 +11,7 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from campus_safety.geo.normalize import ALIASES, parse_segment, street_key
+from campus_safety.geo.normalize import ALIASES, parse_address, parse_segment, street_key
 from campus_safety.lake.parquet import Columns
 
 Point = tuple[float, float]  # lon, lat (GeoJSON order)
@@ -50,6 +50,15 @@ class Piece:
 
 
 @dataclass(frozen=True)
+class AddressPoint:
+    number: int
+    direction: str | None
+    street: str  # street key
+    lat: float
+    lon: float
+
+
+@dataclass(frozen=True)
 class Placement:
     precision: str
     lat: float
@@ -64,20 +73,26 @@ class Network:
     def __init__(
         self,
         pieces: Iterable[Piece],
-        addresses: Iterable[Any],
+        addresses: Iterable[AddressPoint],
         streets_from: Provenance = (None, None, None),
+        addresses_from: Provenance = (None, None, None),
     ) -> None:
         self.pieces = tuple(pieces)
-        self.addresses = tuple(addresses)
-        self.streets_from = streets_from
+        self.streets_from, self.addresses_from = streets_from, addresses_from
         self.by_street: dict[str, list[Piece]] = {}
         for p in self.pieces:
             self.by_street.setdefault(p.street, []).append(p)
         self.known = set(self.by_street)
+        self.by_address: dict[tuple[int, str], list[AddressPoint]] = {}
+        for a in addresses:
+            self.by_address.setdefault((a.number, a.street), []).append(a)
+        self.address_streets = {street for _, street in self.by_address}
 
     @classmethod
-    def from_rows(cls, streets: Sequence[Mapping[str, Any]]) -> "Network":
-        """From silver.geo_streets-shaped rows (staged by geo.streets.street_rows)."""
+    def from_rows(
+        cls, streets: Sequence[Mapping[str, Any]], addresses: Sequence[Mapping[str, Any]] = ()
+    ) -> "Network":
+        """From silver.geo_streets- and geo_addresses-shaped rows (staged by geo.streets)."""
         pieces = [
             Piece(
                 int(r["objectid"]),
@@ -90,13 +105,25 @@ class Network:
             )
             for r in streets
         ]
-        first = streets[0] if streets else {}
-        return cls(
-            pieces, [], (first.get("source_ref"), first.get("run_id"), first.get("ingested_at"))
-        )
+        points = [
+            AddressPoint(
+                int(r["street_number"]),
+                r["street_direction"],
+                str(r["street_key"]),
+                float(r["lat"]),
+                float(r["lon"]),
+            )
+            for r in addresses
+        ]
+        return cls(pieces, points, _provenance(streets), _provenance(addresses))
 
     def vertices(self, street: str) -> list[Point]:
         return [pt for p in self.by_street.get(street, []) for line in p.lines for pt in line]
+
+
+def _provenance(rows: Sequence[Mapping[str, Any]]) -> Provenance:
+    first = rows[0] if rows else {}
+    return first.get("source_ref"), first.get("run_id"), first.get("ingested_at")
 
 
 def _cross(name: str | None) -> str | None:
@@ -153,7 +180,24 @@ def place_segment(text: str, network: Network) -> Placement | None:
     return Placement("segment", round(lat, 6), round(lon, 6), objectid)
 
 
-PLACERS = {"street_segment": place_segment}
+def place_address(text: str, network: Network) -> Placement | None:
+    """The city's address point for number + street (+ direction when given); two possible
+    points (East and West 502) without a direction leave it unplaced."""
+    address = parse_address(text, network.address_streets)
+    if address is None:
+        return None
+    points = {
+        (p.lat, p.lon)
+        for p in network.by_address.get((address.number, address.street), [])
+        if address.direction is None or p.direction in (None, address.direction)
+    }
+    if len(points) != 1:
+        return None
+    lat, lon = points.pop()
+    return Placement("address", lat, lon, None)
+
+
+PLACERS = {"street_segment": place_segment, "address": place_address}
 
 
 def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[object, ...]]:
@@ -171,7 +215,7 @@ def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[o
                     placed.lat,
                     placed.lon,
                     placed.street_objectid,
-                    *network.streets_from,
+                    *(network.streets_from if placed.street_objectid else network.addresses_from),
                 )
             )
     return found

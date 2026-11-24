@@ -118,3 +118,24 @@ def parse_segment(text: str, known: set[str]) -> Segment | None:
     if not street or not cross or street == cross:
         return None
     return Segment(street, SIDES[stretch.group(2)], cross)
+
+
+@dataclass(frozen=True)
+class StreetAddress:
+    number: int
+    direction: str | None  # N | S | E | W when the text gives one
+    street: str  # street key
+
+
+_ADDRESS = re.compile(r"^\s*(\d+)\s+(?:(NORTH|SOUTH|EAST|WEST|N|S|E|W)\.?\s+)?(.+?)\s*$")
+
+
+def parse_address(text: str, known: set[str]) -> StreetAddress | None:
+    """'502 E. KIRKWOOD' -> StreetAddress(502, 'E', 'KIRKWOOD'). Only the first of comma-merged
+    values counts, and a trailing ' - <Clery geography>' note is dropped."""
+    found = _ADDRESS.match(text.upper().split(",")[0].split(" - ")[0])
+    street = _resolve(found.group(3), known) if found else None
+    if not found or not street:
+        return None
+    direction = found.group(2)[0] if found.group(2) else None
+    return StreetAddress(int(found.group(1)), direction, street)

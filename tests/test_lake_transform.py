@@ -373,7 +373,7 @@ STREETS = (
 )
 
 
-def test_street_stretches_are_placed_on_the_city_network(tmp_path: Path) -> None:
+def test_locations_are_placed_on_the_city_network(tmp_path: Path) -> None:
     lake = FileLake(tmp_path / "lake")
     snapshot(
         lake,
@@ -384,9 +384,16 @@ def test_street_stretches_are_placed_on_the_city_network(tmp_path: Path) -> None
             incident(
                 case="900012", offense="RAPE - INTERCOURSE", location="10TH STREET/EAST OF JORDA"
             ),
+            incident(case="900013", offense="VEHICLE THEFT", location="1200 N. JORDAN AVENUE"),
         ),
     )
     city_layer(lake, "city_gis_streets", *STREETS)
+    point = {"street_number": 1200, "street_direction": "N", "street_name": "Eagleson"}
+    city_layer(
+        lake,
+        "city_gis_addresses",
+        {"properties": {**point, "street_suffix": "Ave", "lat": 39.1775, "lon": -86.5119}},
+    )
     transform(lake, tmp_path / "work")
     found = rows(
         tmp_path / "lake" / "silver" / "incidents.parquet",
@@ -396,4 +403,5 @@ def test_street_stretches_are_placed_on_the_city_network(tmp_path: Path) -> None
         ("900010|VEHICLE THEFT", "segment", 39.17, -86.5125),
         ("900011|VEHICLE THEFT", "pending", None, None),  # 14th never meets Jordan here
         ("900012|RAPE - INTERCOURSE", "not_geocodable", None, None),  # sensitive: never placed
+        ("900013|VEHICLE THEFT", "address", 39.1775, -86.5119),
     ]

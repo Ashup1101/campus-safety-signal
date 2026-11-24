@@ -280,14 +280,21 @@ def _stage_geo(lake: Lake, staging: Path) -> dict[str, list[tuple[object, ...]]]
     return staged
 
 
+def _named(columns: Columns, rows: list[tuple[object, ...]]) -> list[dict[str, object]]:
+    names = [name for name, _ in columns]
+    return [dict(zip(names, row, strict=True)) for row in rows]
+
+
 def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]) -> None:
     """Crime log locations on the street network (never sensitive incidents' locations)."""
     observations = staging / "iu_crime_log_observations"
     streets = layers.get("geo_streets", [])
     if not observations.is_dir() or not streets:
         return
-    names = [name for name, _ in geo_streets.STREETS]
-    network = place.Network.from_rows([dict(zip(names, row, strict=True)) for row in streets])
+    network = place.Network.from_rows(
+        _named(geo_streets.STREETS, streets),
+        _named(geo_streets.ADDRESSES, layers.get("geo_addresses", [])),
+    )
     with duckdb.connect(config={"memory_limit": "1GB", "threads": 2}) as con:
         locations = con.execute(
             "SELECT DISTINCT location, location_type FROM read_parquet($glob)"
