@@ -55,9 +55,14 @@ def seed(store: Store, settings: Settings, now: datetime | None = None) -> None:
         for account_id, zones in ZONES.items():
             for zone in zones:
                 store.add_zone(account_id, zone)
-    found = activity.segments(activity.load_geojson())
-    incidents = activity.warehouse_incidents(settings.warehouse, found)
-    incidents += activity.manual_incidents(settings.manual)
+    geojson = activity.load_segments(settings.warehouse)
+    found = activity.segments(geojson)
+    manual = activity.manual_incidents(settings.manual)
+    if activity.is_generated(geojson):
+        incidents = activity.point_incidents(settings.warehouse)
+        incidents += activity.translate(manual, activity.load_geojson(), geojson)
+    else:
+        incidents = activity.warehouse_incidents(settings.warehouse, found) + manual
     current = events.local(now or datetime.now(events.LOCAL))
     rows = activity.levels([s.id for s in found], incidents, current, events.event_nights())
     store.replace_activity(rows)

@@ -9,6 +9,7 @@ from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
@@ -43,7 +44,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     store = Store(settings.db)
     seed(store, settings)
-    geojson = activity.load_geojson()
+    geojson = activity.load_segments(settings.warehouse)
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     hub = Hub(store, Clock(), names)
     drills = DrillSource()
@@ -72,6 +73,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["GET", "POST"],
         allow_headers=["Authorization", "Content-Type"],
     )
+    app.add_middleware(GZipMiddleware, minimum_size=2048)  # ~1,300 generated segments
     app.state.hub, app.state.drills, app.state.replays = hub, drills, replays
     app.mount("/tiles", StaticFiles(directory=settings.tiles, check_dir=False), name="tiles")
 

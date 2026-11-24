@@ -151,3 +151,16 @@ def test_a_block_spread_too_far_is_unclear() -> None:
         ],
     )
     assert place_block("300 BLK E 3RD", far) is None
+
+
+def test_addresses_and_blocks_count_on_the_nearest_piece_of_their_street() -> None:
+    near = Network(
+        NETWORK.pieces,
+        [
+            AddressPoint(650, "N", "EAGLESON", 39.1725, -86.5148),  # ~17 m east of piece 4
+            AddressPoint(700, "N", "EAGLESON", 39.1730, -86.5160),  # ~86 m west of piece 4
+        ],
+    )
+    assert place_address("650 N JORDAN", near) == Placement("address", 39.1725, -86.5148, 4)
+    assert place_address("700 N JORDAN", near) == Placement("address", 39.173, -86.516, None)
+    assert place_block("600 BLK N JORDAN", near) == Placement("block", 39.1725, -86.5148, 4)
