@@ -1,9 +1,17 @@
 "use client";
 
-import { ClipboardCheck, ExternalLink, History, ShieldAlert, ShieldCheck, X } from "lucide-react";
+import { ClipboardCheck, ExternalLink, HeartHandshake, History, ShieldAlert, ShieldCheck, X } from "lucide-react";
 import type { ReactNode } from "react";
 import { color, tokens } from "@/lib/client";
-import { clockTime, toneOf, type Alert, type AlertThread, type Tone } from "@/shared/api";
+import {
+  checkInText,
+  clockTime,
+  toneOf,
+  type Alert,
+  type AlertThread,
+  type CheckIn,
+  type Tone,
+} from "@/shared/api";
 
 const ICONS: Record<Tone, typeof ShieldAlert> = {
   official: ShieldAlert,
@@ -28,9 +36,19 @@ export function ThreadCard({
   dark: boolean;
   children?: ReactNode;
 }) {
-  const { latest, closed, tone } = thread;
-  const shown = palette(closed ? "normal" : tone, dark);
-  const label = closed && tone !== "normal" ? `${tokens.alert[tone].label} · All clear` : shown.label;
+  const { latest, closed, live, tone } = thread;
+  // Live: the source's own tone (red only for a live official alert). Closed: calm all-clear.
+  // Quiet for 6 h without an all-clear: grey, never claiming it is over.
+  const look: Tone = closed ? "normal" : live ? tone : "reconstruction";
+  const shown = palette(look, dark);
+  const name = tokens.alert[tone].label;
+  const label = closed
+    ? tone === "normal"
+      ? name
+      : `${name} · All clear`
+    : live
+      ? name
+      : `${name} · No update for 6 h`;
   const Icon = ICONS[closed ? "normal" : tone];
   const earlier = thread.alerts.slice(0, -1).reverse();
   return (
@@ -70,6 +88,19 @@ export function ThreadCard({
         </div>
       )}
     </li>
+  );
+}
+
+// What the student chose to tell their family during this alert. Private to linked family.
+export function CheckInLine({ checkIn }: { checkIn: CheckIn }) {
+  return (
+    <div className="mt-2 flex items-center gap-2 rounded-lg bg-background/60 px-3 py-2 text-sm">
+      <HeartHandshake className="size-4 shrink-0 text-primary" aria-hidden />
+      <span>
+        <span className="font-medium">{checkIn.student_name}:</span> {checkInText(checkIn)}
+      </span>
+      <span className="ml-auto text-xs text-muted-foreground">{clockTime(checkIn.at)}</span>
+    </div>
   );
 }
 

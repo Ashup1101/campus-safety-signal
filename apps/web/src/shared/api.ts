@@ -148,6 +148,7 @@ export interface AlertThread {
   alerts: Alert[]; // oldest first
   latest: Alert;
   closed: boolean; // the latest alert is the source's all-clear
+  live: boolean; // open and updated within THREAD_GAP_MS (the server's rule); only live cards are red
   tone: Tone; // the first alert's tone; a closed card is calm (never red)
   area: string[];
 }
@@ -156,8 +157,12 @@ function isAllClear(alert: Alert): boolean {
   return alert.closed === true || alert.status.toLowerCase() === "normal";
 }
 
+// Same as THREAD_GAP in demo_server/threads.py: after this long without an update a thread is no
+// longer live. That is not an all-clear (only the source can send one), just "no recent updates".
+export const THREAD_GAP_MS = 6 * 60 * 60 * 1000;
+
 // One card per incident thread, newest first. Alerts without a thread stand alone.
-export function threadsOf(alerts: Alert[]): AlertThread[] {
+export function threadsOf(alerts: Alert[], now: number = Date.now()): AlertThread[] {
   const groups = new Map<string, Alert[]>();
   for (const alert of alerts) {
     const key = alert.thread_id ?? alert.id;
@@ -167,14 +172,20 @@ export function threadsOf(alerts: Alert[]): AlertThread[] {
     .map(([id, group]) => {
       const ordered = [...group].sort((a, b) => a.received_at.localeCompare(b.received_at));
       const latest = ordered[ordered.length - 1];
+      const closed = isAllClear(latest);
       return {
         id,
         alerts: ordered,
         latest,
-        closed: isAllClear(latest),
+        closed,
+        live: !closed && now - Date.parse(latest.received_at) <= THREAD_GAP_MS,
         tone: toneOf(ordered[0]),
         area: [...new Set(ordered.flatMap((a) => a.area ?? []))].sort(),
       };
     })
     .sort((a, b) => b.latest.received_at.localeCompare(a.latest.received_at));
+}
+
+export function checkInText(checkIn: { state: CheckInState; place: ShelterPlace | null }): string {
+  return checkIn.state === "safe" ? "I'm safe" : `Sheltering at ${checkIn.place ?? "a safe place"}`;
 }
