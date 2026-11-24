@@ -1,14 +1,16 @@
 -- Conformed incidents across sources. The IU crime log is an official source; fields it does
--- not carry (coordinates, zones, injuries, summaries) stay null until later phases fill them.
+-- not carry (zones, injuries, summaries) stay null until later phases fill them. Its locations
+-- are placed on the city's street network (geo.place) with the precision as geocode_quality;
+-- sensitive incidents and synthetic rows are never placed.
 -- News clusters join with a templated summary (never article text) and a confidence that
 -- follows the alerts.md tiers: official 1.0, two outlets 0.8, one outlet 0.5.
 select
     md5('iu_crime_log|' || case_number || '|' || offense) as incident_id,
     'official' as source,
-    source_ref,
+    i.source_ref,
     case_number || '|' || offense as source_record_id,
-    run_id,
-    ingested_at,
+    i.run_id,
+    i.ingested_at,
     offense as incident_type,
     offense_raw,
     severity as severity_tier,
@@ -22,11 +24,15 @@ select
         else 'range'
     end as time_precision,
     location as location_text,
-    location_type,
+    i.location_type,
     cast(null as varchar) as business_name,
-    cast(null as double) as lat,
-    cast(null as double) as lon,
-    case when geocodable then 'pending' else 'not_geocodable' end as geocode_quality,
+    p.lat,
+    p.lon,
+    case
+        when p.precision is not null then p.precision
+        when geocodable and not sensitive then 'pending'
+        else 'not_geocodable'
+    end as geocode_quality,
     cast(null as varchar) as zone_id,
     disposition,
     sensitive as is_sensitive,
@@ -39,7 +45,9 @@ select
         as confidence,
     cast(null as varchar) as gap_id,
     cast(null as bigint) as seed
-from {{ ref('iu_crime_log_incidents') }}
+from {{ ref('iu_crime_log_incidents') }} as i
+left join {{ ref('stg_geo_placements') }} as p
+    on p.location_text = i.location and not i.sensitive
 
 union all
 

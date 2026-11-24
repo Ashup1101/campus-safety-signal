@@ -1,5 +1,6 @@
 """End to end: synthetic bronze snapshots -> silver observations -> dbt -> published silver."""
 
+import json
 from collections.abc import Iterator
 from datetime import UTC, date, datetime, timedelta
 from pathlib import Path
@@ -339,3 +340,60 @@ def test_synthetic_patches_join_incidents_and_the_gap_report(tmp_path: Path) -> 
         silver / "synthetic_anomalies.parquet", "SELECT gap_id, count(*) FROM $t GROUP BY 1"
     )
     assert labels == [("iu_log_2014", len(anomalies))]
+
+
+def city_layer(lake: Lake, source: str, *features: dict[str, object]) -> None:
+    body = json.dumps({"type": "FeatureCollection", "features": list(features)}).encode()
+    bronze.write(
+        lake,
+        source=source,
+        body=body,
+        url="https://gis.example.gov/query",
+        fetched_at=DAY_1,
+        http_status=200,
+        run_id="geo-1",
+        ext="geojson",
+    )
+
+
+def centerline(
+    objectid: int, name: str, low: str, high: str, *points: tuple[float, float]
+) -> dict[str, object]:
+    return {
+        "properties": {"objectid": objectid, "fullname": name, "lowxst": low, "highxst": high},
+        "geometry": {"type": "LineString", "coordinates": [list(p) for p in points]},
+    }
+
+
+FEE, EAGLESON, UNION = (-86.520, 39.170), (-86.515, 39.170), (-86.510, 39.170)
+STREETS = (
+    centerline(1, "E 10TH ST", "N Fee Ln", "N Eagleson Ave", FEE, EAGLESON),
+    centerline(2, "E 10TH ST", "N Eagleson Ave", "N Union St", EAGLESON, UNION),
+    centerline(3, "N EAGLESON AVE", "E 10th St", "E 17th St", EAGLESON, (-86.515, 39.175)),
+)
+
+
+def test_street_stretches_are_placed_on_the_city_network(tmp_path: Path) -> None:
+    lake = FileLake(tmp_path / "lake")
+    snapshot(
+        lake,
+        0,
+        bloomington(
+            incident(case="900010", offense="VEHICLE THEFT", location="10TH STREET/EAST OF JORDA"),
+            incident(case="900011", offense="VEHICLE THEFT", location="14TH STREET/WEST OF JORDAN"),
+            incident(
+                case="900012", offense="RAPE - INTERCOURSE", location="10TH STREET/EAST OF JORDA"
+            ),
+        ),
+    )
+    city_layer(lake, "city_gis_streets", *STREETS)
+    transform(lake, tmp_path / "work")
+    found = rows(
+        tmp_path / "lake" / "silver" / "incidents.parquet",
+        "SELECT source_record_id, geocode_quality, lat, lon FROM $t ORDER BY 1",
+    )
+    assert found == [
+        ("900010|VEHICLE THEFT", "segment", 39.17, -86.5125),
+        ("900011|VEHICLE THEFT", "pending", None, None),  # 14th never meets Jordan here
+        ("900012|RAPE - INTERCOURSE", "not_geocodable", None, None),  # sensitive: never placed
+    ]
