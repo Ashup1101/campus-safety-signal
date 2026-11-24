@@ -14,6 +14,7 @@ from campus_safety.geo.place import (
     Piece,
     Placement,
     place_address,
+    place_block,
     place_segment,
 )
 
@@ -82,6 +83,8 @@ ADDRESSES = Network(
     [],
     [
         AddressPoint(502, "E", "KIRKWOOD", 39.1663, -86.5280),
+        AddressPoint(530, "E", "KIRKWOOD", 39.1665, -86.5271),
+        AddressPoint(598, "E", "KIRKWOOD", 39.1661, -86.5262),
         AddressPoint(502, "W", "KIRKWOOD", 39.1663, -86.5400),
         AddressPoint(509, "E", "3RD", 39.1646, -86.5278),
         AddressPoint(1200, "N", "EAGLESON", 39.1775, -86.5119),
@@ -113,3 +116,38 @@ def test_an_address_is_its_city_address_point(text: str, lat: float, lon: float)
 )
 def test_an_address_without_one_clear_point_stays_unplaced(text: str) -> None:
     assert place_address(text, ADDRESSES) is None
+
+
+@pytest.mark.parametrize(
+    ("text", "lat", "lon"),
+    [
+        ("500 BLK E KIRKWOOD", 39.1663, -86.5271),  # middle of 502..598 E Kirkwood
+        ("1200 BLK N JORDAN", 39.1775, -86.5119),  # one point in the block
+        ("509 BLK. E 3rd", 39.1646, -86.5278),  # the 500 block
+    ],
+)
+def test_a_block_is_the_middle_of_its_address_points(text: str, lat: float, lon: float) -> None:
+    assert place_block(text, ADDRESSES) == Placement("block", lat, lon, None)
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "500 BLK KIRKWOOD",  # East and West 500 blocks both exist
+        "1600 BLK. N JORDAN",  # no address points in the block
+        "502 E. KIRKWOOD",  # an address, not a block
+    ],
+)
+def test_a_block_without_one_clear_extent_stays_unplaced(text: str) -> None:
+    assert place_block(text, ADDRESSES) is None
+
+
+def test_a_block_spread_too_far_is_unclear() -> None:
+    far = Network(
+        [],
+        [
+            AddressPoint(300, "E", "3RD", 39.1646, -86.5300),
+            AddressPoint(399, "E", "3RD", 39.1646, -86.5100),
+        ],
+    )
+    assert place_block("300 BLK E 3RD", far) is None

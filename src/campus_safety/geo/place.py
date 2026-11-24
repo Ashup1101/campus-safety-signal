@@ -11,7 +11,13 @@ from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
-from campus_safety.geo.normalize import ALIASES, parse_address, parse_segment, street_key
+from campus_safety.geo.normalize import (
+    ALIASES,
+    parse_address,
+    parse_block,
+    parse_segment,
+    street_key,
+)
 from campus_safety.lake.parquet import Columns
 
 Point = tuple[float, float]  # lon, lat (GeoJSON order)
@@ -20,6 +26,7 @@ M_PER_DEG_LON = M_PER_DEG_LAT * math.cos(math.radians(39.17))  # at Bloomington
 CORNER_M = 30.0  # a piece's end this close to the cross street is the corner
 MIN_ALONG_M = 10.0  # the stretch must run at least this far to the named side
 SAME_CORNER_M = 100.0  # candidates farther apart mean the streets meet twice: unclear
+MAX_BLOCK_M = 400.0  # a hundred block whose address points spread farther is unclear
 
 COLUMNS: Columns = (
     ("location_text", "VARCHAR"),
@@ -197,7 +204,28 @@ def place_address(text: str, network: Network) -> Placement | None:
     return Placement("address", lat, lon, None)
 
 
-PLACERS = {"street_segment": place_segment, "address": place_address}
+def place_block(text: str, network: Network) -> Placement | None:
+    """The middle of the extent of the address points numbered in the hundred block on that
+    street (and side, when given)."""
+    block = parse_block(text, network.address_streets)
+    if block is None:
+        return None
+    points = [
+        p
+        for number in range(block.number, block.number + 100)
+        for p in network.by_address.get((number, block.street), [])
+        if block.direction is None or p.direction in (None, block.direction)
+    ]
+    if not points or len({p.direction for p in points}) > 1:
+        return None
+    south, north = min(p.lat for p in points), max(p.lat for p in points)
+    west, east = min(p.lon for p in points), max(p.lon for p in points)
+    if _meters((west, south), (east, north)) > MAX_BLOCK_M:
+        return None
+    return Placement("block", round((south + north) / 2, 6), round((west + east) / 2, 6), None)
+
+
+PLACERS = {"street_segment": place_segment, "address": place_address, "block": place_block}
 
 
 def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[object, ...]]:

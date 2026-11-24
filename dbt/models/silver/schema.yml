@@ -72,7 +72,7 @@ models:
         data_tests:
           - accepted_values:
               arguments:
-                values: [pending, not_geocodable, segment, address]
+                values: [pending, not_geocodable, segment, address, block]
       - name: zone_id
         data_type: varchar
       - name: disposition
