@@ -236,7 +236,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               ) : (
                 <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto">
                   {threadsOf(alerts).map((thread) => (
-                    <ThreadCard key={thread.id} thread={thread} dark={dark}>
+                    <ThreadCard key={thread.id} thread={thread} dark={dark} features={segments?.features}>
                       {checkIns
                         .filter((c) => c.thread_id === thread.id)
                         .map((c) => (
