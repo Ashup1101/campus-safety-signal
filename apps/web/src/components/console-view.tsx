@@ -226,9 +226,11 @@ export function ConsoleView() {
   return (
     <div className="min-h-screen px-5 py-4">
       <header className="mb-4 flex flex-wrap items-center gap-3">
-        <ShieldCheck className="size-6 text-primary" />
+        <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <ShieldCheck className="size-5" aria-hidden />
+        </span>
         <div className="mr-auto">
-          <h1 className="text-lg font-semibold">IUPD demo console</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.01em]">IUPD demo console</h1>
           <p className="text-xs text-muted-foreground">
             Drills and replays reach test accounts only. Every message says DRILL or RECONSTRUCTION.
           </p>
