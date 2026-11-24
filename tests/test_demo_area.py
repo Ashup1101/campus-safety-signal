@@ -50,3 +50,19 @@ def test_the_drill_alert_and_the_alert_list_carry_the_area(tmp_path: Path) -> No
             client.post("/api/drill", json={"action": "drill"}, headers=headers)
             assert console.receive_json()["alert"]["area"] == KIRKWOOD
         assert client.get("/api/alerts", headers=headers).json()[0]["area"] == KIRKWOOD
+
+
+GENERATED = {
+    "street_3": "E Kirkwood Ave, 400 block (Grant to Dunn)",
+    "street_4": "E Kirkwood Ave, 500 to 600 blocks (Dunn to Fess)",
+    "street_5": "E 10th St, 1400 to 1500 blocks (Eagleson to Campbell)",
+    "street_6": "W Kirkwood Ave, 100 block (College to Walnut)",
+}
+
+
+def test_generated_names_narrow_to_the_piece_holding_the_block() -> None:
+    assert area_for("Shots fired, 500 block of E Kirkwood Ave.", GENERATED) == ["street_4"]
+    assert area_for("Police activity, 600 block Kirkwood Avenue", GENERATED) == ["street_4"]
+    assert area_for("Avoid the 400 block of Kirkwood Ave", GENERATED) == ["street_3"]
+    assert area_for("Crash on Tenth Street", GENERATED) == ["street_5"]
+    assert area_for("Kirkwood Avenue is closed", GENERATED) == ["street_3", "street_4", "street_6"]

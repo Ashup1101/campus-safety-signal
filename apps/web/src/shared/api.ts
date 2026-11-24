@@ -236,11 +236,21 @@ export interface SketchPath {
   inArea: boolean;
 }
 
-// A tiny street sketch for an alert card: every known segment faint, the alert's area drawn last.
+// A tiny street sketch for an alert card: nearby segments faint, the alert's area drawn last.
 // No tiles, so it costs nothing per card. Empty when the alert names no mapped street.
-export function areaSketch(features: SegmentFeature[], area: string[], width: number, height: number, pad = 10): SketchPath[] {
+const NEAR_DEG = 0.006; // about 600 m around the alert's streets
+
+export function areaSketch(allFeatures: SegmentFeature[], area: string[], width: number, height: number, pad = 10): SketchPath[] {
+  const own = allFeatures.filter((f) => area.includes(f.id)).flatMap((f) => f.geometry.coordinates.flat());
+  if (own.length === 0) return [];
+  const [x0, x1] = [Math.min(...own.map((p) => p[0])) - NEAR_DEG, Math.max(...own.map((p) => p[0])) + NEAR_DEG];
+  const [y0, y1] = [Math.min(...own.map((p) => p[1])) - NEAR_DEG, Math.max(...own.map((p) => p[1])) + NEAR_DEG];
+  const features = allFeatures.filter(
+    (f) =>
+      area.includes(f.id) ||
+      f.geometry.coordinates.flat().some(([x, y]) => x >= x0 && x <= x1 && y >= y0 && y <= y1),
+  );
   const points = features.flatMap((f) => f.geometry.coordinates.flat());
-  if (points.length === 0 || !features.some((f) => area.includes(f.id))) return [];
   const lons = points.map((p) => p[0]);
   const lats = points.map((p) => p[1]);
   const [minX, maxX, minY, maxY] = [Math.min(...lons), Math.max(...lons), Math.min(...lats), Math.max(...lats)];
