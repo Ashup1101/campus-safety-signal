@@ -61,6 +61,13 @@ export function ThreadCard({
       <div className="mb-1.5 flex items-center gap-2 text-xs font-medium" style={{ color: shown.accent }}>
         <Icon className="size-4" />
         <span>{label}</span>
+        {live && (
+          // A slow pulse (Tailwind's 2 s cycle, well under 3 flashes per second), off with reduced motion.
+          <span className="inline-flex items-center gap-1 font-normal">
+            <span className="size-2 rounded-full motion-safe:animate-pulse" style={{ background: shown.accent }} aria-hidden />
+            Live
+          </span>
+        )}
         <span className="ml-auto font-normal text-muted-foreground">{clockTime(latest.received_at)}</span>
       </div>
       <p className="text-sm leading-relaxed">{latest.text}</p>
