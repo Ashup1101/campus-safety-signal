@@ -4,6 +4,7 @@ import { Bell, HeartHandshake, MapPin, PauseCircle, Shield, UserRound } from "lu
 import { useEffect, useState } from "react";
 import { ActivityMap, Legend } from "@/components/activity-map";
 import { AlertBanner, CheckInLine, ThreadCard } from "@/components/alerts";
+import { ActivityTiles, LookSwitch, Scoreboard, tonightOf, useLook, useNow } from "@/components/look";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -146,16 +147,24 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
   const window: TimeWindow =
     chosen ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
   const warm = { color: color(tokens.warm, dark), background: dark ? tokens.warm.softDark : tokens.warm.softLight };
+  const [look, setLook] = useLook();
+  const now = useNow();
+  const threads = threadsOf(alerts, now);
+  const tonight = tonightOf(segments, window, threads, now);
+  const windowLabel = window === "late_night" ? "Late nights" : "Event nights";
 
   return (
     <div className="flex min-h-screen flex-col">
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <header className="flex flex-wrap items-center gap-3 px-5 py-4">
-        <Shield className="size-6 text-primary" />
+        <span className="grid size-10 place-items-center rounded-xl bg-primary text-primary-foreground">
+          <Shield className="size-5" aria-hidden />
+        </span>
         <div className="mr-auto">
-          <h1 className="text-lg font-semibold">Campus Safety Signal</h1>
+          <h1 className="text-xl font-semibold tracking-[-0.01em]">Campus Safety Signal</h1>
           <p className="text-xs text-muted-foreground">Parent view · local demo · test accounts only</p>
         </div>
+        <LookSwitch look={look} onChange={setLook} />
         <Badge variant={connected ? "default" : "outline"}>{connected ? "Connected" : "Connecting…"}</Badge>
         <div className="flex gap-1 rounded-full bg-muted p-1">
           {PARENTS.map((p) => (
@@ -166,6 +175,13 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
         </div>
       </header>
       {error && <p className="mx-5 rounded-xl bg-muted p-4 text-sm">{error}</p>}
+      <div className="px-5 pb-4">
+        {look === "gameday" ? (
+          <Scoreboard tonight={tonight} windowLabel={windowLabel} />
+        ) : (
+          <ActivityTiles tonight={tonight} windowLabel={windowLabel} dark={dark} />
+        )}
+      </div>
       <main className="grid flex-1 gap-4 px-5 pb-6 lg:grid-cols-[2fr_1fr]">
         <Card className="flex flex-col">
           <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
@@ -234,9 +250,9 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               {alerts.length === 0 ? (
                 <p className="text-sm text-muted-foreground">No alerts. Official IU alerts appear here the moment they are sent.</p>
               ) : (
-                <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto">
-                  {threadsOf(alerts).map((thread) => (
-                    <ThreadCard key={thread.id} thread={thread} dark={dark} features={segments?.features}>
+                <ul className="flex max-h-[420px] flex-col gap-3 overflow-y-auto overscroll-contain">
+                  {threads.map((thread) => (
+                    <ThreadCard key={thread.id} thread={thread} dark={dark} variant={look} features={segments?.features}>
                       {checkIns
                         .filter((c) => c.thread_id === thread.id)
                         .map((c) => (
