@@ -102,6 +102,7 @@ export type ServerMessage =
       viewers?: string[];
       sharing?: Sharing;
       students?: Student[];
+      check_ins?: CheckIn[]; // live threads only: a screen opened mid-alert sees them
     }
   | { type: "alert"; alert: Alert }
   | { type: "location"; student_id: string; lat: number; lon: number; at: string }

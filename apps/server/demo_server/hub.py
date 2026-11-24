@@ -90,6 +90,8 @@ class Hub:
         self._sharing: dict[str, str] = {}
         self._location: dict[str, dict[str, Any]] = {}
         self.threads = Threads()
+        self._live: dict[str, bool] = {}  # open thread id -> test accounts only
+        self._check_ins: dict[str, dict[str, dict[str, Any]]] = {}  # thread -> student -> check-in
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -129,9 +131,18 @@ class Hub:
         if account.role == "student":
             message["viewers"] = self.viewers(account.id)
             message["sharing"] = self.sharing(account.id)
+            message["check_ins"] = self._check_ins_of({account.id})
         elif account.role == "parent":
-            message["students"] = [self._student(s) for s in self.store.students_of(account.id)]
+            students = self.store.students_of(account.id)
+            message["students"] = [self._student(s) for s in students]
+            message["check_ins"] = self._check_ins_of(set(students))
         return message
+
+    def check_ins(self, thread_id: str) -> list[dict[str, Any]]:
+        return list(self._check_ins.get(thread_id, {}).values())
+
+    def _check_ins_of(self, students: set[str]) -> list[dict[str, Any]]:
+        return [c for by in self._check_ins.values() for s, c in by.items() if s in students]
 
     def _student(self, student_id: str) -> dict[str, Any]:
         account = self.store.account(student_id)
@@ -154,6 +165,41 @@ class Hub:
             await self._set_sharing(account, str(data["state"]))
         elif kind == "heads_up" and data.get("segment_id") in self._segments:
             await self._heads_up(account, str(data["segment_id"]))
+        elif kind == "check_in":
+            await self._check_in(account, data)
+
+    async def _check_in(self, student: Account, data: dict[str, Any]) -> None:
+        """Private "I'm safe" / "I'm sheltering at <place>": linked parents only, memory only,
+        only on a live thread the student could receive; anything else is ignored."""
+        thread_id, state, place = data.get("thread_id"), data.get("state"), data.get("place")
+        test_only = self._live.get(thread_id) if isinstance(thread_id, str) else None
+        if test_only is None or (test_only and not student.is_test):
+            return
+        if state not in CHECK_IN_STATES or (state == "sheltering") != (place in SHELTER_PLACES):
+            return
+        check_in = {
+            "thread_id": thread_id,
+            "student_id": student.id,
+            "student_name": student.display_name,
+            "state": state,
+            "place": place if state == "sheltering" else None,
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        self._check_ins.setdefault(str(thread_id), {})[student.id] = check_in
+        update = {"type": "check_in", "check_in": check_in}
+        await self._to_parents(student.id, update)
+        await self._send(student.id, update)
+        parents = self.store.parents_of(student.id)
+        devices = sum(len(self._peers.get(a, ())) for a in [student.id, *parents])
+        log.info("check-in relayed to %d devices", devices)
+
+    async def _close_thread(self, thread_id: str) -> None:
+        self._live.pop(thread_id, None)
+        students = self._check_ins.pop(thread_id, {})
+        cleared = {"type": "check_in_cleared", "thread_id": thread_id}
+        for student_id in students:
+            await self._to_parents(student_id, cleared)
+            await self._send(student_id, cleared)
 
     async def _location_update(self, student: Account, data: dict[str, Any]) -> None:
         lat, lon = _coordinate(data.get("lat"), 90), _coordinate(data.get("lon"), 180)
@@ -230,6 +276,8 @@ class Hub:
         received = datetime.now(UTC)
         alert_id = uuid.uuid4().hex[:12]
         thread_id, closed = self.threads.assign(alert, received)
+        if not closed:
+            self._live[thread_id] = alert.test_only
         self.store.add_alert(alert_id, alert, received, thread_id)
         body = {
             "id": alert_id,
@@ -252,5 +300,7 @@ class Hub:
             for peer in list(peers)
         ]
         await asyncio.gather(*(self._safe(p, {"type": "alert", "alert": body}) for p in targets))
+        if closed:
+            await self._close_thread(thread_id)
         log.info("%s alert sent to %d devices", alert.kind, len(targets))
         return body
