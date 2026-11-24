@@ -18,6 +18,7 @@ import duckdb
 from campus_safety.bpd_cfs import pull as bpd_pull
 from campus_safety.bpd_cfs import silver as bpd_silver
 from campus_safety.calibration import bps, doe
+from campus_safety.geo import streets as geo_streets
 from campus_safety.geo import zones as geo_zones
 from campus_safety.iu_crime_log import backfill, silver
 from campus_safety.iu_crime_log.classify import Severity
@@ -43,6 +44,7 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     **news_silver.TABLES,
     **synthetic_store.TABLES,
     "geo_law_zones": geo_zones.COLUMNS,
+    **{table: columns for table, (_, columns, _) in geo_streets.STAGED.items()},
 }
 PUBLISHED = (
     ("silver", "incidents"),
@@ -52,6 +54,9 @@ PUBLISHED = (
     ("silver", "synthetic_incidents"),
     ("silver", "synthetic_anomalies"),
     ("silver", "geo_law_zones"),
+    ("silver", "geo_streets"),
+    ("silver", "geo_intersections"),
+    ("silver", "geo_addresses"),
     ("gold", "bpd_zone_calls"),
     ("gold", "news_audit"),
     ("gold", "gap_report"),
@@ -264,6 +269,14 @@ def _stage_geo(lake: Lake, staging: Path) -> None:
         path = staging / "geo_law_zones" / "zones.parquet"
         rows = geo_zones.rows(found[-1], bronze.read(lake, found[-1]))
         write_parquet(path, STAGED_SCHEMAS["geo_law_zones"], rows)
+    for table, (source, columns, parse) in geo_streets.STAGED.items():
+        layer = bronze.manifests(lake, source)
+        if layer:
+            write_parquet(
+                staging / table / "layer.parquet",
+                columns,
+                parse(layer[-1], bronze.read(lake, layer[-1])),
+            )
 
 
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
