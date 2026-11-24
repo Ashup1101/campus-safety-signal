@@ -10,6 +10,29 @@ import { levelFor, type Segments, type Student, type TimeWindow, type Zone } fro
 const CENTER: [number, number] = [-86.5245, 39.1678];
 const BOUNDS: [number, number, number, number] = [-86.548, 39.15, -86.495, 39.188];
 
+// The basemap steps back into the palette (cream paper by day, warm ink at night) so the activity
+// lines carry the color, like a Strava heat map over a quiet map.
+const CREAM = {
+  background: "#efe8da",
+  earth: "#f3ede1",
+  water: "#cdd8d6",
+  buildings: "#e6dece",
+  park_a: "#e2e3cf",
+  park_b: "#dadcc4",
+  wood_a: "#dfe0ca",
+  wood_b: "#d7d9c1",
+};
+const INK = {
+  background: "#160f11",
+  earth: "#1c1416",
+  water: "#141c22",
+  buildings: "#271d1f",
+  park_a: "#1d211c",
+  park_b: "#1b1f1a",
+  wood_a: "#1c201b",
+  wood_b: "#1a1e19",
+};
+
 function baseStyle(dark: boolean): StyleSpecification {
   const flavor = dark ? "dark" : "light";
   return {
@@ -24,7 +47,7 @@ function baseStyle(dark: boolean): StyleSpecification {
           '© <a href="https://openstreetmap.org/copyright">OpenStreetMap</a> contributors, <a href="https://protomaps.com">Protomaps</a>',
       },
     },
-    layers: layers("protomaps", namedFlavor(flavor), { lang: "en" }),
+    layers: layers("protomaps", { ...namedFlavor(flavor), ...(dark ? INK : CREAM) }, { lang: "en" }),
   };
 }
 
@@ -141,16 +164,21 @@ export function ActivityMap({
           paint: { "line-color": color(tokens.zone, dark), "line-width": 1.5, "line-dasharray": [2, 2] },
         });
         m.addLayer({
-          id: "segments-glow",
+          id: "segments-casing",
           type: "line",
           source: "segments",
-          filter: ["==", ["get", "level"], "high"],
           layout: { "line-cap": "round", "line-join": "round" },
           paint: {
-            "line-color": tokens.activity.high[tone],
-            "line-width": tokens.glow.width,
-            "line-blur": tokens.glow.blur,
-            "line-opacity": tokens.glow.opacity,
+            "line-color": dark ? "#160f11" : "#fbf8f1",
+            "line-width": [
+              "match",
+              ["get", "level"],
+              "high",
+              tokens.activity.high.width + 4,
+              "elevated",
+              tokens.activity.elevated.width + 3,
+              tokens.activity.quiet.width + 2,
+            ],
           },
         });
         m.addLayer({
@@ -169,7 +197,7 @@ export function ActivityMap({
               tokens.activity.elevated.width,
               tokens.activity.quiet.width,
             ],
-            "line-opacity": 0.95,
+            "line-opacity": 1,
           },
         });
         m.addLayer({
