@@ -139,3 +139,15 @@ def parse_address(text: str, known: set[str]) -> StreetAddress | None:
         return None
     direction = found.group(2)[0] if found.group(2) else None
     return StreetAddress(int(found.group(1)), direction, street)
+
+
+_BLOCK = re.compile(r"^\s*(\d+)\s+(?:BLK|BLOCK)\.?\s+(.+)$")
+
+
+def parse_block(text: str, known: set[str]) -> StreetAddress | None:
+    """'500 BLK E KIRKWOOD' -> StreetAddress(500, 'E', 'KIRKWOOD'): the hundred block."""
+    found = _BLOCK.match(text.upper().split(",")[0])
+    address = parse_address(f"{found.group(1)} {found.group(2)}", known) if found else None
+    if address is None:
+        return None
+    return StreetAddress(address.number // 100 * 100, address.direction, address.street)

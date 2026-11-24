@@ -385,6 +385,7 @@ def test_locations_are_placed_on_the_city_network(tmp_path: Path) -> None:
                 case="900012", offense="RAPE - INTERCOURSE", location="10TH STREET/EAST OF JORDA"
             ),
             incident(case="900013", offense="VEHICLE THEFT", location="1200 N. JORDAN AVENUE"),
+            incident(case="900014", offense="VEHICLE THEFT", location="1200 BLK N JORDAN"),
         ),
     )
     city_layer(lake, "city_gis_streets", *STREETS)
@@ -404,4 +405,5 @@ def test_locations_are_placed_on_the_city_network(tmp_path: Path) -> None:
         ("900011|VEHICLE THEFT", "pending", None, None),  # 14th never meets Jordan here
         ("900012|RAPE - INTERCOURSE", "not_geocodable", None, None),  # sensitive: never placed
         ("900013|VEHICLE THEFT", "address", 39.1775, -86.5119),
+        ("900014|VEHICLE THEFT", "block", 39.1775, -86.5119),
     ]
