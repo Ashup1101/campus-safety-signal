@@ -6,10 +6,6 @@ import tokens from "../shared/tokens.json";
 
 const REGION = { latitude: 39.1672, longitude: -86.524, latitudeDelta: 0.016, longitudeDelta: 0.016 };
 
-function rgba(hex: string, alpha: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return `rgba(${(n >> 16) & 255}, ${(n >> 8) & 255}, ${n & 255}, ${alpha})`;
-}
 
 function path(line: number[][]) {
   return line.map(([longitude, latitude]) => ({ latitude, longitude }));
@@ -21,7 +17,8 @@ function middle(feature: SegmentFeature) {
   return { latitude, longitude };
 }
 
-// Activity streets: teal / amber / deep orange; High is also thicker, glows, and is labeled.
+// Activity streets: teal / amber / deep orange over a crisp casing (no glow, same as the web);
+// High is also thicker and labeled.
 export function ActivityMap({
   segments,
   window,
@@ -48,14 +45,12 @@ export function ActivityMap({
         const color = tokens.activity[level][tone];
         return feature.geometry.coordinates.map((line, i) => (
           <Fragment key={`${feature.id}-${i}`}>
-            {level === "high" && (
-              <Polyline
-                coordinates={path(line)}
-                strokeColor={rgba(color, tokens.glow.opacity)}
-                strokeWidth={tokens.glow.width}
-                lineCap="round"
-              />
-            )}
+            <Polyline
+              coordinates={path(line)}
+              strokeColor={dark ? "#160f11" : "#fbf8f1"}
+              strokeWidth={tokens.activity[level].width + (level === "high" ? 4 : level === "elevated" ? 3 : 2)}
+              lineCap="round"
+            />
             <Polyline
               coordinates={path(line)}
               strokeColor={color}
