@@ -59,6 +59,8 @@ PUBLISHED = (
     ("silver", "geo_streets"),
     ("silver", "geo_intersections"),
     ("silver", "geo_addresses"),
+    ("silver", "geo_placements"),
+    ("gold", "incident_points"),
     ("gold", "bpd_zone_calls"),
     ("gold", "news_audit"),
     ("gold", "gap_report"),

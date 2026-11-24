@@ -33,6 +33,21 @@ models:
           - accepted_values:
               arguments:
                 values: [official, news]
+  - name: incident_points
+    description: Placed real incidents for maps; never sensitive offenses, never location text.
+    columns:
+      - name: incident_id
+        data_tests: [unique, not_null]
+      - name: precision
+        data_tests:
+          - not_null
+          - accepted_values:
+              arguments:
+                values: [segment, address, block]
+      - name: lat
+        data_tests: [not_null]
+      - name: lon
+        data_tests: [not_null]
   - name: bpd_zone_calls
     description: BPD calls per police reporting zone with the zone's centroid (no finer location exists).
     columns:
