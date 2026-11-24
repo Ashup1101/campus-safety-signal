@@ -69,6 +69,10 @@ models:
         data_type: double
       - name: geocode_quality
         data_type: varchar
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [pending, not_geocodable, segment]
       - name: zone_id
         data_type: varchar
       - name: disposition

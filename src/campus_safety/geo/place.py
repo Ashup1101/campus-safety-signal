@@ -1,0 +1,177 @@
+"""IUPD location strings on the city's street network, at the most precise level the text
+supports, with that level kept as the precision. A street stretch ("10TH STREET/EAST OF JORDAN")
+is the centerline piece of the street that starts at the named corner and runs to the next
+corner on the named side. Anything unclear stays unplaced: a location is never guessed."""
+
+import itertools
+import json
+import math
+from collections.abc import Iterable, Mapping, Sequence
+from dataclasses import dataclass
+from datetime import datetime
+from typing import Any
+
+from campus_safety.geo.normalize import ALIASES, parse_segment, street_key
+from campus_safety.lake.parquet import Columns
+
+Point = tuple[float, float]  # lon, lat (GeoJSON order)
+M_PER_DEG_LAT = 111_320.0
+M_PER_DEG_LON = M_PER_DEG_LAT * math.cos(math.radians(39.17))  # at Bloomington
+CORNER_M = 30.0  # a piece's end this close to the cross street is the corner
+MIN_ALONG_M = 10.0  # the stretch must run at least this far to the named side
+SAME_CORNER_M = 100.0  # candidates farther apart mean the streets meet twice: unclear
+
+COLUMNS: Columns = (
+    ("location_text", "VARCHAR"),
+    ("location_type", "VARCHAR"),
+    ("precision", "VARCHAR"),  # segment | address | block
+    ("lat", "DOUBLE"),
+    ("lon", "DOUBLE"),
+    ("street_objectid", "BIGINT"),  # the centerline piece, for segment placements
+    ("source_ref", "VARCHAR"),  # the city layer the coordinates come from
+    ("run_id", "VARCHAR"),
+    ("ingested_at", "TIMESTAMP"),
+)
+
+
+@dataclass(frozen=True)
+class Piece:
+    objectid: int
+    street: str  # street key
+    low: str | None  # street key of the cross street at the low-address end
+    high: str | None
+    lowadd: int | None
+    highadd: int | None
+    lines: tuple[tuple[Point, ...], ...]
+
+    @property
+    def ends(self) -> tuple[Point, Point]:
+        return self.lines[0][0], self.lines[-1][-1]
+
+
+@dataclass(frozen=True)
+class Placement:
+    precision: str
+    lat: float
+    lon: float
+    street_objectid: int | None
+
+
+Provenance = tuple[str | None, str | None, datetime | None]
+
+
+class Network:
+    def __init__(
+        self,
+        pieces: Iterable[Piece],
+        addresses: Iterable[Any],
+        streets_from: Provenance = (None, None, None),
+    ) -> None:
+        self.pieces = tuple(pieces)
+        self.addresses = tuple(addresses)
+        self.streets_from = streets_from
+        self.by_street: dict[str, list[Piece]] = {}
+        for p in self.pieces:
+            self.by_street.setdefault(p.street, []).append(p)
+        self.known = set(self.by_street)
+
+    @classmethod
+    def from_rows(cls, streets: Sequence[Mapping[str, Any]]) -> "Network":
+        """From silver.geo_streets-shaped rows (staged by geo.streets.street_rows)."""
+        pieces = [
+            Piece(
+                int(r["objectid"]),
+                str(r["street_key"]),
+                _cross(r["lowxst"]),
+                _cross(r["highxst"]),
+                r["lowadd"],
+                r["highadd"],
+                _lines(json.loads(r["geometry"])),
+            )
+            for r in streets
+        ]
+        first = streets[0] if streets else {}
+        return cls(
+            pieces, [], (first.get("source_ref"), first.get("run_id"), first.get("ingested_at"))
+        )
+
+    def vertices(self, street: str) -> list[Point]:
+        return [pt for p in self.by_street.get(street, []) for line in p.lines for pt in line]
+
+
+def _cross(name: str | None) -> str | None:
+    key = street_key(name) if name else ""
+    return ALIASES.get(key, key) or None
+
+
+def _lines(shape: Mapping[str, Any]) -> tuple[tuple[Point, ...], ...]:
+    raw = [shape["coordinates"]] if shape["type"] == "LineString" else shape["coordinates"]
+    return tuple(tuple((float(x), float(y)) for x, y, *_ in line) for line in raw)
+
+
+def _meters(a: Point, b: Point) -> float:
+    return math.hypot((a[0] - b[0]) * M_PER_DEG_LON, (a[1] - b[1]) * M_PER_DEG_LAT)
+
+
+def _midpoint(lines: tuple[tuple[Point, ...], ...]) -> Point:
+    """The point halfway along the piece."""
+    steps = [(a, b, _meters(a, b)) for line in lines for a, b in itertools.pairwise(line)]
+    remaining = sum(length for *_, length in steps) / 2
+    for a, b, length in steps:
+        if remaining <= length and length > 0:
+            t = remaining / length
+            return a[0] + t * (b[0] - a[0]), a[1] + t * (b[1] - a[1])
+        remaining -= length
+    return lines[0][0]
+
+
+def _toward(side: str, corner: Point, point: Point) -> float:
+    """How far point lies from corner toward the named side, in meters (negative: other side)."""
+    dx, dy = (point[0] - corner[0]) * M_PER_DEG_LON, (point[1] - corner[1]) * M_PER_DEG_LAT
+    return {"east": dx, "west": -dx, "north": dy, "south": -dy}[side]
+
+
+def place_segment(text: str, network: Network) -> Placement | None:
+    segment = parse_segment(text, network.known)
+    if segment is None:
+        return None
+    cross = network.vertices(segment.cross)
+    found: list[tuple[float, int, Point, Point]] = []  # (along, objectid, corner, middle)
+    for piece in network.by_street.get(segment.street, []):
+        if segment.cross not in (piece.low, piece.high) or not cross:
+            continue
+        corner = min(piece.ends, key=lambda end: min(_meters(end, c) for c in cross))
+        if min(_meters(corner, c) for c in cross) > CORNER_M:
+            continue
+        middle = _midpoint(piece.lines)
+        along = _toward(segment.side, corner, middle)
+        if along >= MIN_ALONG_M:
+            found.append((along, piece.objectid, corner, middle))
+    if not found or any(_meters(found[0][2], f[2]) > SAME_CORNER_M for f in found):
+        return None
+    _, objectid, _, (lon, lat) = max(found, key=lambda f: (f[0], -f[1]))
+    return Placement("segment", round(lat, 6), round(lon, 6), objectid)
+
+
+PLACERS = {"street_segment": place_segment}
+
+
+def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[object, ...]]:
+    """One row per placed (location_text, location_type); unplaced locations have no row."""
+    found: list[tuple[object, ...]] = []
+    for text, kind in sorted(set(locations)):
+        placer = PLACERS.get(kind)
+        placed = placer(text, network) if placer else None
+        if placed:
+            found.append(
+                (
+                    text,
+                    kind,
+                    placed.precision,
+                    placed.lat,
+                    placed.lon,
+                    placed.street_objectid,
+                    *network.streets_from,
+                )
+            )
+    return found

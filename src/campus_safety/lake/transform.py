@@ -18,6 +18,7 @@ import duckdb
 from campus_safety.bpd_cfs import pull as bpd_pull
 from campus_safety.bpd_cfs import silver as bpd_silver
 from campus_safety.calibration import bps, doe
+from campus_safety.geo import place
 from campus_safety.geo import streets as geo_streets
 from campus_safety.geo import zones as geo_zones
 from campus_safety.iu_crime_log import backfill, silver
@@ -45,6 +46,7 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     **synthetic_store.TABLES,
     "geo_law_zones": geo_zones.COLUMNS,
     **{table: columns for table, (_, columns, _) in geo_streets.STAGED.items()},
+    "geo_placements": place.COLUMNS,
 }
 PUBLISHED = (
     ("silver", "incidents"),
@@ -262,8 +264,9 @@ def _stage_synthetic(lake: Lake, staging: Path, staged: _Staged) -> None:
     staged.published.append(("silver/gap_register/register.parquet", path))
 
 
-def _stage_geo(lake: Lake, staging: Path) -> None:
+def _stage_geo(lake: Lake, staging: Path) -> dict[str, list[tuple[object, ...]]]:
     """The newest copy of each map layer; older copies stay in bronze as history."""
+    staged: dict[str, list[tuple[object, ...]]] = {}
     found = bronze.manifests(lake, geo_zones.SOURCE)
     if found:
         path = staging / "geo_law_zones" / "zones.parquet"
@@ -272,11 +275,27 @@ def _stage_geo(lake: Lake, staging: Path) -> None:
     for table, (source, columns, parse) in geo_streets.STAGED.items():
         layer = bronze.manifests(lake, source)
         if layer:
-            write_parquet(
-                staging / table / "layer.parquet",
-                columns,
-                parse(layer[-1], bronze.read(lake, layer[-1])),
-            )
+            staged[table] = parse(layer[-1], bronze.read(lake, layer[-1]))
+            write_parquet(staging / table / "layer.parquet", columns, staged[table])
+    return staged
+
+
+def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]) -> None:
+    """Crime log locations on the street network (never sensitive incidents' locations)."""
+    observations = staging / "iu_crime_log_observations"
+    streets = layers.get("geo_streets", [])
+    if not observations.is_dir() or not streets:
+        return
+    names = [name for name, _ in geo_streets.STREETS]
+    network = place.Network.from_rows([dict(zip(names, row, strict=True)) for row in streets])
+    with duckdb.connect(config={"memory_limit": "1GB", "threads": 2}) as con:
+        locations = con.execute(
+            "SELECT DISTINCT location, location_type FROM read_parquet($glob)"
+            " WHERE NOT sensitive AND location IS NOT NULL",
+            {"glob": str(observations / "*.parquet")},
+        ).fetchall()
+    found = place.rows(((str(t), str(k)) for t, k in locations), network)
+    write_parquet(staging / "geo_placements" / "placements.parquet", place.COLUMNS, found)
 
 
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
@@ -289,7 +308,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     _stage_calibration(lake, staging, staged)
     _stage_news(lake, staging, staged, extraction)
     _stage_synthetic(lake, staging, staged)
-    _stage_geo(lake, staging)
+    _stage_placements(staging, _stage_geo(lake, staging))
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
