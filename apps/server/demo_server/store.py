@@ -5,15 +5,32 @@ Alert text is stored with suspect descriptions removed; only the live relay carr
 """
 
 import sqlite3
+import threading
+from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import datetime
+from functools import wraps
 from pathlib import Path
-from typing import Literal
+from typing import Any, Literal
 
 from campus_safety.official.alerts import OfficialAlert
 from campus_safety.official.descriptors import strip_descriptors
 
 Role = Literal["student", "parent", "console"]
+
+
+def _locked[**P, R](method: Callable[P, R]) -> Callable[P, R]:
+    """FastAPI runs sync handlers in a thread pool; one sqlite connection must serve one call at a
+    time, or parallel lookups interleave and lose rows (spurious 401s and 404s)."""
+
+    @wraps(method)
+    def call(*args: P.args, **kwargs: P.kwargs) -> R:
+        store: Any = args[0]
+        with store._lock:
+            return method(*args, **kwargs)
+
+    return call
+
 
 SCHEMA = """
 create table if not exists accounts (
@@ -98,11 +115,13 @@ class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
         # One event loop thread uses it; the flag only allows creating it elsewhere.
+        self._lock = threading.RLock()
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.execute("pragma foreign_keys = on")
         self._db.executescript(SCHEMA)
         self._add_thread_column()
 
+    @_locked
     def _add_thread_column(self) -> None:
         """Databases from before threads: add the column; each old alert is its own thread."""
         columns = {row[1] for row in self._db.execute("pragma table_info(alerts)")}
@@ -111,9 +130,11 @@ class Store:
                 self._db.execute("alter table alerts add column thread_id text")
                 self._db.execute("update alerts set thread_id = id where thread_id is null")
 
+    @_locked
     def close(self) -> None:
         self._db.close()
 
+    @_locked
     def add_account(self, account: Account) -> None:
         with self._db:
             self._db.execute(
@@ -121,12 +142,14 @@ class Store:
                 (account.id, account.role, account.display_name, int(account.is_test)),
             )
 
+    @_locked
     def link(self, parent_id: str, student_id: str, label: str) -> None:
         with self._db:
             self._db.execute(
                 "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
             )
 
+    @_locked
     def add_zone(self, account_id: str, zone: Zone) -> None:
         with self._db:
             self._db.execute(
@@ -134,19 +157,23 @@ class Store:
                 (account_id, zone.name, zone.lat, zone.lon, zone.radius_m),
             )
 
+    @_locked
     def accounts(self) -> list[Account]:
         rows = self._db.execute("select * from accounts order by role, display_name").fetchall()
         return [Account(r[0], r[1], r[2], bool(r[3])) for r in rows]
 
+    @_locked
     def account(self, account_id: str) -> Account | None:
         return next((a for a in self.accounts() if a.id == account_id), None)
 
+    @_locked
     def students_of(self, parent_id: str) -> list[str]:
         rows = self._db.execute(
             "select student_id from links where parent_id = ? order by student_id", (parent_id,)
         )
         return [r[0] for r in rows]
 
+    @_locked
     def parents_of(self, student_id: str) -> dict[str, str]:
         """Linked parent id -> the label the student knows them by ("Mom")."""
         rows = self._db.execute(
@@ -154,6 +181,7 @@ class Store:
         )
         return dict(rows.fetchall())
 
+    @_locked
     def zones(self, account_id: str) -> list[Zone]:
         rows = self._db.execute(
             "select name, lat, lon, radius_m from zones where account_id = ? order by id",
@@ -184,6 +212,7 @@ class Store:
                 ),
             )
 
+    @_locked
     def alerts(self, include_test: bool, limit: int = 50) -> list[dict[str, object]]:
         rows = self._db.execute(
             "select id, source, kind, status, verification, official_at, received_at,"
@@ -195,6 +224,7 @@ class Store:
         keys += ["received_at", "text", "link", "thread_id"]
         return [dict(zip(keys, row, strict=True)) for row in rows]
 
+    @_locked
     def delivered(self, alert_id: str, account_id: str, client: str, shown_at: datetime) -> None:
         with self._db:
             self._db.execute(
@@ -202,6 +232,7 @@ class Store:
                 (alert_id, account_id, client, shown_at.isoformat()),
             )
 
+    @_locked
     def latency(self, limit: int = 20) -> list[dict[str, object]]:
         """Per alert: official time, server received, first shown on web and on iPhone."""
         rows = self._db.execute(
@@ -218,6 +249,7 @@ class Store:
         keys += ["received_at", "web_at", "ios_at"]
         return [dict(zip(keys, row, strict=True)) for row in rows]
 
+    @_locked
     def replace_activity(self, rows: list[Activity]) -> None:
         with self._db:
             self._db.execute("delete from activity")
@@ -226,6 +258,7 @@ class Store:
                 [(r.segment_id, r.window, r.level, r.reason, r.incidents, r.serious) for r in rows],
             )
 
+    @_locked
     def activity(self) -> list[Activity]:
         rows = self._db.execute("select * from activity order by segment_id, time_window")
         return [Activity(*r) for r in rows]
