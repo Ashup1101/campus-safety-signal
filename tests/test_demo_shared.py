@@ -30,3 +30,16 @@ def test_red_is_reserved_for_live_official_alerts() -> None:
         if isinstance(value, str) and value.startswith("#")
     ]
     assert red.isdisjoint(others)
+
+
+def test_server_and_apps_share_the_check_in_lists() -> None:
+    import re
+
+    from demo_server.hub import CHECK_IN_STATES, SHELTER_PLACES
+
+    api = (ROOT / "apps" / "web" / "src" / "shared" / "api.ts").read_text()
+    places = re.search(r"SHELTER_PLACES = \[(.*?)\] as const", api, re.DOTALL)
+    states = re.search(r"export type CheckInState = (.*?);", api)
+    assert places and states
+    assert tuple(re.findall(r'"([^"]+)"', places.group(1))) == SHELTER_PLACES
+    assert tuple(re.findall(r'"([^"]+)"', states.group(1))) == CHECK_IN_STATES

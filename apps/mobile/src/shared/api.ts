@@ -7,6 +7,16 @@ export type Level = "quiet" | "elevated" | "high";
 export type TimeWindow = "late_night" | "event_night";
 export type Verification = "official" | "drill" | "reconstruction";
 export type Tone = "official" | "normal" | "drill" | "reconstruction";
+export type CheckInState = "safe" | "sheltering";
+// Fixed list (no free text): the server accepts only these. Same list in demo_server/hub.py.
+export const SHELTER_PLACES = [
+  "my room",
+  "a campus building",
+  "a friend's place",
+  "the library",
+  "off campus",
+] as const;
+export type ShelterPlace = (typeof SHELTER_PLACES)[number];
 
 export interface Account {
   id: string;
@@ -24,6 +34,19 @@ export interface Alert {
   official_at: string | null;
   received_at: string;
   link: string | null;
+  thread_id: string; // one card per thread: updates and the all-clear join it
+  closed?: boolean; // live messages only: this alert closed its thread (the all-clear)
+  area: string[]; // segment ids the official text names; empty = no map
+}
+
+// A student's private check-in during a live alert: linked family only, never stored.
+export interface CheckIn {
+  thread_id: string;
+  student_id: string;
+  student_name: string;
+  state: CheckInState;
+  place: ShelterPlace | null;
+  at: string;
 }
 
 export interface Clock {
@@ -92,13 +115,16 @@ export type ServerMessage =
       segment_name: string;
     }
   | { type: "clock"; clock: Clock }
-  | { type: "latency" };
+  | { type: "latency" }
+  | { type: "check_in"; check_in: CheckIn }
+  | { type: "check_in_cleared"; thread_id: string };
 
 export type ClientMessage =
   | { type: "location"; lat: number; lon: number }
   | { type: "sharing"; state: Sharing }
   | { type: "ack"; alert_id: string; client: "web" | "ios" }
-  | { type: "heads_up"; segment_id: string };
+  | { type: "heads_up"; segment_id: string }
+  | { type: "check_in"; thread_id: string; state: CheckInState; place?: ShelterPlace };
 
 // Red is for live official alerts only; an official "Normal" status is an all-clear.
 export function toneOf(alert: Alert): Tone {
