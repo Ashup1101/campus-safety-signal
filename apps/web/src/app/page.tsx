@@ -19,15 +19,21 @@ const ENTRIES = [
 
 export default function Home() {
   return (
-    <main className="mx-auto flex min-h-screen max-w-3xl flex-col justify-center gap-6 px-5 py-10">
-      <div>
-        <h1 className="text-2xl font-semibold">Campus Safety Signal</h1>
-        <p className="text-muted-foreground">Local demo with test accounts only. Nothing here is hosted.</p>
+    <main className="mx-auto flex min-h-[85vh] max-w-3xl flex-col justify-center gap-6 px-5 py-10">
+      <div className="overflow-hidden rounded-2xl bg-foreground text-background">
+        <div className="h-2 bg-primary" aria-hidden />
+        <div className="px-6 py-7">
+          <h1 className="text-4xl font-semibold tracking-[-0.02em] sm:text-5xl">Campus Safety Signal</h1>
+          <p className="mt-3 max-w-xl text-background/80">
+            IU&apos;s official alerts reach students and parents at the same moment, with a street-by-street view of
+            what tonight usually looks like. Built from public data; local demo with test accounts only.
+          </p>
+        </div>
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         {ENTRIES.map(({ href, icon: Icon, title, text }) => (
           <Link key={href} href={href} className="rounded-xl focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring">
-            <Card className="h-full transition-colors hover:bg-muted">
+            <Card className="h-full transition-[background-color,transform] duration-100 hover:bg-muted active:scale-[0.99]">
               <CardHeader>
                 <Icon className="mb-2 size-6 text-primary" />
                 <CardTitle>{title}</CardTitle>
