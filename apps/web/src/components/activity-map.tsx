@@ -98,6 +98,7 @@ export function ActivityMap({
     let instance: MapLibre | null = null;
     (async () => {
       const maplibre = await import("maplibre-gl");
+      maplibre.setWorkerUrl("/maplibre-worker"); // see app/maplibre-worker/route.ts
       const { Protocol } = await import("pmtiles");
       if (cancelled || !container.current) return;
       const protocol = new Protocol();
