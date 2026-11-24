@@ -118,3 +118,13 @@ test("a dot says what, when and how precisely it is placed", () => {
   assert.equal(pointText({ category: "", day: "2025-12-01", precision: "address" }), "Incident, Dec 1, 2025: at this address");
   assert.deepEqual([30, 90, 365].map(daysLabel), ["30 days", "90 days", "1 year"]);
 });
+
+test("the sketch keeps to streets near the alert's area", () => {
+  const far = {
+    type: "Feature",
+    id: "far",
+    properties: { id: "far", name: "N Far Rd, 9000 block (A to B)", levels: {} },
+    geometry: { type: "MultiLineString", coordinates: [[[-86.4, 39.3], [-86.39, 39.3]]] },
+  };
+  assert.deepEqual(areaSketch([...FEATURES, far], ["kirk"], 240, 120).map((p) => p.id), ["third", "kirk"]);
+});
