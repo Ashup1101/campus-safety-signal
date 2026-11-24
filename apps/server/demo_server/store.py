@@ -46,7 +46,8 @@ create table if not exists alerts (
     official_at text,
     received_at text not null,
     stored_text text not null,
-    link text
+    link text,
+    thread_id text
 );
 create table if not exists deliveries (
     alert_id text not null references alerts (id),
@@ -100,6 +101,15 @@ class Store:
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.execute("pragma foreign_keys = on")
         self._db.executescript(SCHEMA)
+        self._add_thread_column()
+
+    def _add_thread_column(self) -> None:
+        """Databases from before threads: add the column; each old alert is its own thread."""
+        columns = {row[1] for row in self._db.execute("pragma table_info(alerts)")}
+        if "thread_id" not in columns:
+            with self._db:
+                self._db.execute("alter table alerts add column thread_id text")
+                self._db.execute("update alerts set thread_id = id where thread_id is null")
 
     def close(self) -> None:
         self._db.close()
@@ -151,10 +161,14 @@ class Store:
         )
         return [Zone(*r) for r in rows]
 
-    def add_alert(self, alert_id: str, alert: OfficialAlert, received_at: datetime) -> None:
+    def add_alert(
+        self, alert_id: str, alert: OfficialAlert, received_at: datetime, thread_id: str
+    ) -> None:
         with self._db:
             self._db.execute(
-                "insert into alerts values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                "insert into alerts (id, source, kind, status, verification, test_only,"
+                " official_at, received_at, stored_text, link, thread_id)"
+                " values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                 (
                     alert_id,
                     alert.source,
@@ -166,18 +180,19 @@ class Store:
                     received_at.isoformat(),
                     strip_descriptors(alert.text),
                     alert.link,
+                    thread_id,
                 ),
             )
 
     def alerts(self, include_test: bool, limit: int = 50) -> list[dict[str, object]]:
         rows = self._db.execute(
             "select id, source, kind, status, verification, official_at, received_at,"
-            " stored_text, link from alerts where test_only = 0 or ?"
+            " stored_text, link, thread_id from alerts where test_only = 0 or ?"
             " order by received_at desc limit ?",
             (int(include_test), limit),
         )
         keys = ["id", "source", "kind", "status", "verification", "official_at"]
-        keys += ["received_at", "text", "link"]
+        keys += ["received_at", "text", "link", "thread_id"]
         return [dict(zip(keys, row, strict=True)) for row in rows]
 
     def delivered(self, alert_id: str, account_id: str, client: str, shown_at: datetime) -> None:

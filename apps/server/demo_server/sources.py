@@ -100,9 +100,12 @@ class ReplaySource(QueueSource):
         super().__init__("replay", "replay")
         self.replays = replays
         self._sleep = sleep
+        self._runs = 0
 
     async def play(self, replay_id: str, speed: float = REPLAY_SPEED) -> None:
         replay = self.replays[replay_id]
+        self._runs += 1
+        run = self._runs  # each run is its own alert thread (threads.thread_key)
         previous = replay.steps[0].sent_at
         for index, step in enumerate(replay.steps):
             await self._sleep((step.sent_at - previous).total_seconds() / speed)
@@ -115,7 +118,7 @@ class ReplaySource(QueueSource):
                     verification="reconstruction",
                     official_at=step.sent_at.replace(tzinfo=events.LOCAL),
                     status=step.status,
-                    external_id=f"{replay_id}#{index}",
+                    external_id=f"{replay_id}:{run}#{index}",
                     link=replay.sources[0] if replay.sources else None,
                 )
             )
