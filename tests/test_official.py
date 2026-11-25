@@ -137,3 +137,21 @@ def test_poller_polls_faster_on_calendar_event_nights_before_late_night() -> Non
         == rave.HIGH_ALERT_INTERVAL_SECONDS
     )
     assert rave.RaveFeedSource(now=lambda: plain_evening).interval() == rave.INTERVAL_SECONDS
+
+
+def test_watcher_health_records_checks_changes_and_errors() -> None:
+    web = FakeFeed()
+    times = iter(datetime(2026, 11, 25, 6, m, tzinfo=UTC) for m in range(10))
+    source = rave.RaveFeedSource(get=web.get, now=lambda: next(times))
+    assert source.health.as_dict() == {
+        "last_checked": None, "last_status": None, "last_changed": None, "last_error": None,
+    }  # fmt: skip
+    asyncio.run(source.poll())  # baseline
+    asyncio.run(source.poll())  # unchanged
+    first = source.health.as_dict()
+    assert first["last_status"] == 200 and first["last_error"] is None
+    assert first["last_changed"] == "2026-11-25T06:00:00+00:00"  # the baseline counts as a change
+    asyncio.run(source.poll())  # new alert
+    assert source.health.as_dict()["last_changed"] == "2026-11-25T06:02:00+00:00"
+    source.record_error(fetch.FetchError("down"))
+    assert source.health.as_dict()["last_error"] == "FetchError"

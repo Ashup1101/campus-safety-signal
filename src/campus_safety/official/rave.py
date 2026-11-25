@@ -108,6 +108,28 @@ def parse_feed(html: str) -> list[RaveAlert]:
 Get = Callable[..., fetch.Page]
 
 
+@dataclass
+class Health:
+    """What the console shows about the watcher: when it last checked, the HTTP status, when the
+    feed last had something new, and the last error kind (never page text)."""
+
+    last_checked: datetime | None = None
+    last_status: int | None = None
+    last_changed: datetime | None = None
+    last_error: str | None = None
+
+    def as_dict(self) -> dict[str, object]:
+        def stamp(at: datetime | None) -> str | None:
+            return at.isoformat() if at else None
+
+        return {
+            "last_checked": stamp(self.last_checked),
+            "last_status": self.last_status,
+            "last_changed": stamp(self.last_changed),
+            "last_error": self.last_error,
+        }
+
+
 class RaveFeedSource:
     name = SOURCE
     kind: SourceKind = "web_page"
@@ -128,6 +150,10 @@ class RaveFeedSource:
         self._seen: set[tuple[str, datetime, str]] | None = None
         self._etag: str | None = None
         self._last_modified: str | None = None
+        self.health = Health()
+
+    def record_error(self, error: Exception) -> None:
+        self.health.last_checked, self.health.last_error = self._now(), type(error).__name__
 
     def interval(self) -> float:
         high = events.high_alert(self._now())
@@ -138,12 +164,17 @@ class RaveFeedSource:
         get = self._get or fetch.polite_get
         page = await asyncio.to_thread(get, URL, etag=self._etag, last_modified=self._last_modified)
         self._etag, self._last_modified = page.etag, page.last_modified
+        checked = self._now()
+        self.health.last_checked, self.health.last_status = checked, page.status
+        self.health.last_error = None
         if page.status == 304:
             return []
         found = parse_feed(page.body.decode("utf-8", errors="replace"))
         first = self._seen is None
         seen = self._seen if self._seen is not None else set()
         new = [alert for alert in found if alert.key not in seen]
+        if new:
+            self.health.last_changed = checked
         seen.update(alert.key for alert in found)
         self._seen = seen
         if new and self._lake is not None:
@@ -180,5 +211,6 @@ class RaveFeedSource:
                 for alert in await self.poll():
                     yield alert
             except (fetch.FetchError, FeedLayoutError) as e:
+                self.record_error(e)
                 log.warning("%s poll failed: %s", SOURCE, type(e).__name__)
             await self._sleep(self.interval())

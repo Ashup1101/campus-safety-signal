@@ -57,8 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     drills = DrillSource()
     replays = ReplaySource(load_replays(settings.manual))
     sources: list[OfficialAlertSource] = [drills, replays]
-    if settings.live_feed:
-        sources.append(RaveFeedSource(lake=open_lake(settings.lake_uri)))
+    watcher = RaveFeedSource(lake=open_lake(settings.lake_uri)) if settings.live_feed else None
+    if watcher is not None:
+        sources.append(watcher)
     tokens: dict[str, str] = {}
 
     async def relay(source: OfficialAlertSource) -> None:
@@ -163,6 +164,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/incidents")
     def incident_points(_: Me, days: Annotated[int, Query(ge=1, le=1095)] = 90) -> dict[str, Any]:
         return points.recent(settings.warehouse, days, date.today())
+
+    @app.get("/api/watcher")
+    def watcher_health(_: Console) -> dict[str, object]:
+        if watcher is None:
+            return {"enabled": False}
+        return {"enabled": True, **watcher.health.as_dict()}
 
     @app.get("/api/mailbox")
     def mailbox(me: Me) -> list[dict[str, object]]:
