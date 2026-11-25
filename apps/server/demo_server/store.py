@@ -32,6 +32,17 @@ def _locked[**P, R](method: Callable[P, R]) -> Callable[P, R]:
     return call
 
 
+MAILBOX = """create table if not exists mailbox (
+    id integer primary key,
+    account_id text not null references accounts (id),
+    kind text not null check (
+        kind in ('briefing', 'digest', 'alert', 'correction', 'all_clear', 'account')
+    ),
+    subject text not null,
+    body text not null,
+    thread_id text,
+    created_at text not null
+);"""
 SCHEMA = """
 create table if not exists accounts (
     id text primary key,
@@ -73,18 +84,11 @@ create table if not exists deliveries (
     shown_at text not null,
     primary key (alert_id, account_id, client)
 );
-create table if not exists mailbox (
-    id integer primary key,
-    account_id text not null references accounts (id),
-    kind text not null check (kind in ('briefing', 'digest', 'alert', 'correction', 'all_clear')),
-    subject text not null,
-    body text not null,
-    thread_id text,
-    created_at text not null
-);
+{MAILBOX}
 create table if not exists magic_tokens (
     hash text primary key,
     account_id text not null references accounts (id),
+    issued_at text not null,
     expires_at text not null,
     used_at text
 );
@@ -139,9 +143,10 @@ class Store:
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.execute("pragma foreign_keys = on")
-        self._db.executescript(SCHEMA)
+        self._db.executescript(SCHEMA.replace("{MAILBOX}", MAILBOX))
         self._add_thread_column()
         self._add_account_columns()
+        self._widen_mailbox_kinds()
 
     @_locked
     def _add_thread_column(self) -> None:
@@ -167,6 +172,17 @@ class Store:
                 "create unique index if not exists accounts_email on accounts (email)"
                 " where email is not null"
             )
+
+    @_locked
+    def _widen_mailbox_kinds(self) -> None:
+        """Mailboxes from before sign-up do not accept the 'account' kind: rebuild, keep rows."""
+        row = self._db.execute("select sql from sqlite_master where name = 'mailbox'").fetchone()
+        if row and "'account'" not in row[0]:
+            with self._db:
+                self._db.execute("alter table mailbox rename to mailbox_old")
+                self._db.execute(MAILBOX)
+                self._db.execute("insert into mailbox select * from mailbox_old")
+                self._db.execute("drop table mailbox_old")
 
     @_locked
     def close(self) -> None:
@@ -332,12 +348,22 @@ class Store:
         return bool(fresh)
 
     @_locked
-    def add_magic(self, digest: str, account_id: str, expires_at: datetime) -> None:
+    def add_magic(
+        self, digest: str, account_id: str, issued_at: datetime, expires_at: datetime
+    ) -> None:
         with self._db:
             self._db.execute(
-                "insert into magic_tokens values (?, ?, ?, null)",
-                (digest, account_id, expires_at.isoformat()),
+                "insert into magic_tokens values (?, ?, ?, ?, null)",
+                (digest, account_id, issued_at.isoformat(), expires_at.isoformat()),
             )
+
+    @_locked
+    def magic_issued_since(self, account_id: str, since: datetime) -> int:
+        row = self._db.execute(
+            "select count(*) from magic_tokens where account_id = ? and issued_at >= ?",
+            (account_id, since.isoformat()),
+        ).fetchone()
+        return int(row[0]) if row else 0
 
     @_locked
     def magic(self, digest: str) -> dict[str, Any] | None:

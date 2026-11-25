@@ -30,3 +30,23 @@ def test_one_account_per_email(tmp_path: Path) -> None:
     store.add_account(Account("a", "parent", "A", False, email="same@example.test"))
     with pytest.raises(sqlite3.IntegrityError):
         store.add_account(Account("b", "student", "B", False, email="same@example.test"))
+
+
+def test_an_older_mailbox_accepts_sign_in_links_and_keeps_its_messages(tmp_path: Path) -> None:
+    path = tmp_path / "demo.sqlite3"
+    first = Store(path)
+    first.add_account(Account("p", "parent", "P", True))
+    first.deliver_mail("k1", "p", "digest", "Old", "Kept")
+    first.close()
+    with sqlite3.connect(path) as db:  # put back the v5 check without 'account'
+        db.execute("alter table mailbox rename to m2")
+        db.execute(
+            "create table mailbox (id integer primary key, account_id text not null, kind text not"
+            " null check (kind in ('briefing', 'digest', 'alert', 'correction', 'all_clear')),"
+            " subject text not null, body text not null, thread_id text, created_at text not null)"
+        )
+        db.execute("insert into mailbox select * from m2")
+        db.execute("drop table m2")
+    store = Store(path)
+    assert store.deliver_mail("k2", "p", "account", "Your sign-in link", "x")
+    assert [m["subject"] for m in store.mailbox("p")] == ["Your sign-in link", "Old"]

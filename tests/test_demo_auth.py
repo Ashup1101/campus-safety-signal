@@ -34,3 +34,47 @@ def test_expired_unknown_or_tampered_tokens_change_nothing(store: Store) -> None
     assert auth.redeem(store, token[:-1] + ("A" if token[-1] != "A" else "B"), NOW) is None
     fresh = auth.issue(store, "p1", NOW)
     assert auth.redeem(store, fresh, NOW) == "p1"  # earlier failures left it untouched
+
+
+def link_in_mailbox(store: Store, account_id: str) -> str:
+    body = str(store.mailbox(account_id)[0]["body"])
+    return body.split("/magic/")[1].split()[0]
+
+
+def test_signup_sends_a_link_to_the_mailbox_and_never_returns_it(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+    )
+    client = TestClient(app)
+    store: Store = app.state.store
+    body = {"email": " Pat@Example.test ", "role": "parent", "display_name": "Pat"}
+    answer = client.post("/api/signup", json=body)
+    assert answer.status_code == 202 and answer.json() == {"status": "sent"}
+    account = store.account_by_email("pat@example.test")
+    assert account is not None and account.self_service and not account.is_test
+    assert store.mailbox(account.id)[0]["kind"] == "account"
+    assert len(link_in_mailbox(store, account.id)) >= 40
+    assert "pat@example.test" not in caplog.text.lower()
+    assert client.post("/api/signup", json=body).status_code == 409  # one account per email
+    for bad in (
+        {**body, "email": "nope"},
+        {**body, "display_name": " "},
+        {**body, "role": "console"},
+    ):
+        assert client.post(
+            "/api/signup", json={**bad, "email": bad.get("email", "x@y.test")}
+        ).status_code in (400, 422)
+    statuses = [
+        client.post("/api/signin", json={"email": "pat@example.test"}).status_code for _ in range(6)
+    ]
+    assert statuses == [202, 202, 202, 202, 429, 429]  # 5 links per address per hour (incl. signup)
+    assert (
+        client.post("/api/signin", json={"email": "who@example.test"}).status_code == 202
+    )  # no hint

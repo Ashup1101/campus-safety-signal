@@ -3,9 +3,10 @@
 import asyncio
 import contextlib
 import json
+import re
 import secrets
 from collections.abc import AsyncIterator
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Annotated, Any, Literal
 
 from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, WebSocketDisconnect
@@ -15,10 +16,11 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
 from campus_safety import events
+from campus_safety.alerts.rules import Draft
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
-from demo_server import activity, points, tonight_model
+from demo_server import activity, auth, points, tonight_model
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
@@ -38,6 +40,21 @@ class Login(BaseModel):
 
 class Drill(BaseModel):
     action: Literal["drill", "all_clear"]
+
+
+class Signup(BaseModel):
+    email: str
+    role: Literal["student", "parent"]
+    display_name: str
+
+
+class Signin(BaseModel):
+    email: str
+
+
+EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
+LINKS_PER_HOUR = 5
+WEB = "http://localhost:3100"
 
 
 class ClockPreset(BaseModel):
@@ -109,6 +126,43 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    def send_link(account: Account) -> bool:
+        """A sign-in link to the account's mailbox, at most LINKS_PER_HOUR an hour."""
+        now = datetime.now(UTC)
+        if store.magic_issued_since(account.id, now - timedelta(hours=1)) >= LINKS_PER_HOUR:
+            return False
+        token = auth.issue(store, account.id, now)
+        body = (
+            f"Open {WEB}/magic/{token} within 15 minutes to sign in. It works once."
+            " If you did not ask for this, ignore it."
+        )
+        MailboxChannel(store).deliver(
+            account.id, Draft("Your sign-in link", body), "account", token
+        )
+        return True
+
+    @app.post("/api/signup", status_code=202)
+    def signup(body: Signup) -> dict[str, str]:
+        email, name = body.email.strip().lower(), body.display_name.strip()
+        if not EMAIL.match(email) or len(email) > 254 or not 1 <= len(name) <= 40:
+            raise HTTPException(400, "check the email and the name (1 to 40 characters)")
+        if store.account_by_email(email):
+            raise HTTPException(409, "an account already uses this email; sign in instead")
+        account = Account(
+            f"{body.role}_{secrets.token_hex(4)}", body.role, name, False, email, True
+        )
+        store.add_account(account)
+        send_link(account)
+        return {"status": "sent"}
+
+    @app.post("/api/signin", status_code=202)
+    def signin(body: Signin) -> dict[str, str]:
+        # The same answer whether or not the address has an account (no account lookup by email).
+        account = store.account_by_email(body.email)
+        if account is not None and not send_link(account):
+            raise HTTPException(429, "too many sign-in links; try again in an hour")
+        return {"status": "sent"}
 
     @app.get("/api/accounts")
     def accounts() -> list[dict[str, str]]:
