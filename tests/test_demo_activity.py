@@ -222,3 +222,33 @@ def test_hand_entered_incidents_move_to_one_piece_of_the_same_street_only() -> N
     assert [i.segments for i in activity.translate(hit, hand, one)] == [("street_1",)]
     # Two pieces along the stretch: which one is unknown, so the incident is not guessed onto both.
     assert activity.translate(hit, hand, two) == []
+
+
+def test_tonight_comes_from_the_police_zone_each_segment_lies_in(tmp_path: Path) -> None:
+    db = city_warehouse(tmp_path / "w.duckdb", [])
+    night = date(2026, 10, 31)
+    box = [[-86.5300, 39.1660], [-86.5286, 39.1660], [-86.5286, 39.1670], [-86.5300, 39.1670]]
+    with duckdb.connect(str(db)) as con:
+        con.execute("CREATE TABLE silver.geo_law_zones (zonecode VARCHAR, geometry VARCHAR)")
+        con.execute(
+            "INSERT INTO silver.geo_law_zones VALUES ('LB408', ?)",
+            [json.dumps({"type": "Polygon", "coordinates": [[*box, box[0]]]})],
+        )
+        con.execute(
+            'CREATE TABLE gold.tonight (zonecode VARCHAR, night DATE, "window" VARCHAR,'
+            " expected DOUBLE, level VARCHAR, method VARCHAR, reason VARCHAR)"
+        )
+        con.execute(
+            "INSERT INTO gold.tonight VALUES ('LB408', ?, 'late_night', 2.0, 'high', 'rule',"
+            " 'Expected much busier than usual: Halloween weekend')",
+            [night],
+        )
+    geojson = activity.load_segments(db)
+    rows = activity.tonight_rows(db, geojson, night)
+    # The Dunn St piece lies outside the zone: it gets no tonight level.
+    assert [(r.segment_id, r.window, r.level) for r in rows] == [("street_3", "tonight", "high")]
+    assert rows[0].reason == (
+        "Expected much busier than usual: Halloween weekend (city calls for service, simple rule)"
+    )
+    assert activity.tonight_rows(db, geojson, date(2026, 11, 25)) == []  # never invented
+    assert activity.tonight_rows(tmp_path / "none.duckdb", geojson, night) == []

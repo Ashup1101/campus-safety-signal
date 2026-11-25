@@ -106,6 +106,71 @@ def _lines(feature: dict[str, Any]) -> tuple[tuple[tuple[float, float], ...], ..
     )
 
 
+Point = tuple[float, float]
+METHOD_WORDS = {"model": "forecast model", "rule": "simple rule"}
+
+
+def _polygons(shape: dict[str, Any]) -> list[list[list[Point]]]:
+    raw = [shape["coordinates"]] if shape["type"] == "Polygon" else shape["coordinates"]
+    return [[[(float(x), float(y)) for x, y, *_ in ring] for ring in polygon] for polygon in raw]
+
+
+def _in_ring(point: Point, ring: list[Point]) -> bool:
+    x, y, inside = point[0], point[1], False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1], strict=True):
+        if (y1 > y) != (y2 > y) and x < x1 + (y - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def _inside(point: Point, polygons: list[list[list[Point]]]) -> bool:
+    return any(
+        _in_ring(point, polygon[0]) and not any(_in_ring(point, hole) for hole in polygon[1:])
+        for polygon in polygons
+    )
+
+
+def tonight_rows(db: Path, geojson: dict[str, Any], night: date) -> list[Activity]:
+    """Tonight's level for each generated segment from gold.tonight, through the police zone its
+    middle lies in. No forecast for the night (or no zone) means no tonight row: never invented."""
+    if not db.exists():
+        return []
+    with duckdb.connect(str(db), read_only=True, config=DB_CONFIG) as con:
+        try:
+            forecast = con.execute(
+                "select zonecode, level, reason, method from gold.tonight"
+                " where night = ? and \"window\" = 'late_night'",
+                [night],
+            ).fetchall()
+            zones = con.execute("select zonecode, geometry from silver.geo_law_zones").fetchall()
+        except duckdb.CatalogException:
+            return []
+    by_zone = {zone: (level, reason, method) for zone, level, reason, method in forecast}
+    shapes = []
+    for zone, geometry in zones:
+        if zone in by_zone and geometry:
+            polygons = _polygons(json.loads(geometry))
+            xs = [x for polygon in polygons for x, _ in polygon[0]]
+            ys = [y for polygon in polygons for _, y in polygon[0]]
+            shapes.append((zone, (min(xs), min(ys), max(xs), max(ys)), polygons))
+    rows = []
+    for feature in geojson["features"]:
+        x, y = midpoint(_lines(feature))
+        zone = next(
+            (
+                z
+                for z, (x0, y0, x1, y1), polygons in shapes
+                if x0 <= x <= x1 and y0 <= y <= y1 and _inside((x, y), polygons)
+            ),
+            None,
+        )
+        if zone:
+            level, reason, method = by_zone[zone]
+            words = f"{reason} (city calls for service, {METHOD_WORDS.get(method, method)})"
+            rows.append(Activity(feature["properties"]["id"], "tonight", level, words, 0, 0))
+    return rows
+
+
 def translate(
     incidents: Iterable[Incident], hand: dict[str, Any], generated: dict[str, Any]
 ) -> list[Incident]:
