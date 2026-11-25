@@ -65,6 +65,13 @@ models:
           - accepted_values:
               arguments:
                 values: [model, rule]
+  - name: archive_coverage
+    description: Wayback captures of the IU crime log per year - listed, parsed, failed, not fetched.
+    columns:
+      - name: year
+        data_tests: [unique, not_null]
+      - name: listed
+        data_tests: [not_null]
   - name: console_cross_check
     description: IU log entries vs BPD calls per month, zone and shared category (calls are not crimes).
     columns:

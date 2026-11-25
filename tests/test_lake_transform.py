@@ -518,3 +518,60 @@ def test_console_cross_check_compares_shared_categories_per_zone_and_month(
         (date(2026, 10, 1), "LB101", "assault", 1, 0),
         (date(2026, 10, 1), "LB101", "theft", 1, 2),
     ]
+
+
+def cdx_listing(lake: Lake, url: str, *captures: tuple[str, str]) -> None:
+    """A stored Wayback CDX listing of (timestamp, original URL) rows."""
+    body = [["timestamp", "original", "digest"], *([t, o, f"D{t}"] for t, o in captures)]
+    bronze.write(
+        lake,
+        source="wayback_cdx",
+        body=json.dumps(body).encode(),
+        url=url,
+        fetched_at=DAY_1,
+        http_status=200,
+        run_id=f"cdx-{len(captures)}",
+        ext="json",
+    )
+
+
+def test_archive_coverage_counts_listed_parsed_and_failed_captures_per_year(
+    tmp_path: Path,
+) -> None:
+    from campus_safety.iu_crime_log import backfill
+
+    lake = FileLake(tmp_path / "lake")
+    snapshot(lake, 0, bloomington(incident(case="900001")))
+    (page_ext, page_url), (pdf_ext, pdf_url) = backfill._listing_urls()[:2]
+    assert (page_ext, pdf_ext) == ("html", "pdf")
+    cdx_listing(lake, page_url, ("20250301000000", "https://protect.iu.edu/daily-logs.html"))
+    cdx_listing(
+        lake,
+        pdf_url,
+        ("20170105000000", "http://www.indiana.edu/~iupd/Documents/Daily Log/a.pdf"),
+        ("20170106000000", "http://www.indiana.edu/~iupd/Documents/Daily Log/b.pdf"),
+        ("20170107000000", "http://www.indiana.edu/~iupd/Documents/Daily Log/c.pdf"),
+        ("20170108000000", "http://www.indiana.edu/~iupd/Documents/Daily Log/"),  # not a PDF
+    )
+    for run_id, body, ext, captured in (
+        ("wb-1", bloomington(incident(case="900001")).encode(), "html", datetime(2025, 3, 1)),
+        ("wb-2", make_pdf(REPORT), "pdf", datetime(2017, 1, 5)),
+        ("wb-3", b"<!DOCTYPE html>archive error", "pdf", datetime(2017, 1, 6)),
+    ):
+        bronze.write(
+            lake,
+            source="iu_crime_log_wayback",
+            body=body,
+            url=f"https://web.archive.org/web/{run_id}",
+            fetched_at=DAY_1,
+            http_status=200,
+            run_id=run_id,
+            ext=ext,
+            captured_at=captured.replace(tzinfo=UTC),
+        )
+    transform(lake, tmp_path / "work")
+    path = tmp_path / "lake" / "gold" / "archive_coverage.parquet"
+    assert rows(path, "SELECT year, listed, parsed, failed, not_fetched FROM $t ORDER BY 1") == [
+        (2017, 3, 1, 1, 1),
+        (2025, 1, 1, 0, 0),
+    ]

@@ -40,6 +40,7 @@ CRIME_LOG_DATASETS = (silver.SOURCE, backfill.SOURCE)
 STAGED_SCHEMAS: dict[str, Columns] = {
     "iu_crime_log_observations": silver.OBSERVATIONS,
     "iu_crime_log_runs": silver.RUNS,
+    "wayback_captures": backfill.CAPTURES,
     "bpd_cfs_observations": bpd_silver.OBSERVATIONS,
     "bpd_cfs_metadata": bpd_silver.METADATA,
     "calibration_clery_rows": doe.ROWS,
@@ -87,6 +88,7 @@ PUBLISHED = (
     ("gold", "bpd_cfs_refresh_history"),
     ("gold", "calibration_bpd_cfs_check"),
     ("gold", "console_cross_check"),
+    ("gold", "archive_coverage"),
 )
 
 
@@ -345,6 +347,14 @@ def _stage_t1(lake: Lake, staging: Path) -> None:
     )
 
 
+def _stage_wayback_captures(lake: Lake, staging: Path) -> None:
+    """What the archive listings name, for archive coverage (listed vs fetched and parsed)."""
+    found = backfill.stored_captures(lake)
+    if found:
+        path = staging / "wayback_captures" / "captures.parquet"
+        write_parquet(path, STAGED_SCHEMAS["wayback_captures"], found)
+
+
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
     extraction = extraction or Extraction()
     staging = work_dir / "staging"
@@ -357,6 +367,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     _stage_synthetic(lake, staging, staged)
     _stage_placements(staging, _stage_geo(lake, staging))
     _stage_t1(lake, staging)
+    _stage_wayback_captures(lake, staging)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
