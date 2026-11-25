@@ -22,6 +22,15 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " 1 AS synthetic_seeds, 2 AS planted_anomalies, 40 AS clery_total,"
                 " 'IUPD daily logs' AS closing_source"
             )
+            con.execute(
+                "CREATE TABLE gold.console_cross_check AS SELECT DATE '2026-10-01' AS month,"
+                " 'LB101' AS zonecode, 'theft' AS category, 1 AS iu_count, 2 AS bpd_count"
+            )
+            con.execute(
+                "CREATE TABLE gold.calibration_bpd_cfs_check AS SELECT 2026 AS period_year,"
+                " 9 AS period_month, 1000 AS reported_calls, 990 AS feed_calls,"
+                " -10 AS difference, -1.0::DOUBLE AS pct_difference"
+            )
     settings = Settings(data_dir=tmp_path / "d", warehouse=db, tiles=tmp_path / "t")
     return TestClient(create_app(settings))
 
@@ -45,3 +54,18 @@ def test_gaps_are_console_only_and_real_only_by_default(tmp_path: Path) -> None:
 def test_gaps_without_a_warehouse_are_empty(tmp_path: Path) -> None:
     client = client_for(tmp_path, with_gaps=False)
     assert client.get("/api/console/gaps", headers=login(client, "console")).json() == []
+
+
+def test_cross_check_says_calls_are_not_crimes(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/cross-check"
+    assert client.get(url, headers=login(client, "student_sam")).status_code == 403
+    body = client.get(url, headers=login(client, "console")).json()
+    assert "not crimes" in body["note"]
+    assert body["rows"] == [
+        {"month": "2026-10-01", "zonecode": "LB101", "category": "theft", "iu_count": 1,
+         "bpd_count": 2}
+    ]  # fmt: skip
+    assert body["calibration"][0]["pct_difference"] == -1.0
+    empty = client_for(tmp_path / "none", with_gaps=False)
+    assert empty.get(url, headers=login(empty, "console")).json()["rows"] == []
