@@ -73,6 +73,19 @@ create table if not exists deliveries (
     shown_at text not null,
     primary key (alert_id, account_id, client)
 );
+create table if not exists mailbox (
+    id integer primary key,
+    account_id text not null references accounts (id),
+    kind text not null check (kind in ('briefing', 'digest', 'alert', 'correction', 'all_clear')),
+    subject text not null,
+    body text not null,
+    thread_id text,
+    created_at text not null
+);
+create table if not exists sent_keys (
+    key text primary key,
+    sent_at text not null
+);
 create table if not exists activity (
     segment_id text not null,
     time_window text not null,
@@ -248,6 +261,41 @@ class Store:
         keys = ["id", "thread_id", "kind", "verification", "status", "official_at"]
         keys += ["received_at", "web_at", "ios_at"]
         return [dict(zip(keys, row, strict=True)) for row in rows]
+
+    @_locked
+    def deliver_mail(
+        self,
+        key: str,
+        account_id: str,
+        kind: str,
+        subject: str,
+        body: str,
+        thread_id: str | None = None,
+    ) -> bool:
+        """One message per key: a repeated key (the same briefing, digest or follow-up) is a
+        no-op and returns False."""
+        now = datetime.now().astimezone().isoformat(timespec="seconds")
+        with self._db:
+            fresh = self._db.execute(
+                "insert or ignore into sent_keys values (?, ?)", (key, now)
+            ).rowcount
+            if fresh:
+                self._db.execute(
+                    "insert into mailbox (account_id, kind, subject, body, thread_id, created_at)"
+                    " values (?, ?, ?, ?, ?, ?)",
+                    (account_id, kind, subject, body, thread_id, now),
+                )
+        return bool(fresh)
+
+    @_locked
+    def mailbox(self, account_id: str, limit: int = 50) -> list[dict[str, object]]:
+        rows = self._db.execute(
+            "select id, kind, subject, body, thread_id, created_at from mailbox"
+            " where account_id = ? order by id desc limit ?",
+            (account_id, limit),
+        )
+        names = ("id", "kind", "subject", "body", "thread_id", "created_at")
+        return [dict(zip(names, row, strict=True)) for row in rows]
 
     @_locked
     def replace_activity(self, rows: list[Activity]) -> None:
