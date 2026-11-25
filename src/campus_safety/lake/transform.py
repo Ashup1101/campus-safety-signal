@@ -7,6 +7,7 @@
 3. Publish the staged files and the silver and gold tables to the lake.
 """
 
+import json
 import os
 import shutil
 from dataclasses import dataclass
@@ -31,6 +32,7 @@ from campus_safety.lake.storage import Lake
 from campus_safety.news import silver as news_silver
 from campus_safety.news.extract import CachedLLMExtractor, Extractor, RulesExtractor
 from campus_safety.synthetic import store as synthetic_store
+from campus_safety.t1 import pipeline as t1_pipeline
 from campus_safety.t3 import fallback
 
 DBT_PROJECT = Path(__file__).resolve().parents[3] / "dbt"
@@ -47,6 +49,11 @@ STAGED_SCHEMAS: dict[str, Columns] = {
     "geo_law_zones": geo_zones.COLUMNS,
     **{table: columns for table, (_, columns, _) in geo_streets.STAGED.items()},
     "geo_placements": place.COLUMNS,
+    "t1_forecast": (
+        *t1_pipeline.FORECAST,
+        ("run_id", "VARCHAR"),
+        ("imported_at", "TIMESTAMP"),
+    ),
 }
 PUBLISHED = (
     ("silver", "incidents"),
@@ -61,6 +68,7 @@ PUBLISHED = (
     ("silver", "geo_addresses"),
     ("silver", "geo_placements"),
     ("gold", "incident_points"),
+    ("gold", "tonight"),
     ("gold", "bpd_zone_calls"),
     ("gold", "news_audit"),
     ("gold", "gap_report"),
@@ -307,6 +315,29 @@ def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]
     write_parquet(staging / "geo_placements" / "placements.parquet", place.COLUMNS, found)
 
 
+def _stage_t1(lake: Lake, staging: Path) -> None:
+    """The newest imported T1 run (t1 import checked its shape) with its run id and import time."""
+    stamps = []
+    for key in lake.keys("t1/"):
+        if key.endswith("/import.json"):
+            stamp = json.loads(lake.get(key))
+            stamps.append((str(stamp["imported_at"]), key.removesuffix("import.json"), stamp))
+    if not stamps:
+        return
+    _, prefix, stamp = max(stamps)
+    local = staging / "raw" / "t1_forecast.parquet"
+    local.parent.mkdir(parents=True, exist_ok=True)
+    local.write_bytes(lake.get(prefix + "forecast.parquet"))
+    imported_at = datetime.fromisoformat(stamp["imported_at"]).astimezone(UTC).replace(tzinfo=None)
+    with duckdb.connect() as con:
+        found = con.execute("SELECT * FROM read_parquet($p)", {"p": str(local)}).fetchall()
+    write_parquet(
+        staging / "t1_forecast" / "forecast.parquet",
+        STAGED_SCHEMAS["t1_forecast"],
+        [(*row, stamp["run_id"], imported_at) for row in found],
+    )
+
+
 def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) -> TransformSummary:
     extraction = extraction or Extraction()
     staging = work_dir / "staging"
@@ -318,6 +349,7 @@ def transform(lake: Lake, work_dir: Path, extraction: Extraction | None = None) 
     _stage_news(lake, staging, staged, extraction)
     _stage_synthetic(lake, staging, staged)
     _stage_placements(staging, _stage_geo(lake, staging))
+    _stage_t1(lake, staging)
     if not staged.snapshots and not staged.bpd_pages:
         raise TransformError(f"no crime log snapshots or BPD pages in bronze at {lake.uri}")
     for table, columns in STAGED_SCHEMAS.items():
