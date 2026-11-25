@@ -207,11 +207,14 @@ def warehouse_incidents(db: Path, found: list[Segment]) -> list[Incident]:
     if not db.exists():
         return []
     with duckdb.connect(str(db), read_only=True, config=DB_CONFIG) as con:
-        rows = con.execute(
-            "select location_text, incident_type, severity_tier, occurred_from"
-            " from silver.incidents where not is_sensitive and occurred_from is not null"
-            " and location_text is not null"
-        ).fetchall()
+        try:
+            rows = con.execute(
+                "select location_text, incident_type, severity_tier, occurred_from"
+                " from silver.incidents where not is_sensitive and occurred_from is not null"
+                " and location_text is not null"
+            ).fetchall()
+        except duckdb.CatalogException:  # a partial warehouse: no incidents to count
+            return []
     incidents = []
     for location, incident_type, tier, occurred in rows:
         ids = tuple(s.id for s in found if s.matches(location))
