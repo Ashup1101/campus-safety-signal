@@ -44,3 +44,36 @@ def test_a_parent_invites_a_student_by_email_once(tmp_path: Path) -> None:
     pending = client.get("/api/invites", headers=student).json()
     assert [(i["from"], i["status"]) for i in pending] == [("Pat", "pending")]
     assert [i["status"] for i in client.get("/api/invites", headers=parent).json()] == ["pending"]
+
+
+def test_the_student_decides_and_either_side_can_unlink(tmp_path: Path) -> None:
+    app, client = app_and_client(tmp_path)
+    store = app.state.store  # type: ignore[attr-defined]
+    parent = signed_in(client, store, "pat@example.test", "parent", "Pat")
+    student = signed_in(client, store, "kim@example.test", "student", "Kim")
+    other = signed_in(client, store, "lee@example.test", "student", "Lee")
+    pat, kim = (
+        store.account_by_email("pat@example.test"),
+        store.account_by_email("kim@example.test"),
+    )
+    invite = client.post(
+        "/api/invites", headers=parent, json={"student_email": "kim@example.test"}
+    ).json()
+    assert client.post(f"/api/invites/{invite['id']}/accept", headers=other).status_code == 404
+    assert client.post(f"/api/invites/{invite['id']}/accept", headers=parent).status_code == 404
+    assert store.students_of(pat.id) == []  # nothing until the student says yes
+    assert client.post(f"/api/invites/{invite['id']}/accept", headers=student).status_code == 200
+    assert store.students_of(pat.id) == [kim.id]
+    assert (
+        client.post(f"/api/invites/{invite['id']}/accept", headers=student).status_code == 404
+    )  # done
+    assert client.delete(f"/api/links/{pat.id}", headers=student).status_code == 204
+    assert store.students_of(pat.id) == []
+    notice = store.mailbox(pat.id)[0]
+    assert (notice["kind"], notice["subject"]) == ("account", "Kim unlinked")
+    second = client.post(
+        "/api/invites", headers=parent, json={"student_email": "kim@example.test"}
+    ).json()
+    assert client.post(f"/api/invites/{second['id']}/decline", headers=student).status_code == 200
+    assert store.students_of(pat.id) == []
+    assert client.delete(f"/api/links/{pat.id}", headers=student).status_code == 404  # no link
