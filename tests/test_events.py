@@ -41,6 +41,30 @@ def test_aware_times_are_read_in_bloomington() -> None:
 def test_calendar_loads_and_validates(tmp_path: Path) -> None:
     assert date(2026, 4, 25) in events.event_nights()
     bad = tmp_path / "events.yaml"
-    bad.write_text("events:\n  - event_id: x\n    name: X\n    nights: [soon]\n")
+    bad.write_text("events:\n  - event_id: x\n    name: X\n    source: s\n    nights: [soon]\n")
     with pytest.raises(ValueError, match="nights"):
         events.load(bad)
+
+
+def test_the_real_calendar_has_unique_ids_and_a_source_for_every_entry() -> None:
+    found = events.load()
+    assert len({e.event_id for e in found}) == len(found)
+    assert all(e.source for e in found)
+    years = {n.year for e in found if e.event_id.startswith("halloween") for n in e.nights}
+    assert years == set(range(2016, 2027))  # Halloween is a fixed public date every year
+    # Existing event nights are unchanged.
+    assert {date(2024, 10, 31), date(2025, 11, 1), date(2026, 4, 25)} <= events.event_nights()
+
+
+def test_entries_need_a_source_and_unique_ids(tmp_path: Path) -> None:
+    unsourced = tmp_path / "a.yaml"
+    unsourced.write_text("events:\n  - event_id: x\n    name: X\n    nights: [2026-01-01]\n")
+    with pytest.raises(ValueError, match="source"):
+        events.load(unsourced)
+    twice = tmp_path / "b.yaml"
+    entry = (
+        "  - event_id: x\n    name: X\n    source: https://example.org\n    nights: [2026-01-01]\n"
+    )
+    twice.write_text("events:\n" + entry + entry)
+    with pytest.raises(ValueError, match="duplicate"):
+        events.load(twice)

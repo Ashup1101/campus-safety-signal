@@ -1,16 +1,58 @@
 # Event nights: the activity map's event_night window (18:00 on the date to 04:00 the next
-# morning, local time) and the alert poller's high-alert window. Public calendar dates only.
-# Phase 5 extends this to the full calendar (home football, move-in, finals, earlier years).
+# morning, local time), the alert poller's high-alert window and T1's is_event feature.
+# Public dates only, each with its source. Halloween is a fixed date: Oct 31, plus the other
+# weekend night when it falls on a Friday or Saturday, plus Friday and Saturday when it falls on
+# a Sunday. Not listed yet (no source found that allows reading, 2026-11-25): home football games,
+# move-in, finals before Fall 2025, Little 500 in 2017, 2018 and 2021-2023.
 events:
-  - event_id: halloween_2024
-    name: Halloween
-    nights: [2024-10-31]
+  - {event_id: halloween_2016, name: Halloween, source: fixed date (Oct 31), nights: [2016-10-31]}
+  - {event_id: halloween_2017, name: Halloween, source: fixed date (Oct 31), nights: [2017-10-31]}
+  - {event_id: halloween_2018, name: Halloween, source: fixed date (Oct 31), nights: [2018-10-31]}
+  - {event_id: halloween_2019, name: Halloween, source: fixed date (Oct 31), nights: [2019-10-31]}
+  - event_id: halloween_2020
+    name: Halloween weekend
+    source: fixed date (Oct 31)
+    nights: [2020-10-30, 2020-10-31]
+  - event_id: halloween_2021
+    name: Halloween weekend
+    source: fixed date (Oct 31)
+    nights: [2021-10-29, 2021-10-30, 2021-10-31]
+  - {event_id: halloween_2022, name: Halloween, source: fixed date (Oct 31), nights: [2022-10-31]}
+  - {event_id: halloween_2023, name: Halloween, source: fixed date (Oct 31), nights: [2023-10-31]}
+  - {event_id: halloween_2024, name: Halloween, source: fixed date (Oct 31), nights: [2024-10-31]}
   - event_id: halloween_2025
     name: Halloween weekend
+    source: fixed date (Oct 31)
     nights: [2025-10-31, 2025-11-01]
-  - event_id: little_500_2026
-    name: Little 500 weekend
-    nights: [2026-04-24, 2026-04-25]
   - event_id: halloween_2026
     name: Halloween weekend
+    source: fixed date (Oct 31)
     nights: [2026-10-30, 2026-10-31]
+  - event_id: little_500_2016
+    name: Little 500 weekend
+    source: https://www.idsnews.com/article/2016/03/history-of-little-500
+    nights: [2016-04-15, 2016-04-16]
+  - event_id: little_500_2019
+    name: Little 500 weekend
+    source: https://www.idsnews.com/article/2019/06/the-legacy-of-little-500
+    nights: [2019-04-12, 2019-04-13]
+  - event_id: little_500_2024
+    name: Little 500 weekend
+    source: https://www.idsnews.com/article/2024/03/indiana-university-hoosiers-source-guide-little-500-history
+    nights: [2024-04-19, 2024-04-20]
+  - event_id: little_500_2025
+    name: Little 500 weekend
+    source: https://www.idsnews.com/article/2025/04/mens-womens-little-500-indiana-university-bloomington
+    nights: [2025-04-25, 2025-04-26]
+  - event_id: little_500_2026
+    name: Little 500 weekend
+    source: https://iusf.bloomington.iu.edu/little500/
+    nights: [2026-04-24, 2026-04-25]
+  - event_id: end_of_term_fall_2025
+    name: End of fall term
+    source: https://bulletin.indiana.edu/registration/examination-policies/fall-final-exams.html
+    nights: [2025-12-19, 2025-12-20]
+  - event_id: end_of_term_spring_2026
+    name: End of spring term
+    source: https://studentcentral.indiana.edu/grades/finals.html
+    nights: [2026-05-08, 2026-05-09]
