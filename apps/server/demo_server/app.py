@@ -193,6 +193,28 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(409, "an invite to this student is already waiting")
         return {"id": invite_id, "status": "pending"}
 
+    @app.post("/api/invites/{invite_id}/{answer}")
+    def answer_invite(
+        invite_id: int, answer: Literal["accept", "decline"], me: Me
+    ) -> dict[str, str]:
+        parent_id = store.answer_invite(invite_id, me, answer == "accept", datetime.now(UTC))
+        if parent_id is None:
+            raise HTTPException(404, "no waiting invite like that for you")
+        return {"status": "accepted" if answer == "accept" else "declined"}
+
+    @app.delete("/api/links/{other_id}", status_code=204)
+    def unlink(other_id: str, me: Me) -> None:
+        parent_id, student_id = (other_id, me.id) if me.role == "student" else (me.id, other_id)
+        if not store.unlink(parent_id, student_id):
+            raise HTTPException(404, "no link like that")
+        other = store.account(other_id)
+        if other is not None:  # one gentle notice to the other side, in their mailbox
+            notice = Draft(
+                f"{me.display_name} unlinked", f"{me.display_name} is no longer linked with you."
+            )
+            key = f"unlink:{parent_id}:{student_id}:{secrets.token_hex(4)}"
+            MailboxChannel(store).deliver(other.id, notice, "account", key)
+
     @app.get("/api/invites")
     def invites(me: Me) -> list[dict[str, Any]]:
         return store.invites(me, datetime.now(UTC))

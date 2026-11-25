@@ -437,6 +437,42 @@ class Store:
         return [dict(zip(names, r, strict=True)) for r in rows]
 
     @_locked
+    def answer_invite(
+        self, invite_id: int, student: "Account", accept: bool, now: datetime
+    ) -> str | None:
+        """The student's answer to a pending, unexpired invite addressed to their email. Returns the
+        parent id, or None when there is no such invite for this student."""
+        since = (now - INVITE_LIFETIME).isoformat()
+        with self._db:
+            row = self._db.execute(
+                "select parent_id from invites where id = ? and student_email = ?"
+                " and status = 'pending' and created_at >= ?",
+                (invite_id, student.email, since),
+            ).fetchone()
+            if row is None or student.role != "student":
+                return None
+            status = "accepted" if accept else "declined"
+            self._db.execute("update invites set status = ? where id = ?", (status, invite_id))
+            if accept:
+                parent = self._db.execute(
+                    "select display_name from accounts where id = ?", (row[0],)
+                ).fetchone()
+                self._db.execute(
+                    "insert or replace into links values (?, ?, ?)", (row[0], student.id, parent[0])
+                )
+        return str(row[0])
+
+    @_locked
+    def unlink(self, parent_id: str, student_id: str) -> bool:
+        with self._db:
+            return bool(
+                self._db.execute(
+                    "delete from links where parent_id = ? and student_id = ?",
+                    (parent_id, student_id),
+                ).rowcount
+            )
+
+    @_locked
     def sent(self, key: str) -> bool:
         return (
             self._db.execute("select 1 from sent_keys where key = ?", (key,)).fetchone() is not None
