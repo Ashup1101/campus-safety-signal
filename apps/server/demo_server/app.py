@@ -17,6 +17,7 @@ from pydantic import BaseModel, Field
 
 from campus_safety import events
 from campus_safety.alerts.rules import Draft
+from campus_safety.geo.place import distance_to_lines
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
@@ -65,6 +66,12 @@ class ZoneBody(BaseModel):
 
 
 MAX_ZONES = 5
+AREA_M = 400.0
+
+
+class Here(BaseModel):
+    lat: Annotated[float, Field(ge=39.0, le=39.4)]
+    lon: Annotated[float, Field(ge=-86.8, le=-86.3)]
 
 
 class Invite(BaseModel):
@@ -272,6 +279,35 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def delete_zone(zone_id: int, me: Me) -> None:
         if not store.delete_zone(me.id, zone_id):
             raise HTTPException(404, "no such zone of yours")
+
+    @app.post("/api/area-check")
+    def area_check(here: Here, _: Me) -> dict[str, Any]:
+        """Streets within 400 m of one location reading, nearest first. The reading is used for
+        this answer only: never stored, never logged."""
+        levels: dict[str, dict[str, dict[str, str]]] = {}
+        for row in store.activity():
+            levels.setdefault(row.segment_id, {})[row.window] = {
+                "level": row.level,
+                "reason": row.reason,
+            }
+        nearby = []
+        for f in geojson["features"]:
+            lines = tuple(
+                tuple((float(x), float(y)) for x, y in line)
+                for line in f["geometry"]["coordinates"]
+            )
+            meters = distance_to_lines((here.lon, here.lat), lines)
+            if meters <= AREA_M:
+                segment_id = f["properties"]["id"]
+                nearby.append(
+                    {
+                        "id": segment_id,
+                        "name": f["properties"]["name"],
+                        "meters": round(meters),
+                        "levels": levels.get(segment_id, {}),
+                    }
+                )
+        return {"segments": sorted(nearby, key=lambda s: s["meters"])}
 
     @app.get("/api/segments")
     def segments(_: Me) -> dict[str, Any]:
