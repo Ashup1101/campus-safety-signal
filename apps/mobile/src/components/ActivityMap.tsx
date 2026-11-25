@@ -94,7 +94,7 @@ export function ActivityMap({
         ))}
       {(points?.features ?? []).slice(0, MAX_DOTS).map((p, i) => (
         <Marker
-          key={`dot-${i}`}
+          key={`${p.properties.day}-${p.properties.precision}-${p.geometry.coordinates.join(",")}-${i}`}
           coordinate={{ latitude: p.geometry.coordinates[1], longitude: p.geometry.coordinates[0] }}
           title={pointText(p.properties)}
           tracksViewChanges={false}

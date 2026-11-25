@@ -4,6 +4,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
+from typing import Any
 
 from campus_safety import events
 from demo_server import activity
@@ -46,7 +47,12 @@ class Settings:
         return self.data_dir / "demo.sqlite3"
 
 
-def seed(store: Store, settings: Settings, now: datetime | None = None) -> None:
+def seed(
+    store: Store,
+    settings: Settings,
+    now: datetime | None = None,
+    geojson: dict[str, Any] | None = None,
+) -> None:
     if not store.accounts():
         for account in ACCOUNTS:
             store.add_account(account)
@@ -55,7 +61,7 @@ def seed(store: Store, settings: Settings, now: datetime | None = None) -> None:
         for account_id, zones in ZONES.items():
             for zone in zones:
                 store.add_zone(account_id, zone)
-    geojson = activity.load_segments(settings.warehouse)
+    geojson = geojson or activity.load_segments(settings.warehouse)
     found = activity.segments(geojson)
     manual = activity.manual_incidents(settings.manual)
     if activity.is_generated(geojson):

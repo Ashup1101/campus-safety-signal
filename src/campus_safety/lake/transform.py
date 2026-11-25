@@ -290,12 +290,12 @@ def _named(columns: Columns, rows: list[tuple[object, ...]]) -> list[dict[str, o
 def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]) -> None:
     """Crime log locations on the street network (never sensitive incidents' locations)."""
     observations = staging / "iu_crime_log_observations"
-    streets = layers.get("geo_streets", [])
-    if not observations.is_dir() or not streets:
+    streets, addresses = layers.get("geo_streets", []), layers.get("geo_addresses", [])
+    if not observations.is_dir() or not (streets or addresses):
         return
     network = place.Network.from_rows(
         _named(geo_streets.STREETS, streets),
-        _named(geo_streets.ADDRESSES, layers.get("geo_addresses", [])),
+        _named(geo_streets.ADDRESSES, addresses),
     )
     with duckdb.connect(config={"memory_limit": "1GB", "threads": 2}) as con:
         locations = con.execute(

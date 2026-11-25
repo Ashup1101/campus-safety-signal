@@ -167,3 +167,58 @@ def test_generated_segments_count_incident_points_and_hand_entered_incidents(
     late = by_window(rows, "street_3")["late_night"]
     assert (late.level, late.incidents, late.serious) == ("high", 3, 2)
     assert by_window(rows, "street_8")["late_night"].level == "quiet"
+
+
+def test_hand_entered_incidents_move_to_one_piece_of_the_same_street_only() -> None:
+    hand = {
+        "features": [
+            {
+                "properties": {"id": "e7th", "name": "E 7th St, Eagleson Ave to Union St"},
+                "geometry": {"coordinates": [[[-86.52, 39.17], [-86.51, 39.17]]]},
+            }
+        ]
+    }
+
+    def piece(segment_id: str, name: str, *line: list[float]) -> dict[str, object]:
+        return {
+            "properties": {"id": segment_id, "name": name},
+            "geometry": {"coordinates": [list(line)]},
+        }
+
+    one = {
+        "features": [
+            piece(
+                "street_1",
+                "E 7th St, 1400 block (Eagleson to Union)",
+                [-86.52, 39.17],
+                [-86.51, 39.17],
+            ),
+            # A short cross-street piece whose middle sits on the 7th St line: never counted.
+            piece(
+                "street_2",
+                "N Union St, 200 block (7th to 7th)",
+                [-86.51, 39.1699],
+                [-86.51, 39.1701],
+            ),
+        ]
+    }
+    two = {
+        "features": [
+            piece(
+                "street_1",
+                "E 7th St, 1400 block (Eagleson to Swain)",
+                [-86.52, 39.17],
+                [-86.515, 39.17],
+            ),
+            piece(
+                "street_3",
+                "E 7th St, 1500 block (Swain to Union)",
+                [-86.515, 39.17],
+                [-86.51, 39.17],
+            ),
+        ]
+    }
+    hit = [shooting(datetime(2026, 4, 26, 0, 25), "e7th")]
+    assert [i.segments for i in activity.translate(hit, hand, one)] == [("street_1",)]
+    # Two pieces along the stretch: which one is unknown, so the incident is not guessed onto both.
+    assert activity.translate(hit, hand, two) == []

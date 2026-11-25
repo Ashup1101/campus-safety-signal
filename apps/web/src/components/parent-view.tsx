@@ -235,7 +235,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               </div>
               {days > 0 && points && (
                 <span className="tabular-nums">
-                  {points.features.length} placed in the last {daysLabel(days)}
+                  {points.features.length} placed in the last {daysLabel(points.days)}
                 </span>
               )}
             </div>
