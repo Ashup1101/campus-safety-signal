@@ -100,6 +100,12 @@ create table if not exists invites (
     status text not null check (status in ('pending', 'accepted', 'declined')),
     created_at text not null
 );
+create table if not exists ask_usage (
+    account_id text not null references accounts (id),
+    day text not null,
+    count integer not null,
+    primary key (account_id, day)
+);
 create table if not exists sent_keys (
     key text primary key,
     sent_at text not null
@@ -514,10 +520,26 @@ class Store:
                 "delete from invites where parent_id = ? or student_email = ?",
                 (account.id, account.email),
             )
-            for table in ("zones", "mailbox", "magic_tokens", "deliveries"):
+            for table in ("zones", "mailbox", "magic_tokens", "deliveries", "ask_usage"):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
             self._db.execute("delete from sent_keys where instr(key, ?) > 0", (account.id,))
             self._db.execute("delete from accounts where id = ?", (account.id,))
+
+    @_locked
+    def take_ask(self, account_id: str, day: str, limit: int) -> bool:
+        """Counts one question; False (and nothing counted) once the day's limit is reached."""
+        with self._db:
+            row = self._db.execute(
+                "select count from ask_usage where account_id = ? and day = ?", (account_id, day)
+            ).fetchone()
+            if row and row[0] >= limit:
+                return False
+            self._db.execute(
+                "insert into ask_usage values (?, ?, 1) on conflict (account_id, day)"
+                " do update set count = count + 1",
+                (account_id, day),
+            )
+        return True
 
     @_locked
     def sent(self, key: str) -> bool:
