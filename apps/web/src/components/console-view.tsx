@@ -226,6 +226,40 @@ interface TonightModel {
   run_id?: string;
 }
 
+interface Watcher {
+  enabled: boolean;
+  last_checked?: string | null;
+  last_status?: number | null;
+  last_changed?: string | null;
+  last_error?: string | null;
+  next_briefing: { event: string; at: string } | null;
+  next_digest: string;
+}
+
+const when = (iso: string | null | undefined) => (iso ? new Date(iso).toLocaleString() : "not yet");
+
+function WatcherCard({ watcher }: { watcher: Watcher | null }) {
+  if (!watcher) return null;
+  return (
+    <dl className="grid grid-cols-[auto_minmax(0,1fr)] gap-x-4 gap-y-1.5 text-sm">
+      <dt className="text-muted-foreground">IU alert page</dt>
+      <dd>{watcher.enabled ? (watcher.last_error ? `Last check failed (${watcher.last_error})` : "Watching") : "Off in this demo"}</dd>
+      {watcher.enabled && (
+        <>
+          <dt className="text-muted-foreground">Last checked</dt>
+          <dd className="tabular-nums">{when(watcher.last_checked)}</dd>
+          <dt className="text-muted-foreground">Last new alert</dt>
+          <dd className="tabular-nums">{when(watcher.last_changed)}</dd>
+        </>
+      )}
+      <dt className="text-muted-foreground">Next briefing</dt>
+      <dd>{watcher.next_briefing ? `${watcher.next_briefing.event}, ${when(watcher.next_briefing.at)}` : "No event night ahead"}</dd>
+      <dt className="text-muted-foreground">Next digest</dt>
+      <dd className="tabular-nums">{when(watcher.next_digest)}</dd>
+    </dl>
+  );
+}
+
 function TonightModelCard({ card }: { card: TonightModel | null }) {
   if (!card) return null;
   if (!card.method || !card.scores) {
@@ -276,6 +310,7 @@ export function ConsoleView() {
   const [replays, setReplays] = useState<Replay[]>([]);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
   const [tonightModel, setTonightModel] = useState<TonightModel | null>(null);
+  const [watcher, setWatcher] = useState<Watcher | null>(null);
   const [clock, setClock] = useState<Clock | null>(null);
   const [sent, setSent] = useState<string | null>(null);
 
@@ -292,13 +327,15 @@ export function ConsoleView() {
       api<Coverage>("/api/coverage", token),
       api<Clock>("/api/clock", token),
       api<TonightModel>("/api/tonight-model", token),
-    ]).then(([latency, list, data, current, model]) => {
+      api<Watcher>("/api/watcher", token),
+    ]).then(([latency, list, data, current, model, watching]) => {
       if (!live) return;
       setRows(latency);
       setReplays(list);
       setCoverage(data);
       setClock(current);
       setTonightModel(model);
+      setWatcher(watching);
     });
     return () => {
       live = false;
@@ -420,6 +457,15 @@ export function ConsoleView() {
           </CardHeader>
           <CardContent>
             <CoveragePanel coverage={coverage} dark={dark} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Watcher and schedule</CardTitle>
+            <CardDescription>IU&apos;s live alert page, and when briefings and digests go out.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <WatcherCard watcher={watcher} />
           </CardContent>
         </Card>
         <Card>

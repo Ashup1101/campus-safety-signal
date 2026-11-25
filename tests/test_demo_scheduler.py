@@ -90,3 +90,13 @@ def test_weekly_digest_on_monday(store: Store, tmp_path: Path) -> None:
     db = warehouse(tmp_path / "w.duckdb", ("VANDALISM", "low", datetime(2026, 11, 18, 21, 0)))
     assert scheduler(store, db, datetime(2026, 11, 23, 7, 30)).tick() == 1  # Monday
     assert [m["subject"] for m in store.mailbox("parent_mom")] == ["Weekly digest: Kirkwood Avenue"]
+
+
+def test_next_briefing_and_digest_times(store: Store, tmp_path: Path) -> None:
+    upcoming = scheduler(store, tmp_path / "none.duckdb", datetime(2026, 10, 27, 9, 0)).upcoming()
+    assert upcoming == {
+        "next_briefing": {"event": "Halloween weekend", "at": "2026-10-29T15:00:00"},
+        "next_digest": "2026-10-28T07:00:00",
+    }
+    after = scheduler(store, tmp_path / "none.duckdb", datetime(2026, 11, 2, 6, 0)).upcoming()
+    assert after == {"next_briefing": None, "next_digest": "2026-11-02T07:00:00"}
