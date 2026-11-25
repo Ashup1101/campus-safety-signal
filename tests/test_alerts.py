@@ -345,3 +345,27 @@ def test_cli_decide_publish_and_report(
     assert main([*base, "report"]) == 0
     assert "2 incidents published, 1 deliveries {'web_push': 1}" in caplog.text
     assert main(["--warehouse", str(tmp_path / "missing.duckdb"), "decide"]) == 1
+
+
+def test_followups_send_one_correction_per_change_and_one_all_clear() -> None:
+    from dataclasses import replace
+
+    from campus_safety.alerts import followups
+    from campus_safety.alerts.ledger import MemoryLedger, publish_key
+
+    ledger = MemoryLedger()
+    assert followups.followups([(SHOOTING, False)], ledger, NOW) == []  # never alerted
+    ledger.claim(publish_key(SHOOTING.incident_id, "alert"), NOW)
+    followups.record_facts(ledger, SHOOTING, NOW)
+    assert followups.followups([(SHOOTING, False)], ledger, NOW) == []  # same facts
+    changed = replace(SHOOTING, injuries=8)
+    found = followups.followups([(changed, False)], ledger, NOW)
+    assert [(f.kind, f.draft.title) for f in found] == [
+        ("correction", "Correction: shooting near 400 block of E Kirkwood Ave")
+    ]
+    assert followups.followups([(changed, False)], ledger, NOW) == []  # once per change
+    over = followups.followups([(changed, True)], ledger, NOW)
+    assert [f.kind for f in over] == ["all_clear"]
+    assert followups.followups([(replace(changed, injuries=9), True)], ledger, NOW) == []
+    # The ledger holds fingerprints and timestamps, never alert text.
+    assert all("Kirkwood" not in key for key in ledger.entries)
