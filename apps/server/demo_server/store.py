@@ -502,6 +502,24 @@ class Store:
             )
 
     @_locked
+    def delete_account(self, account: "Account") -> None:
+        """Everything the account owns, in one transaction: links on either side, invites it sent
+        or that were sent to its email, zones, mailbox, sign-in links, deliveries, the keys of
+        messages sent to it, and the account itself."""
+        with self._db:
+            self._db.execute(
+                "delete from links where parent_id = ? or student_id = ?", (account.id, account.id)
+            )
+            self._db.execute(
+                "delete from invites where parent_id = ? or student_email = ?",
+                (account.id, account.email),
+            )
+            for table in ("zones", "mailbox", "magic_tokens", "deliveries"):
+                self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
+            self._db.execute("delete from sent_keys where instr(key, ?) > 0", (account.id,))
+            self._db.execute("delete from accounts where id = ?", (account.id,))
+
+    @_locked
     def sent(self, key: str) -> bool:
         return (
             self._db.execute("select 1 from sent_keys where key = ?", (key,)).fetchone() is not None
