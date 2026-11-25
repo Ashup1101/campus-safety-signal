@@ -37,7 +37,7 @@ test:
 
 # Audit the locked set (dev tools included); uv venvs ship without pip, so skip it.
 audit:
-	uv export --locked --no-emit-project --format requirements-txt \
+	uv export --locked --no-emit-project --group train --format requirements-txt \
 		| uv run pip-audit --require-hashes --disable-pip -r /dev/stdin
 
 check: lint typecheck test audit infra-check
