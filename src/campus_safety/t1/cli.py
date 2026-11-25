@@ -4,6 +4,7 @@ counts and scores only, never records."""
 
 import argparse
 import logging
+import os
 import uuid
 from collections.abc import Sequence
 from pathlib import Path
@@ -41,6 +42,15 @@ def forecast_run(table_path: Path, out: Path, run_id: str, fit_models: bool) -> 
     return 0
 
 
+def import_dir(source: Path) -> int:
+    from campus_safety.lake.storage import open_lake
+    from campus_safety.t1 import importer
+
+    status = importer.import_run(open_lake(os.environ.get("LAKE_URI")), source)
+    log.info("t1 import %s: %s", source.name, status)
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="t1", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -55,16 +65,20 @@ def main(argv: Sequence[str] | None = None) -> int:
         sub.add_argument("--table", type=Path, default=DEFAULT_TABLE)
         sub.add_argument("--out", type=Path, default=Path(f"data/t1/{name}"))
         sub.add_argument("--run-id", default=None)
+    load = commands.add_parser("import", help="check a finished run and copy it into the lake")
+    load.add_argument("source", type=Path, help="a downloaded artifact or `t1 rule` output dir")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     try:
         if args.command == "table":
             return table(args.warehouse, args.out)
+        if args.command == "import":
+            return import_dir(args.source)
         if not args.table.exists():
             log.error("t1: no table at %s; run `t1 table` first", args.table)
             return 1
         run_id = args.run_id or f"{args.command}-{uuid.uuid4().hex[:8]}"
         return forecast_run(args.table, args.out, run_id, args.command == "train")
-    except (duckdb.Error, ValueError) as e:
+    except (duckdb.Error, ValueError, OSError) as e:
         log.error("t1 %s failed: %s", args.command, type(e).__name__)
         return 1
