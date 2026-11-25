@@ -76,6 +76,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(GZipMiddleware, minimum_size=2048)  # ~1,300 generated segments
     app.state.hub, app.state.drills, app.state.replays = hub, drills, replays
+    app.state.store = store
     app.mount("/tiles", StaticFiles(directory=settings.tiles, check_dir=False), name="tiles")
 
     def account_for(token: str | None) -> Account | None:
@@ -155,6 +156,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/incidents")
     def incident_points(_: Me, days: Annotated[int, Query(ge=1, le=1095)] = 90) -> dict[str, Any]:
         return points.recent(settings.warehouse, days, date.today())
+
+    @app.get("/api/mailbox")
+    def mailbox(me: Me) -> list[dict[str, object]]:
+        return store.mailbox(me.id)
 
     @app.get("/api/tonight-model")
     def tonight_model_card(_: Console) -> dict[str, Any]:
