@@ -102,3 +102,20 @@ def test_the_student_sees_the_relationship_the_parent_chose(tmp_path: Path) -> N
     for bad in ("call 555 1234", "https://x.test", "a" * 31, " "):
         body = {"student_email": "kim0@example.test", "relationship": bad}
         assert client.post("/api/invites", headers=parent, json=body).status_code == 400
+
+
+def test_links_list_and_invites_show_the_relationship(tmp_path: Path) -> None:
+    app, client = app_and_client(tmp_path)
+    store = app.state.store  # type: ignore[attr-defined]
+    parent = signed_in(client, store, "pat@example.test", "parent", "Pat")
+    student = signed_in(client, store, "kim@example.test", "student", "Kim")
+    body = {"student_email": "kim@example.test", "relationship": "father"}
+    invite = client.post("/api/invites", headers=parent, json=body).json()
+    assert client.get("/api/invites", headers=student).json()[0]["relationship"] == "Dad"
+    client.post(f"/api/invites/{invite['id']}/accept", headers=student)
+    pat, kim = (
+        store.account_by_email("pat@example.test"),
+        store.account_by_email("kim@example.test"),
+    )
+    assert client.get("/api/links", headers=student).json() == [{"id": pat.id, "name": "Dad"}]
+    assert client.get("/api/links", headers=parent).json() == [{"id": kim.id, "name": "Kim"}]
