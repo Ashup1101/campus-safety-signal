@@ -125,3 +125,22 @@ def test_bpd_calls_land_in_their_zones(
     ]
     assert published == (2,)
     assert (tmp_path / "lake" / "gold" / "bpd_zone_calls.parquet").exists()
+
+
+def test_a_point_is_located_in_the_zone_that_holds_it() -> None:
+    hole = square(-86.528, 39.162, 0.002)
+    found = zones.shapes(
+        [
+            ("LB101", "BPD", "1", "1", 0.0, 0.0, json.dumps(
+                {"type": "Polygon", "coordinates": [square(-86.53, 39.16, 0.01), hole]}
+            )),
+            ("LI901", "IUPD", "9", "1", 0.0, 0.0, json.dumps(
+                {"type": "MultiPolygon", "coordinates": [[square(-86.50, 39.16, 0.01)]]}
+            )),
+            ("LB9", "BPD", None, None, None, None, None),  # no polygon: never matches
+        ]
+    )  # fmt: skip
+    assert zones.locate(-86.525, 39.169, found) == "LB101"
+    assert zones.locate(-86.527, 39.163, found) is None  # inside the hole
+    assert zones.locate(-86.495, 39.165, found) == "LI901"
+    assert zones.locate(-86.40, 39.165, found) is None

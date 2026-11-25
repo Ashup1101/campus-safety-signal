@@ -6,7 +6,7 @@ corner on the named side. Anything unclear stays unplaced: a location is never g
 import itertools
 import json
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
@@ -36,6 +36,7 @@ COLUMNS: Columns = (
     ("lat", "DOUBLE"),
     ("lon", "DOUBLE"),
     ("street_objectid", "BIGINT"),  # the centerline piece, for segment placements
+    ("zonecode", "VARCHAR"),  # the police reporting zone holding the point, when known
     ("source_ref", "VARCHAR"),  # the city layer the coordinates come from
     ("run_id", "VARCHAR"),
     ("ingested_at", "TIMESTAMP"),
@@ -252,8 +253,13 @@ def place_block(text: str, network: Network) -> Placement | None:
 PLACERS = {"street_segment": place_segment, "address": place_address, "block": place_block}
 
 
-def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[object, ...]]:
-    """One row per placed (location_text, location_type); unplaced locations have no row."""
+def rows(
+    locations: Iterable[tuple[str, str]],
+    network: Network,
+    zone_of: Callable[[float, float], str | None] = lambda lon, lat: None,
+) -> list[tuple[object, ...]]:
+    """One row per placed (location_text, location_type); unplaced locations have no row.
+    zone_of(lon, lat) names the police reporting zone holding the point."""
     found: list[tuple[object, ...]] = []
     for text, kind in sorted(set(locations)):
         placer = PLACERS.get(kind)
@@ -267,6 +273,7 @@ def rows(locations: Iterable[tuple[str, str]], network: Network) -> list[tuple[o
                     placed.lat,
                     placed.lon,
                     placed.street_objectid,
+                    zone_of(placed.lon, placed.lat),
                     *(
                         network.streets_from
                         if placed.precision == "segment"

@@ -86,6 +86,7 @@ PUBLISHED = (
     ("gold", "bpd_cfs_missing_days"),
     ("gold", "bpd_cfs_refresh_history"),
     ("gold", "calibration_bpd_cfs_check"),
+    ("gold", "console_cross_check"),
 )
 
 
@@ -280,8 +281,8 @@ def _stage_geo(lake: Lake, staging: Path) -> dict[str, list[tuple[object, ...]]]
     found = bronze.manifests(lake, geo_zones.SOURCE)
     if found:
         path = staging / "geo_law_zones" / "zones.parquet"
-        rows = geo_zones.rows(found[-1], bronze.read(lake, found[-1]))
-        write_parquet(path, STAGED_SCHEMAS["geo_law_zones"], rows)
+        staged["geo_law_zones"] = geo_zones.rows(found[-1], bronze.read(lake, found[-1]))
+        write_parquet(path, STAGED_SCHEMAS["geo_law_zones"], staged["geo_law_zones"])
     for table, (source, columns, parse) in geo_streets.STAGED.items():
         layer = bronze.manifests(lake, source)
         if layer:
@@ -296,7 +297,8 @@ def _named(columns: Columns, rows: list[tuple[object, ...]]) -> list[dict[str, o
 
 
 def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]) -> None:
-    """Crime log locations on the street network (never sensitive incidents' locations)."""
+    """Crime log locations on the street network (never sensitive incidents' locations), each
+    with the police reporting zone that holds it."""
     observations = staging / "iu_crime_log_observations"
     streets, addresses = layers.get("geo_streets", []), layers.get("geo_addresses", [])
     if not observations.is_dir() or not (streets or addresses):
@@ -311,7 +313,12 @@ def _stage_placements(staging: Path, layers: dict[str, list[tuple[object, ...]]]
             " WHERE NOT sensitive AND location IS NOT NULL",
             {"glob": str(observations / "*.parquet")},
         ).fetchall()
-    found = place.rows(((str(t), str(k)) for t, k in locations), network)
+    shapes = geo_zones.shapes(layers.get("geo_law_zones", []))
+    found = place.rows(
+        ((str(t), str(k)) for t, k in locations),
+        network,
+        lambda lon, lat: geo_zones.locate(lon, lat, shapes),
+    )
     write_parquet(staging / "geo_placements" / "placements.parquet", place.COLUMNS, found)
 
 

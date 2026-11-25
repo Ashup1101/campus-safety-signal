@@ -8,6 +8,7 @@ ever inferred for a call.
 """
 
 import json
+from collections.abc import Iterable, Sequence
 from datetime import UTC
 from typing import Any
 
@@ -95,6 +96,41 @@ def _polygons(geometry: dict[str, Any]) -> list[Any]:
     if kind == "MultiPolygon" and isinstance(coords, list):
         return coords
     raise ZonesError(f"unsupported geometry {kind!r}")
+
+
+Box = tuple[float, float, float, float]
+Shape = tuple[str, Box, list[Any]]  # zone code, bounding box, polygons (rings of [lon, lat])
+
+
+def shapes(zone_rows: Iterable[Sequence[object]]) -> list[Shape]:
+    """Zone rows (COLUMNS order) ready for locate(); zones without a polygon are left out."""
+    found: list[Shape] = []
+    for row in zone_rows:
+        code, geometry = row[0], row[6]
+        if code and isinstance(geometry, str):
+            polygons = _polygons(json.loads(geometry))
+            xs = [x for polygon in polygons for x, _ in polygon[0]]
+            ys = [y for polygon in polygons for _, y in polygon[0]]
+            found.append((str(code), (min(xs), min(ys), max(xs), max(ys)), polygons))
+    return found
+
+
+def _in_ring(lon: float, lat: float, ring: list[list[float]]) -> bool:
+    inside = False
+    for (x1, y1), (x2, y2) in zip(ring, ring[1:] + ring[:1], strict=True):
+        if (y1 > lat) != (y2 > lat) and lon < x1 + (lat - y1) * (x2 - x1) / (y2 - y1):
+            inside = not inside
+    return inside
+
+
+def locate(lon: float, lat: float, found: Sequence[Shape]) -> str | None:
+    """The zone whose polygon holds the point (holes excluded); None outside every zone."""
+    for code, (x0, y0, x1, y1), polygons in found:
+        if x0 <= lon <= x1 and y0 <= lat <= y1:
+            for outer, *holes in polygons:
+                if _in_ring(lon, lat, outer) and not any(_in_ring(lon, lat, h) for h in holes):
+                    return code
+    return None
 
 
 def rows(manifest: bronze.Manifest, body: bytes) -> list[tuple[object, ...]]:
