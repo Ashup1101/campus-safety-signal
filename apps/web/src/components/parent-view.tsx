@@ -1,6 +1,7 @@
 "use client";
 
 import { Bell, HeartHandshake, MapPin, PauseCircle, Shield, UserRound } from "lucide-react";
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { ActivityMap, Legend } from "@/components/activity-map";
 import { AlertBanner, CheckInLine, ThreadCard } from "@/components/alerts";
@@ -188,6 +189,9 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
           <p className="text-xs text-muted-foreground">Parent view · local demo · test accounts only</p>
         </div>
         <Badge variant={connected ? "default" : "outline"}>{connected ? "Connected" : "Connecting…"}</Badge>
+        <Link href="/mailbox" className="text-sm underline underline-offset-4">
+          Mailbox
+        </Link>
         <div className="flex gap-1 rounded-full bg-muted p-1">
           {PARENTS.map((p) => (
             <Button key={p.id} size="sm" variant={p.id === accountId ? "outline" : "ghost"} onClick={() => onSwitch(p.id)}>
