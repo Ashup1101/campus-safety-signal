@@ -8,7 +8,7 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any, Literal
@@ -17,6 +17,7 @@ from campus_safety.official.alerts import OfficialAlert
 from campus_safety.official.descriptors import strip_descriptors
 
 Role = Literal["student", "parent", "console"]
+INVITE_LIFETIME = timedelta(days=7)
 
 
 def _locked[**P, R](method: Callable[P, R]) -> Callable[P, R]:
@@ -91,6 +92,13 @@ create table if not exists magic_tokens (
     issued_at text not null,
     expires_at text not null,
     used_at text
+);
+create table if not exists invites (
+    id integer primary key,
+    parent_id text not null references accounts (id),
+    student_email text not null,
+    status text not null check (status in ('pending', 'accepted', 'declined')),
+    created_at text not null
 );
 create table if not exists sent_keys (
     key text primary key,
@@ -394,6 +402,39 @@ class Store:
     @_locked
     def magic_rows(self) -> list[tuple[Any, ...]]:
         return self._db.execute("select * from magic_tokens").fetchall()
+
+    @_locked
+    def add_invite(self, parent_id: str, student_email: str, now: datetime) -> int | None:
+        """A pending invite, or None when one is already pending (expired ones do not count)."""
+        email, since = student_email.strip().lower(), (now - INVITE_LIFETIME).isoformat()
+        with self._db:
+            if self._db.execute(
+                "select 1 from invites where parent_id = ? and student_email = ?"
+                " and status = 'pending' and created_at >= ?",
+                (parent_id, email, since),
+            ).fetchone():
+                return None
+            cursor = self._db.execute(
+                "insert into invites (parent_id, student_email, status, created_at)"
+                " values (?, ?, 'pending', ?)",
+                (parent_id, email, now.isoformat()),
+            )
+        return cursor.lastrowid
+
+    @_locked
+    def invites(self, account: "Account", now: datetime) -> list[dict[str, Any]]:
+        """Students see invites to their email; parents see the ones they sent. Expired pending
+        invites (older than 7 days) are not shown."""
+        since = (now - INVITE_LIFETIME).isoformat()
+        rows = self._db.execute(
+            "select i.id, a.display_name, i.student_email, i.status, i.created_at"
+            " from invites i join accounts a on a.id = i.parent_id"
+            " where ((? = 'student' and i.student_email = ?) or (? = 'parent' and i.parent_id = ?))"
+            " and (i.status != 'pending' or i.created_at >= ?) order by i.id desc",
+            (account.role, account.email, account.role, account.id, since),
+        )
+        names = ("id", "from", "student_email", "status", "created_at")
+        return [dict(zip(names, r, strict=True)) for r in rows]
 
     @_locked
     def sent(self, key: str) -> bool:
