@@ -127,3 +127,13 @@ def test_poller_keeps_going_after_a_failure() -> None:
 def test_poller_polls_faster_late_at_night() -> None:
     late = datetime(2026, 3, 4, 4, 30, tzinfo=UTC)  # 23:30 in Bloomington
     assert rave.RaveFeedSource(now=lambda: late).interval() == rave.HIGH_ALERT_INTERVAL_SECONDS
+
+
+def test_poller_polls_faster_on_calendar_event_nights_before_late_night() -> None:
+    halloween_evening = datetime(2026, 10, 30, 23, 0, tzinfo=UTC)  # 19:00 in Bloomington
+    plain_evening = datetime(2026, 11, 10, 0, 0, tzinfo=UTC)  # 19:00, no event
+    assert (
+        rave.RaveFeedSource(now=lambda: halloween_evening).interval()
+        == rave.HIGH_ALERT_INTERVAL_SECONDS
+    )
+    assert rave.RaveFeedSource(now=lambda: plain_evening).interval() == rave.INTERVAL_SECONDS
