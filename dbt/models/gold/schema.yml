@@ -48,6 +48,23 @@ models:
         data_tests: [not_null]
       - name: lon
         data_tests: [not_null]
+  - name: tonight
+    description: Expected late-night level per police zone for the next nights (T1 or the rule).
+    columns:
+      - name: zonecode
+        data_tests: [not_null]
+      - name: night
+        data_tests: [not_null]
+      - name: level
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [quiet, elevated, high]
+      - name: method
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: [model, rule]
   - name: bpd_zone_calls
     description: BPD calls per police reporting zone with the zone's centroid (no finer location exists).
     columns:

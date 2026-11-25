@@ -432,3 +432,20 @@ def test_incident_points_hold_real_placed_non_sensitive_incidents_only(tmp_path:
     assert rows(path, "SELECT incident_type, precision, lat, lon, street_objectid FROM $t") == [
         ("VEHICLE THEFT", "segment", 39.17, -86.5125, 2)
     ]
+
+
+def test_tonight_comes_from_the_newest_imported_t1_run(tmp_path: Path) -> None:
+    from test_t1_import import run_dir
+
+    from campus_safety.t1 import importer
+
+    lake = FileLake(tmp_path / "lake")
+    seed_history(lake)
+    transform(lake, tmp_path / "work")
+    tonight = tmp_path / "lake" / "gold" / "tonight.parquet"
+    assert rows(tonight, "SELECT count(*) FROM $t") == [(0,)]  # no run imported yet
+    importer.import_run(lake, run_dir(tmp_path / "run"))
+    transform(lake, tmp_path / "work")
+    assert rows(tonight, "SELECT zonecode, level, method, run_id FROM $t") == [
+        ("LB1", "quiet", "rule", "gh-1")
+    ]
