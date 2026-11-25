@@ -212,6 +212,62 @@ function CoveragePanel({ coverage, dark }: { coverage: Coverage | null; dark: bo
   );
 }
 
+interface TonightScores {
+  deviance: number;
+  mae: number;
+  rows: number;
+}
+
+interface TonightModel {
+  method: "model" | "rule" | null;
+  model?: string | null;
+  scores?: { model: TonightScores | null; rule: TonightScores; last_week: TonightScores };
+  trained_at?: string;
+  run_id?: string;
+}
+
+function TonightModelCard({ card }: { card: TonightModel | null }) {
+  if (!card) return null;
+  if (!card.method || !card.scores) {
+    return <p className="text-sm text-muted-foreground">No tonight forecast imported yet.</p>;
+  }
+  const rows: [string, TonightScores | null][] = [
+    [`Trained model${card.model ? ` (${card.model})` : ""}`, card.scores.model],
+    ["Simple rule (4-week mean, event nights)", card.scores.rule],
+    ["Same night last week", card.scores.last_week],
+  ];
+  return (
+    <div className="flex flex-col gap-3 text-sm">
+      <p>
+        In use: <strong>{card.method === "model" ? "the trained model" : "the simple rule"}</strong>
+        {card.method === "rule" && (card.scores.model ? " (the model did not beat it on 2025-2026)" : " (no model trained yet)")}
+      </p>
+      <table className="w-full text-left text-xs tabular-nums">
+        <thead className="text-muted-foreground">
+          <tr>
+            <th className="font-normal">Method</th>
+            <th className="font-normal">Test deviance (lower is better)</th>
+            <th className="font-normal">Mean error</th>
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map(([label, score]) => (
+            <tr key={label}>
+              <td>{label}</td>
+              <td>{score ? score.deviance.toFixed(3) : "not trained"}</td>
+              <td>{score ? score.mae.toFixed(3) : "—"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="text-xs text-muted-foreground">
+        From city calls for service per police zone; calls are not crimes. Made{" "}
+        {card.trained_at ? new Date(card.trained_at).toLocaleDateString() : "—"} (run {card.run_id}).
+      </p>
+    </div>
+  );
+}
+
 export function ConsoleView() {
   const dark = useDark();
   const { session, error } = useSession("console");
@@ -219,6 +275,7 @@ export function ConsoleView() {
   const [rows, setRows] = useState<LatencyRow[]>([]);
   const [replays, setReplays] = useState<Replay[]>([]);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
+  const [tonightModel, setTonightModel] = useState<TonightModel | null>(null);
   const [clock, setClock] = useState<Clock | null>(null);
   const [sent, setSent] = useState<string | null>(null);
 
@@ -234,12 +291,14 @@ export function ConsoleView() {
       api<Replay[]>("/api/replays", token),
       api<Coverage>("/api/coverage", token),
       api<Clock>("/api/clock", token),
-    ]).then(([latency, list, data, current]) => {
+      api<TonightModel>("/api/tonight-model", token),
+    ]).then(([latency, list, data, current, model]) => {
       if (!live) return;
       setRows(latency);
       setReplays(list);
       setCoverage(data);
       setClock(current);
+      setTonightModel(model);
     });
     return () => {
       live = false;
@@ -361,6 +420,15 @@ export function ConsoleView() {
           </CardHeader>
           <CardContent>
             <CoveragePanel coverage={coverage} dark={dark} />
+          </CardContent>
+        </Card>
+        <Card>
+          <CardHeader>
+            <CardTitle>Tonight model</CardTitle>
+            <CardDescription>Which method makes the Tonight map, and how it scored.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <TonightModelCard card={tonightModel} />
           </CardContent>
         </Card>
       </div>

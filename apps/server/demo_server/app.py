@@ -17,7 +17,7 @@ from pydantic import BaseModel
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
-from demo_server import activity, points
+from demo_server import activity, points, tonight_model
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
@@ -155,6 +155,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/incidents")
     def incident_points(_: Me, days: Annotated[int, Query(ge=1, le=1095)] = 90) -> dict[str, Any]:
         return points.recent(settings.warehouse, days, date.today())
+
+    @app.get("/api/tonight-model")
+    def tonight_model_card(_: Console) -> dict[str, Any]:
+        return tonight_model.card(settings.lake_uri)
 
     @app.get("/api/clock")
     def get_clock() -> dict[str, Any]:
