@@ -449,3 +449,72 @@ def test_tonight_comes_from_the_newest_imported_t1_run(tmp_path: Path) -> None:
     assert rows(tonight, "SELECT zonecode, level, method, run_id FROM $t") == [
         ("LB1", "quiet", "rule", "gh-1")
     ]
+
+
+def bpd_calls(lake: Lake, *calls: tuple[str, str, str, str]) -> None:
+    """(case, call time, nature, zone) rows as one made-up BPD feed page."""
+    from campus_safety.bpd_cfs import pull as bpd_pull
+
+    body = [
+        {"case_number": c, "datetime": t, "nature": n, "district": z, "agency": "BPD"}
+        for c, t, n, z in calls
+    ]
+    bronze.write(
+        lake,
+        source=bpd_pull.SOURCE,
+        body=json.dumps(body).encode(),
+        url="https://data.example.gov/resource/calls.json",
+        fetched_at=DAY_1,
+        http_status=200,
+        run_id="bpd-p0000",
+        ext="json",
+    )
+
+
+def zone_square(code: str, lon: float, lat: float, size: float) -> dict[str, object]:
+    ring = [[lon, lat], [lon + size, lat], [lon + size, lat + size], [lon, lat + size], [lon, lat]]
+    return {
+        "properties": {"zonecode": code, "agencycode": "BPD", "distnum": "1", "sector": "1"},
+        "geometry": {"type": "Polygon", "coordinates": [ring]},
+    }
+
+
+TENTH = "10TH STREET/EAST OF JORDA"
+
+
+def test_console_cross_check_compares_shared_categories_per_zone_and_month(
+    tmp_path: Path,
+) -> None:
+    lake = FileLake(tmp_path / "lake")
+    snapshot(
+        lake,
+        0,
+        bloomington(
+            incident(case="900010", offense="VEHICLE THEFT", location=TENTH),
+            incident(case="900011", offense="BATTERY NO INJURY", location=TENTH),
+            incident(case="900012", offense="RAPE - INTERCOURSE", location=TENTH),  # sensitive
+            incident(case="900013", offense="VEHICLE THEFT", location="SAMPLE HALL"),  # unplaced
+        ),
+    )
+    city_layer(lake, "city_gis_streets", *STREETS)
+    city_layer(
+        lake,
+        "city_gis_law_zones",
+        zone_square("LB101", -86.53, 39.16, 0.02),
+        zone_square("LB202", -86.40, 39.16, 0.02),
+    )
+    bpd_calls(
+        lake,
+        ("B1", "2026-10-03T21:00:00.000", "THEFT NP", "LB101"),
+        ("B2", "2026-10-04T01:00:00.000", "VEH THEFT NP", "LB101"),
+        ("B3", "2026-10-05T23:00:00.000", "SEX ASSAULT NP", "LB101"),  # sensitive: never mapped
+        ("B4", "2026-10-06T23:00:00.000", "TRAFFIC STOP", "LB101"),  # no IU counterpart
+        ("B5", "2026-10-07T23:00:00.000", "THEFT NP", "LB202"),  # no placed IU entry there
+        ("B6", "2025-01-07T23:00:00.000", "THEFT NP", "LB101"),  # before the IU log's months
+    )
+    transform(lake, tmp_path / "work")
+    path = tmp_path / "lake" / "gold" / "console_cross_check.parquet"
+    assert rows(path, "SELECT month, zonecode, category, iu_count, bpd_count FROM $t") == [
+        (date(2026, 10, 1), "LB101", "assault", 1, 0),
+        (date(2026, 10, 1), "LB101", "theft", 1, 2),
+    ]
