@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCard";
 import { CheckingInBadge } from "../components/CheckingInBadge";
+import { AreaCheck } from "../components/AreaCheck";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
@@ -269,6 +270,7 @@ export function StudentHome({
             <Text style={{ color: dark ? tokens.warm.dark : tokens.warm.light }}>{note}</Text>
           </Pressable>
         )}
+        <AreaCheck token={session.token} window={window} />
         <Inbox messages={mail} muted={muted} />
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-dark">
           <Text className="font-semibold text-foreground dark:text-foreground-dark">Location sharing</Text>
