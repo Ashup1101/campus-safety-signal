@@ -14,6 +14,7 @@ from datetime import UTC, datetime
 
 from campus_safety import fetch, wayback
 from campus_safety.lake import bronze
+from campus_safety.lake.parquet import Columns
 from campus_safety.lake.storage import Lake
 
 SOURCE = "iu_crime_log_wayback"
@@ -52,6 +53,32 @@ def _listing_urls() -> list[tuple[str, str]]:
     ]
 
 
+def _kept(ext: str, capture: wayback.Capture) -> bool:
+    return ext != "pdf" or capture.original.lower().endswith(".pdf")
+
+
+CAPTURES: Columns = (
+    ("kind", "VARCHAR"),  # html | pdf
+    ("raw_url", "VARCHAR"),
+    ("captured_at", "TIMESTAMP"),
+)
+
+
+def stored_captures(lake: Lake) -> list[tuple[object, ...]]:
+    """Every capture the stored CDX listings name (the newest listing per URL), as the backfill
+    would consider it: (kind, raw_url, captured_at UTC). Older listings still count."""
+    kinds = {url: ext for ext, url in _listing_urls()}
+    newest = {m.url: m for m in bronze.manifests(lake, LISTING_SOURCE)}
+    found: dict[str, tuple[object, ...]] = {}
+    for url, manifest in newest.items():
+        ext = kinds.get(url, "pdf" if "matchType=prefix" in url else "html")
+        for capture in wayback.parse_cdx(bronze.read(lake, manifest)):
+            if _kept(ext, capture):
+                at = capture.captured_at.replace(tzinfo=None)
+                found.setdefault(capture.raw_url, (ext, capture.raw_url, at))
+    return list(found.values())
+
+
 def captures(
     lake: Lake, run_id: str, sleep: Callable[[float], None], delay: float
 ) -> tuple[list[tuple[str, wayback.Capture]], int]:
@@ -82,7 +109,7 @@ def captures(
             failed += 1
             continue
         for capture in wayback.parse_cdx(body):
-            if ext != "pdf" or capture.original.lower().endswith(".pdf"):
+            if _kept(ext, capture):
                 found.setdefault(capture.raw_url, (ext, capture))
     if failed == len(urls):
         raise fetch.FetchError(f"every CDX listing failed after {RETRIES} attempts")

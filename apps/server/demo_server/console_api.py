@@ -61,3 +61,8 @@ def register(
                 "select * from gold.calibration_bpd_cfs_check order by period_year, period_month",
             ),
         }
+
+    @app.get("/api/console/archive")
+    def console_archive(_: Console) -> list[dict[str, Any]]:
+        """Wayback captures of the IU log per year: listed, parsed, failed, not fetched."""
+        return _rows(warehouse, "select * from gold.archive_coverage order by year")

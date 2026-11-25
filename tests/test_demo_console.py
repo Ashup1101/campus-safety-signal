@@ -27,6 +27,11 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " 'LB101' AS zonecode, 'theft' AS category, 1 AS iu_count, 2 AS bpd_count"
             )
             con.execute(
+                "CREATE TABLE gold.archive_coverage AS SELECT * FROM (VALUES"
+                " (2017, 3, 1, 1, 1), (2025, 1, 1, 0, 0))"
+                " AS t(year, listed, parsed, failed, not_fetched)"
+            )
+            con.execute(
                 "CREATE TABLE gold.calibration_bpd_cfs_check AS SELECT 2026 AS period_year,"
                 " 9 AS period_month, 1000 AS reported_calls, 990 AS feed_calls,"
                 " -10 AS difference, -1.0::DOUBLE AS pct_difference"
@@ -69,3 +74,13 @@ def test_cross_check_says_calls_are_not_crimes(tmp_path: Path) -> None:
     assert body["calibration"][0]["pct_difference"] == -1.0
     empty = client_for(tmp_path / "none", with_gaps=False)
     assert empty.get(url, headers=login(empty, "console")).json()["rows"] == []
+
+
+def test_archive_coverage_per_year(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/archive"
+    assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
+    assert client.get(url, headers=login(client, "console")).json() == [
+        {"year": 2017, "listed": 3, "parsed": 1, "failed": 1, "not_fetched": 1},
+        {"year": 2025, "listed": 1, "parsed": 1, "failed": 0, "not_fetched": 0},
+    ]
