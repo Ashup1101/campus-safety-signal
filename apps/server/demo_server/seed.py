@@ -71,5 +71,7 @@ def seed(
         incidents = activity.warehouse_incidents(settings.warehouse, found) + manual
     current = events.local(now or datetime.now(events.LOCAL))
     rows = activity.levels([s.id for s in found], incidents, current, events.event_nights())
+    if activity.is_generated(geojson):
+        rows += activity.tonight_rows(settings.warehouse, geojson, events.night_of(current))
     store.replace_activity(rows)
     log.info("activity from %d incidents on %d segments", len(incidents), len(found))
