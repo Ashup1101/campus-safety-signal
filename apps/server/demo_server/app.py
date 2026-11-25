@@ -21,7 +21,7 @@ from campus_safety.geo.place import distance_to_lines
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
-from demo_server import activity, ask, auth, points, tonight_model
+from demo_server import activity, ask, auth, console_api, points, tonight_model
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
@@ -171,6 +171,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     Me = Annotated[Account, Depends(current)]
     Console = Annotated[Account, Depends(console)]
+    console_api.register(app, console, settings.warehouse, settings.gaps)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
