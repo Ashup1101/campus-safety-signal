@@ -338,3 +338,26 @@ def test_incident_dots_carry_category_day_and_precision_only(tmp_path: Path) -> 
     assert len(client.get("/api/incidents?days=365", headers=mine).json()["features"]) == 2
     assert client.get("/api/incidents?days=0", headers=mine).status_code == 422
     assert client.get("/api/incidents?days=90").status_code == 401
+
+
+def test_tonight_model_card_is_console_only_and_reads_the_newest_import(tmp_path: Path) -> None:
+    from test_t1_import import run_dir
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.t1 import importer
+
+    settings = Settings(
+        data_dir=tmp_path / "demo",
+        warehouse=tmp_path / "none.duckdb",
+        tiles=tmp_path / "tiles",
+        lake_uri=(tmp_path / "lake").as_uri(),
+    )
+    client = TestClient(create_app(settings))
+    console = {"Authorization": f"Bearer {login(client, 'console')}"}
+    parent = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
+    assert client.get("/api/tonight-model", headers=parent).status_code == 403
+    assert client.get("/api/tonight-model", headers=console).json() == {"method": None}
+    importer.import_run(FileLake(tmp_path / "lake"), run_dir(tmp_path / "run"))
+    card = client.get("/api/tonight-model", headers=console).json()
+    assert (card["method"], card["model"], card["run_id"]) == ("rule", None, "gh-1")
+    assert set(card["scores"]) == {"model", "rule", "last_week"}
