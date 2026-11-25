@@ -4,7 +4,9 @@
 export type Role = "student" | "parent" | "console";
 export type Sharing = "on" | "paused" | "off";
 export type Level = "quiet" | "elevated" | "high";
-export type TimeWindow = "late_night" | "event_night";
+// tonight: the expected level for the current night (T1 or the simple rule), present only when a
+// forecast covers it.
+export type TimeWindow = "late_night" | "event_night" | "tonight";
 export type Verification = "official" | "drill" | "reconstruction";
 export type Tone = "official" | "normal" | "drill" | "reconstruction";
 export type CheckInState = "safe" | "sheltering";
@@ -176,6 +178,17 @@ export function toneOf(alert: Alert): Tone {
 
 export function levelFor(feature: SegmentFeature, window: TimeWindow): SegmentLevel {
   return feature.properties.levels[window] ?? { level: "quiet", reason: "No data for this window" };
+}
+
+export function hasTonight(segments: Pick<Segments, "features"> | null): boolean {
+  return (segments?.features ?? []).some((f) => f.properties.levels.tonight !== undefined);
+}
+
+// Which method made tonight's levels, from the reason the server writes ("..., simple rule)").
+export function tonightMethod(segments: Pick<Segments, "features"> | null): string | null {
+  const reason = (segments?.features ?? []).find((f) => f.properties.levels.tonight)?.properties.levels.tonight?.reason;
+  if (!reason) return null;
+  return reason.includes("forecast model") ? "Forecast model" : "Simple rule";
 }
 
 export function clockTime(iso: string | null): string {

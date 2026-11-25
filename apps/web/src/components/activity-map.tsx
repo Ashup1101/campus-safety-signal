@@ -337,7 +337,17 @@ export function ActivityMap({
   return <div ref={container} className="h-full min-h-[420px] w-full overflow-hidden rounded-xl" />;
 }
 
-export function Legend({ dark, window, dots = false }: { dark: boolean; window: TimeWindow; dots?: boolean }) {
+export function Legend({
+  dark,
+  window,
+  dots = false,
+  method = null,
+}: {
+  dark: boolean;
+  window: TimeWindow;
+  dots?: boolean;
+  method?: string | null;
+}) {
   const levels = ["quiet", "elevated", "high"] as const;
   return (
     <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
@@ -367,7 +377,13 @@ export function Legend({ dark, window, dots = false }: { dark: boolean; window: 
           block or street stretch
         </span>
       )}
-      <span>From past incidents only, never anyone&apos;s movements.</span>
+      {method ? (
+        <span>
+          Expected from city calls for service (calls are not crimes). Made by: {method}.
+        </span>
+      ) : (
+        <span>From past incidents only, never anyone&apos;s movements.</span>
+      )}
     </div>
   );
 }

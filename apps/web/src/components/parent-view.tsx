@@ -11,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { api, color, tokens, useDark, useSession, useSocket } from "@/lib/client";
 import {
   clockTime,
+  hasTonight,
+  tonightMethod,
   daysLabel,
   RECENT_DAYS,
   threadsOf,
@@ -56,6 +58,12 @@ function SharingStatus({ student }: { student: Student }) {
   }
   return <span className="text-sm text-muted-foreground">Not sharing right now</span>;
 }
+
+const WINDOW_CHIPS: Record<TimeWindow, string> = {
+  late_night: "Late nights",
+  event_night: "Event nights",
+  tonight: "Tonight",
+};
 
 export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitch: (id: string) => void }) {
   const dark = useDark();
@@ -158,13 +166,15 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
     }
   });
 
+  const withTonight = hasTonight(segments);
+  const picked = chosen === "tonight" && !withTonight ? null : chosen;
   const window: TimeWindow =
-    chosen ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
+    picked ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
   const warm = { color: color(tokens.warm, dark), background: dark ? tokens.warm.softDark : tokens.warm.softLight };
   const now = useNow();
   const threads = threadsOf(alerts, now);
   const tonight = tonightOf(segments, window, threads, now);
-  const windowLabel = window === "late_night" ? "Late nights" : "Event nights";
+  const windowLabel = WINDOW_CHIPS[window];
 
   return (
     <div className="flex min-h-screen flex-col">
@@ -200,9 +210,15 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
               </CardDescription>
             </div>
             <div className="flex gap-1 rounded-full bg-muted p-1">
-              {(["late_night", "event_night"] as const).map((w) => (
-                <Button key={w} size="sm" variant={w === window ? "outline" : "ghost"} onClick={() => setChosen(w)}>
-                  {w === "late_night" ? "Late nights" : "Event nights"}
+              {(["late_night", "event_night", ...(withTonight ? (["tonight"] as const) : [])] as const).map((w) => (
+                <Button
+                  key={w}
+                  size="sm"
+                  variant={w === window ? "outline" : "ghost"}
+                  aria-pressed={w === window}
+                  onClick={() => setChosen(w)}
+                >
+                  {WINDOW_CHIPS[w]}
                 </Button>
               ))}
             </div>
@@ -239,7 +255,7 @@ export function ParentView({ accountId, onSwitch }: { accountId: string; onSwitc
                 </span>
               )}
             </div>
-            <Legend dark={dark} window={window} dots={days > 0} />
+            <Legend dark={dark} window={window} dots={days > 0} method={window === "tonight" ? tonightMethod(segments) : null} />
           </CardContent>
         </Card>
         <div className="flex flex-col gap-4">

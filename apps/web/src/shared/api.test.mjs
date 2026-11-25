@@ -2,7 +2,7 @@
 // runner loads the TypeScript file directly (type stripping, Node 24). Made-up alerts and streets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { THREAD_GAP_MS, areaSketch, areaStreets, checkInText, daysLabel, pointText, threadsOf } from "./api.ts";
+import { THREAD_GAP_MS, areaSketch, areaStreets, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -127,4 +127,16 @@ test("the sketch keeps to streets near the alert's area", () => {
     geometry: { type: "MultiLineString", coordinates: [[[-86.4, 39.3], [-86.39, 39.3]]] },
   };
   assert.deepEqual(areaSketch([...FEATURES, far], ["kirk"], 240, 120).map((p) => p.id), ["third", "kirk"]);
+});
+
+test("Tonight shows only when the server sent it, and names its method", () => {
+  const seg = (levels) => ({ type: "Feature", id: "s", properties: { id: "s", name: "S", levels }, geometry: { type: "MultiLineString", coordinates: [] } });
+  const none = { features: [seg({ late_night: { level: "quiet", reason: "x" } })] };
+  assert.equal(hasTonight(none), false);
+  assert.equal(tonightMethod(none), null);
+  const rule = { features: [seg({ tonight: { level: "high", reason: "Expected much busier than usual (city calls for service, simple rule)" } })] };
+  assert.equal(hasTonight(rule), true);
+  assert.equal(tonightMethod(rule), "Simple rule");
+  const model = { features: [seg({ tonight: { level: "quiet", reason: "About a usual night here (city calls for service, forecast model)" } })] };
+  assert.equal(tonightMethod(model), "Forecast model");
 });
