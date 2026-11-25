@@ -132,6 +132,7 @@ class Zone:
     lat: float
     lon: float
     radius_m: int
+    id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -265,10 +266,38 @@ class Store:
     @_locked
     def zones(self, account_id: str) -> list[Zone]:
         rows = self._db.execute(
-            "select name, lat, lon, radius_m from zones where account_id = ? order by id",
+            "select name, lat, lon, radius_m, id from zones where account_id = ? order by id",
             (account_id,),
         )
         return [Zone(*r) for r in rows]
+
+    @_locked
+    def save_zone(self, account_id: str, zone: Zone) -> int | None:
+        """Add (zone.id None) or update one of the account's own zones; None when the id is not
+        theirs."""
+        with self._db:
+            if zone.id is None:
+                cursor = self._db.execute(
+                    "insert into zones (account_id, name, lat, lon, radius_m)"
+                    " values (?, ?, ?, ?, ?)",
+                    (account_id, zone.name, zone.lat, zone.lon, zone.radius_m),
+                )
+                return cursor.lastrowid
+            changed = self._db.execute(
+                "update zones set name = ?, lat = ?, lon = ?, radius_m = ?"
+                " where id = ? and account_id = ?",
+                (zone.name, zone.lat, zone.lon, zone.radius_m, zone.id, account_id),
+            ).rowcount
+        return zone.id if changed else None
+
+    @_locked
+    def delete_zone(self, account_id: str, zone_id: int) -> bool:
+        with self._db:
+            return bool(
+                self._db.execute(
+                    "delete from zones where id = ? and account_id = ?", (zone_id, account_id)
+                ).rowcount
+            )
 
     def add_alert(
         self, alert_id: str, alert: OfficialAlert, received_at: datetime, thread_id: str
