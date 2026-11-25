@@ -13,7 +13,7 @@ from fastapi import Depends, FastAPI, Header, HTTPException, Query, WebSocket, W
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from campus_safety import events
 from campus_safety.alerts.rules import Draft
@@ -28,7 +28,7 @@ from demo_server.mailbox import MailboxChannel
 from demo_server.scheduler import Scheduler
 from demo_server.seed import Settings, seed
 from demo_server.sources import DrillSource, ReplaySource, load_replays
-from demo_server.store import Account, Store
+from demo_server.store import Account, Store, Zone
 
 # The web app runs on 3100 (3000 is often taken by other local projects).
 ORIGINS = ["http://localhost:3100", "http://127.0.0.1:3100"]
@@ -55,6 +55,16 @@ class Signin(BaseModel):
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
 LINKS_PER_HOUR = 5
 WEB = "http://localhost:3100"
+
+
+class ZoneBody(BaseModel):
+    name: Annotated[str, Field(min_length=1, max_length=60)]
+    lat: Annotated[float, Field(ge=39.0, le=39.4)]  # around Bloomington
+    lon: Annotated[float, Field(ge=-86.8, le=-86.3)]
+    radius_m: Annotated[int, Field(ge=100, le=2000)]
+
+
+MAX_ZONES = 5
 
 
 class Invite(BaseModel):
@@ -243,6 +253,25 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/zones")
     def zones(me: Me) -> list[dict[str, object]]:
         return [vars(z) for z in store.zones(me.id)]
+
+    @app.post("/api/zones", status_code=201)
+    def add_zone(body: ZoneBody, me: Me) -> dict[str, object]:
+        if len(store.zones(me.id)) >= MAX_ZONES:
+            raise HTTPException(409, f"up to {MAX_ZONES} watch zones")
+        zone_id = store.save_zone(me.id, Zone(body.name.strip(), body.lat, body.lon, body.radius_m))
+        return {"id": zone_id}
+
+    @app.put("/api/zones/{zone_id}")
+    def edit_zone(zone_id: int, body: ZoneBody, me: Me) -> dict[str, object]:
+        zone = Zone(body.name.strip(), body.lat, body.lon, body.radius_m, zone_id)
+        if store.save_zone(me.id, zone) is None:
+            raise HTTPException(404, "no such zone of yours")
+        return {"id": zone_id}
+
+    @app.delete("/api/zones/{zone_id}", status_code=204)
+    def delete_zone(zone_id: int, me: Me) -> None:
+        if not store.delete_zone(me.id, zone_id):
+            raise HTTPException(404, "no such zone of yours")
 
     @app.get("/api/segments")
     def segments(_: Me) -> dict[str, Any]:
