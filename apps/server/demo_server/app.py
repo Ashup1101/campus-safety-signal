@@ -164,6 +164,19 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(429, "too many sign-in links; try again in an hour")
         return {"status": "sent"}
 
+    @app.get("/api/magic/{token}")
+    def magic(token: str) -> dict[str, Any]:
+        account_id = auth.redeem(store, token, datetime.now(UTC))
+        account = store.account(account_id) if account_id else None
+        if account is None:
+            raise HTTPException(400, "this sign-in link is not valid any more; ask for a new one")
+        bearer = secrets.token_urlsafe(24)
+        tokens[bearer] = account.id
+        return {
+            "token": bearer,
+            "account": {"id": account.id, "role": account.role, "name": account.display_name},
+        }
+
     @app.get("/api/accounts")
     def accounts() -> list[dict[str, str]]:
         return [{"id": a.id, "role": a.role, "name": a.display_name} for a in store.accounts()]

@@ -78,3 +78,26 @@ def test_signup_sends_a_link_to_the_mailbox_and_never_returns_it(
     assert (
         client.post("/api/signin", json={"email": "who@example.test"}).status_code == 202
     )  # no hint
+
+
+def test_the_link_signs_in_once(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+    )
+    client = TestClient(app)
+    body = {"email": "sam@example.test", "role": "student", "display_name": "Sam"}
+    client.post("/api/signup", json=body)
+    account = app.state.store.account_by_email("sam@example.test")
+    token = link_in_mailbox(app.state.store, account.id)
+    session = client.get(f"/api/magic/{token}")
+    assert session.status_code == 200
+    assert session.json()["account"] == {"id": account.id, "role": "student", "name": "Sam"}
+    me = {"Authorization": f"Bearer {session.json()['token']}"}
+    assert client.get("/api/mailbox", headers=me).status_code == 200
+    assert client.get(f"/api/magic/{token}").status_code == 400  # used
+    assert client.get("/api/magic/nonsense").status_code == 400
