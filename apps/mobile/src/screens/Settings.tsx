@@ -47,7 +47,15 @@ function Choice({ label, onPress, selected }: { label: string; onPress: () => vo
 }
 
 // Settings for the signed-in person: linking (parents invite, students decide), and more below.
-export function Settings({ session, onBack }: { session: Session; onBack: () => void }) {
+export function Settings({
+  session,
+  onBack,
+  onDeleted,
+}: {
+  session: Session;
+  onBack: () => void;
+  onDeleted: () => void;
+}) {
   const dark = useColorScheme() === "dark";
   const muted = dark ? "#c9bba9" : "#5c4f4a";
   const token = session.token;
@@ -58,6 +66,12 @@ export function Settings({ session, onBack }: { session: Session; onBack: () => 
   const [relationship, setRelationship] = useState("mother");
   const [own, setOwn] = useState("");
   const [note, setNote] = useState<string | null>(null);
+  const [confirming, setConfirming] = useState(false);
+  const deleteMe = async () => {
+    const response = await apiSend("/api/me", token, "DELETE");
+    if (response.status === 204) onDeleted();
+    else setNote(response.status === 403 ? "The demo's test accounts stay. Delete works for your own account." : "Could not delete right now.");
+  };
 
   const refresh = useCallback(() => {
     api<Link[]>("/api/links", token).then(setLinks, () => {});
@@ -171,6 +185,22 @@ export function Settings({ session, onBack }: { session: Session; onBack: () => 
         </Section>
         <Section title="Watch zones">
           <ZonesEditor token={token} zoneColor={tokens.zone[dark ? "dark" : "light"]} />
+        </Section>
+        <Section title="Delete my account">
+          {confirming ? (
+            <>
+              <Text className="mb-3 text-sm text-foreground dark:text-foreground-dark">
+                This removes your account, your links, invites, watch zones, inbox and sign-in links right away. It
+                cannot be undone.
+              </Text>
+              <View className="flex-row gap-2">
+                <Choice label="Delete everything" onPress={deleteMe} />
+                <Choice label="Keep my account" onPress={() => setConfirming(false)} />
+              </View>
+            </>
+          ) : (
+            <Choice label="Delete my account" onPress={() => setConfirming(true)} />
+          )}
         </Section>
         {note && <Text className="mt-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
       </ScrollView>
