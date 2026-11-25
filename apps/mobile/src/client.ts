@@ -53,6 +53,19 @@ export async function api<T>(path: string, token: string): Promise<T> {
   return (await response.json()) as T;
 }
 
+export async function apiSend(
+  path: string,
+  token: string,
+  method: "POST" | "PUT" | "DELETE",
+  body?: unknown,
+): Promise<Response> {
+  return fetch(`${SERVER}${path}`, {
+    method,
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+}
+
 type Send = (message: ClientMessage) => void;
 
 export function useSocket(token: string, onMessage: (message: ServerMessage, send: Send) => void) {

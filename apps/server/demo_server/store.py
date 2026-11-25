@@ -474,13 +474,14 @@ class Store:
         invites (older than 7 days) are not shown."""
         since = (now - INVITE_LIFETIME).isoformat()
         rows = self._db.execute(
-            "select i.id, a.display_name, i.student_email, i.status, i.created_at"
+            "select i.id, a.display_name, i.student_email, i.status, i.created_at,"
+            " coalesce(i.relationship, a.display_name)"
             " from invites i join accounts a on a.id = i.parent_id"
             " where ((? = 'student' and i.student_email = ?) or (? = 'parent' and i.parent_id = ?))"
             " and (i.status != 'pending' or i.created_at >= ?) order by i.id desc",
             (account.role, account.email, account.role, account.id, since),
         )
-        names = ("id", "from", "student_email", "status", "created_at")
+        names = ("id", "from", "student_email", "status", "created_at", "relationship")
         return [dict(zip(names, r, strict=True)) for r in rows]
 
     @_locked

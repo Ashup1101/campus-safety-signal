@@ -264,6 +264,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             key = f"unlink:{parent_id}:{student_id}:{secrets.token_hex(4)}"
             MailboxChannel(store).deliver(other.id, notice, "account", key)
 
+    @app.get("/api/links")
+    def links(me: Me) -> list[dict[str, str]]:
+        """A student's parents by the name the student sees; a parent's students by name."""
+        if me.role == "student":
+            return [{"id": pid, "name": label} for pid, label in store.parents_of(me.id).items()]
+        found = (store.account(sid) for sid in store.students_of(me.id))
+        return [{"id": a.id, "name": a.display_name} for a in found if a is not None]
+
     @app.get("/api/invites")
     def invites(me: Me) -> list[dict[str, Any]]:
         return store.invites(me, datetime.now(UTC))

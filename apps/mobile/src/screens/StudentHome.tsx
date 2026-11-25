@@ -1,6 +1,6 @@
 import * as Location from "expo-location";
 import * as Notifications from "expo-notifications";
-import { House, LogOut, MapPin, PauseCircle, Shield } from "lucide-react-native";
+import { House, LogOut, MapPin, PauseCircle, Settings as SettingsIcon, Shield } from "lucide-react-native";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Pressable, ScrollView, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -53,7 +53,15 @@ function Chip({ label, active, onPress }: { label: string; active: boolean; onPr
   );
 }
 
-export function StudentHome({ session, onLeave }: { session: Session; onLeave: () => void }) {
+export function StudentHome({
+  session,
+  onLeave,
+  onSettings,
+}: {
+  session: Session;
+  onLeave: () => void;
+  onSettings: () => void;
+}) {
   const dark = useColorScheme() === "dark";
   const token = session.token;
   const [viewers, setViewers] = useState<string[]>([]);
@@ -218,7 +226,10 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             {connected ? "Connected · demo" : "Connecting…"}
           </Text>
         </View>
-        <Pressable onPress={onLeave} accessibilityLabel="Switch student" hitSlop={8} className="min-h-11 min-w-11 items-center justify-center">
+        <Pressable onPress={onSettings} accessibilityRole="button" accessibilityLabel="Settings" hitSlop={8} className="min-h-11 min-w-11 items-center justify-center">
+          <SettingsIcon size={18} color={muted} />
+        </Pressable>
+        <Pressable onPress={onLeave} accessibilityRole="button" accessibilityLabel="Sign out" hitSlop={8} className="min-h-11 min-w-11 items-center justify-center">
           <LogOut size={18} color={muted} />
         </Pressable>
       </View>

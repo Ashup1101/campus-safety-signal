@@ -1,4 +1,4 @@
-import { HeartHandshake, LogOut, MapPin } from "lucide-react-native";
+import { HeartHandshake, LogOut, MapPin, Settings as SettingsIcon } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
@@ -32,7 +32,15 @@ function sharingText(s: Student): string {
 
 // The parent's home: only the students this parent is linked to (the student accepted the link).
 // The location shows only while this screen is open and is never stored. No switching between parents.
-export function ParentHome({ session, onLeave }: { session: Session; onLeave: () => void }) {
+export function ParentHome({
+  session,
+  onLeave,
+  onSettings,
+}: {
+  session: Session;
+  onLeave: () => void;
+  onSettings: () => void;
+}) {
   const dark = useColorScheme() === "dark";
   const tone = dark ? "dark" : "light";
   const muted = dark ? "#c9bba9" : "#5c4f4a";
@@ -120,9 +128,14 @@ export function ParentHome({ session, onLeave }: { session: Session; onLeave: ()
             Parent · {connected ? "connected" : "connecting…"} · Not an official IU service
           </Text>
         </View>
-        <Pressable accessibilityRole="button" accessibilityLabel="Sign out" onPress={onLeave} className="min-h-11 min-w-11 items-center justify-center">
-          <LogOut size={18} color={muted} />
-        </Pressable>
+        <View className="flex-row">
+          <Pressable accessibilityRole="button" accessibilityLabel="Settings" onPress={onSettings} className="min-h-11 min-w-11 items-center justify-center">
+            <SettingsIcon size={18} color={muted} />
+          </Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel="Sign out" onPress={onLeave} className="min-h-11 min-w-11 items-center justify-center">
+            <LogOut size={18} color={muted} />
+          </Pressable>
+        </View>
       </View>
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">

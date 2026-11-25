@@ -6,16 +6,21 @@ import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "./src/client";
 import { Login } from "./src/screens/Login";
 import { ParentHome } from "./src/screens/ParentHome";
+import { Settings } from "./src/screens/Settings";
 import { StudentHome } from "./src/screens/StudentHome";
 
 // One app; the signed-in role decides the screens. Students never see parent screens and parents
 // never see student screens. The IUPD console is a separate website and never opens here.
 function Screens({ session, onLeave }: { session: Session; onLeave: () => void }) {
+  const [settings, setSettings] = useState(false);
+  if (session.account.role !== "console" && settings) {
+    return <Settings session={session} onBack={() => setSettings(false)} />;
+  }
   if (session.account.role === "student") {
-    return <StudentHome key={session.account.id} session={session} onLeave={onLeave} />;
+    return <StudentHome key={session.account.id} session={session} onLeave={onLeave} onSettings={() => setSettings(true)} />;
   }
   if (session.account.role === "parent") {
-    return <ParentHome key={session.account.id} session={session} onLeave={onLeave} />;
+    return <ParentHome key={session.account.id} session={session} onLeave={onLeave} onSettings={() => setSettings(true)} />;
   }
   return (
     <SafeAreaView className="flex-1 justify-center bg-background px-6 dark:bg-background-dark">
