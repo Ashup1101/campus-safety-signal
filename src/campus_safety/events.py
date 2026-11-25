@@ -23,15 +23,20 @@ class Event:
     event_id: str
     name: str
     nights: tuple[date, ...]
+    source: str  # where the dates come from (a public page, or "fixed date")
 
 
 def load(path: Path = CALENDAR) -> list[Event]:
-    events = []
+    events: list[Event] = []
     for entry in (yaml.safe_load(path.read_text()) or {}).get("events", []):
-        nights = entry.get("nights")
+        event_id, nights = str(entry.get("event_id")), entry.get("nights")
         if not isinstance(nights, list) or not all(isinstance(n, date) for n in nights):
-            raise ValueError(f"{entry.get('event_id')!r}: nights must be a list of YYYY-MM-DD")
-        events.append(Event(str(entry["event_id"]), str(entry["name"]), tuple(nights)))
+            raise ValueError(f"{event_id!r}: nights must be a list of YYYY-MM-DD")
+        if not str(entry.get("source") or "").strip():
+            raise ValueError(f"{event_id!r}: every entry needs a source")
+        if any(e.event_id == event_id for e in events):
+            raise ValueError(f"{event_id!r}: duplicate event_id")
+        events.append(Event(event_id, str(entry["name"]), tuple(nights), str(entry["source"])))
     return events
 
 
