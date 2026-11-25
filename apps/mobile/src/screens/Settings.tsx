@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiSend, type Session } from "../client";
+import { ZonesEditor } from "../components/ZonesEditor";
+import tokens from "../shared/tokens.json";
 
 interface Invite {
   id: number;
@@ -159,6 +161,9 @@ export function Settings({ session, onBack }: { session: Session; onBack: () => 
               </View>
             ))
           )}
+        </Section>
+        <Section title="Watch zones">
+          <ZonesEditor token={token} zoneColor={tokens.zone[dark ? "dark" : "light"]} />
         </Section>
         {note && <Text className="mt-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
       </ScrollView>
