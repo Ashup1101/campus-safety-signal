@@ -98,7 +98,8 @@ create table if not exists invites (
     parent_id text not null references accounts (id),
     student_email text not null,
     status text not null check (status in ('pending', 'accepted', 'declined')),
-    created_at text not null
+    created_at text not null,
+    relationship text
 );
 create table if not exists ask_usage (
     account_id text not null references accounts (id),
@@ -162,6 +163,7 @@ class Store:
         self._add_thread_column()
         self._add_account_columns()
         self._widen_mailbox_kinds()
+        self._add_invite_relationship()
 
     @_locked
     def _add_thread_column(self) -> None:
@@ -187,6 +189,14 @@ class Store:
                 "create unique index if not exists accounts_email on accounts (email)"
                 " where email is not null"
             )
+
+    @_locked
+    def _add_invite_relationship(self) -> None:
+        """Invites from before relationships: add the column; old invites show the parent's name."""
+        columns = {row[1] for row in self._db.execute("pragma table_info(invites)")}
+        if "relationship" not in columns:
+            with self._db:
+                self._db.execute("alter table invites add column relationship text")
 
     @_locked
     def _widen_mailbox_kinds(self) -> None:
@@ -439,7 +449,9 @@ class Store:
         return self._db.execute("select * from magic_tokens").fetchall()
 
     @_locked
-    def add_invite(self, parent_id: str, student_email: str, now: datetime) -> int | None:
+    def add_invite(
+        self, parent_id: str, student_email: str, now: datetime, relationship: str | None = None
+    ) -> int | None:
         """A pending invite, or None when one is already pending (expired ones do not count)."""
         email, since = student_email.strip().lower(), (now - INVITE_LIFETIME).isoformat()
         with self._db:
@@ -450,9 +462,9 @@ class Store:
             ).fetchone():
                 return None
             cursor = self._db.execute(
-                "insert into invites (parent_id, student_email, status, created_at)"
-                " values (?, ?, 'pending', ?)",
-                (parent_id, email, now.isoformat()),
+                "insert into invites (parent_id, student_email, status, created_at, relationship)"
+                " values (?, ?, 'pending', ?, ?)",
+                (parent_id, email, now.isoformat(), relationship),
             )
         return cursor.lastrowid
 
@@ -480,7 +492,7 @@ class Store:
         since = (now - INVITE_LIFETIME).isoformat()
         with self._db:
             row = self._db.execute(
-                "select parent_id from invites where id = ? and student_email = ?"
+                "select parent_id, relationship from invites where id = ? and student_email = ?"
                 " and status = 'pending' and created_at >= ?",
                 (invite_id, student.email, since),
             ).fetchone()
@@ -492,8 +504,9 @@ class Store:
                 parent = self._db.execute(
                     "select display_name from accounts where id = ?", (row[0],)
                 ).fetchone()
+                label = row[1] or parent[0]  # what the student sees: "Mom", "Guardian", own words
                 self._db.execute(
-                    "insert or replace into links values (?, ?, ?)", (row[0], student.id, parent[0])
+                    "insert or replace into links values (?, ?, ?)", (row[0], student.id, label)
                 )
         return str(row[0])
 

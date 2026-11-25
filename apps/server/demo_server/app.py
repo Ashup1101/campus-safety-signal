@@ -80,6 +80,30 @@ class Question(BaseModel):
 
 class Invite(BaseModel):
     student_email: str
+    relationship: str | None = None  # mother | father | guardian | own words
+
+
+RELATIONSHIPS = {
+    "mother": "Mom",
+    "mom": "Mom",
+    "father": "Dad",
+    "dad": "Dad",
+    "guardian": "Guardian",
+}
+OWN_WORDS = re.compile(r"^[A-Za-z][A-Za-z .'-]{0,29}$")
+
+
+def relationship_label(value: str | None) -> str | None:
+    """The label the student sees; None means "use the parent's name". Raises ValueError for text
+    that is not a short plain phrase (no digits, links or symbols)."""
+    if value is None:
+        return None
+    text = " ".join(value.split())
+    if text.lower() in RELATIONSHIPS:
+        return RELATIONSHIPS[text.lower()]
+    if not OWN_WORDS.match(text):
+        raise ValueError("relationship")
+    return text
 
 
 class ClockPreset(BaseModel):
@@ -209,7 +233,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         email = body.student_email.strip().lower()
         if not EMAIL.match(email):
             raise HTTPException(400, "check the student's email")
-        invite_id = store.add_invite(me.id, email, datetime.now(UTC))
+        try:
+            label = relationship_label(body.relationship)
+        except ValueError:
+            raise HTTPException(400, "say mother, father, guardian or a few plain words") from None
+        invite_id = store.add_invite(me.id, email, datetime.now(UTC), label)
         if invite_id is None:
             raise HTTPException(409, "an invite to this student is already waiting")
         return {"id": invite_id, "status": "pending"}
