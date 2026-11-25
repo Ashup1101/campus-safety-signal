@@ -19,6 +19,34 @@ export async function login(accountId: string): Promise<Session> {
   return (await response.json()) as Session;
 }
 
+async function post(path: string, body: unknown): Promise<Response> {
+  return fetch(`${SERVER}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+}
+
+// Sign-up and sign-in send a one-time link to the account's mailbox; the link signs in once.
+export async function signUp(email: string, role: "student" | "parent", name: string): Promise<string | null> {
+  const response = await post("/api/signup", { email, role, display_name: name });
+  if (response.status === 202) return null;
+  if (response.status === 409) return "An account already uses this email. Ask for a sign-in link instead.";
+  return "Check the email and the name (1 to 40 characters).";
+}
+
+export async function requestLink(email: string): Promise<string | null> {
+  const response = await post("/api/signin", { email });
+  return response.status === 429 ? "Too many links this hour. Try again later." : null;
+}
+
+export async function signInWithLink(link: string): Promise<Session> {
+  const token = link.trim().split("/magic/").pop()?.split(/[\s?#]/)[0] ?? "";
+  const response = await fetch(`${SERVER}/api/magic/${encodeURIComponent(token)}`);
+  if (!response.ok) throw new Error("This sign-in link is not valid any more. Ask for a new one.");
+  return (await response.json()) as Session;
+}
+
 export async function api<T>(path: string, token: string): Promise<T> {
   const response = await fetch(`${SERVER}${path}`, { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`${path}: ${response.status}`);

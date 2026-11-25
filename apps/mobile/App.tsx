@@ -1,21 +1,38 @@
 import "./global.css";
 import { StatusBar } from "expo-status-bar";
 import { useState } from "react";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { Pressable, Text } from "react-native";
+import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "./src/client";
 import { Login } from "./src/screens/Login";
+import { ParentHome } from "./src/screens/ParentHome";
 import { StudentHome } from "./src/screens/StudentHome";
+
+// One app; the signed-in role decides the screens. Students never see parent screens and parents
+// never see student screens. The IUPD console is a separate website and never opens here.
+function Screens({ session, onLeave }: { session: Session; onLeave: () => void }) {
+  if (session.account.role === "student") {
+    return <StudentHome key={session.account.id} session={session} onLeave={onLeave} />;
+  }
+  if (session.account.role === "parent") {
+    return <ParentHome key={session.account.id} session={session} onLeave={onLeave} />;
+  }
+  return (
+    <SafeAreaView className="flex-1 justify-center bg-background px-6 dark:bg-background-dark">
+      <Text className="text-lg font-semibold text-foreground dark:text-foreground-dark">The IUPD console is on the website.</Text>
+      <Pressable accessibilityRole="button" onPress={onLeave} className="mt-4 min-h-11 justify-center">
+        <Text className="underline text-foreground dark:text-foreground-dark">Back</Text>
+      </Pressable>
+    </SafeAreaView>
+  );
+}
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
-      {session ? (
-        <StudentHome key={session.account.id} session={session} onLeave={() => setSession(null)} />
-      ) : (
-        <Login onSession={setSession} />
-      )}
+      {session ? <Screens session={session} onLeave={() => setSession(null)} /> : <Login onSession={setSession} />}
     </SafeAreaProvider>
   );
 }
