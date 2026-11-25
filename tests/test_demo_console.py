@@ -84,3 +84,13 @@ def test_archive_coverage_per_year(tmp_path: Path) -> None:
         {"year": 2017, "listed": 3, "parsed": 1, "failed": 1, "not_fetched": 1},
         {"year": 2025, "listed": 1, "parsed": 1, "failed": 0, "not_fetched": 0},
     ]
+
+
+def test_alert_metrics_are_console_only_with_a_bounded_period(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/alert-metrics"
+    assert client.get(url, headers=login(client, "student_sam")).status_code == 403
+    console = login(client, "console")
+    body = client.get(f"{url}?days=7", headers=console).json()
+    assert body["days"] == 7 and set(body["latency"]) == {"web", "ios"}
+    assert client.get(f"{url}?days=0", headers=console).status_code == 422
