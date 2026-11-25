@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Pressable, ScrollView, Text, TextInput, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiSend, type Session } from "../client";
+import { Ask, Resources } from "../components/AskAndResources";
 import { ZonesEditor } from "../components/ZonesEditor";
 import tokens from "../shared/tokens.json";
 
@@ -161,6 +162,12 @@ export function Settings({ session, onBack }: { session: Session; onBack: () => 
               </View>
             ))
           )}
+        </Section>
+        <Section title="Ask about past incidents">
+          <Ask token={token} />
+        </Section>
+        <Section title="Resources">
+          <Resources />
         </Section>
         <Section title="Watch zones">
           <ZonesEditor token={token} zoneColor={tokens.zone[dark ? "dark" : "light"]} />

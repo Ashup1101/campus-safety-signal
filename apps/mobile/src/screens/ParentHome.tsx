@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, View, useColorScheme } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, ThreadCard } from "../components/AlertCard";
+import { AreaCheck } from "../components/AreaCheck";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { api, useSocket, type Session } from "../client";
 import {
@@ -199,6 +200,7 @@ export function ParentHome({
             </ThreadCard>
           ))
         )}
+        <AreaCheck token={token} window={window} />
         <Inbox messages={mail} muted={muted} />
       </ScrollView>
     </SafeAreaView>
