@@ -82,6 +82,12 @@ create table if not exists mailbox (
     thread_id text,
     created_at text not null
 );
+create table if not exists magic_tokens (
+    hash text primary key,
+    account_id text not null references accounts (id),
+    expires_at text not null,
+    used_at text
+);
 create table if not exists sent_keys (
     key text primary key,
     sent_at text not null
@@ -324,6 +330,44 @@ class Store:
                     (account_id, kind, subject, body, thread_id, now),
                 )
         return bool(fresh)
+
+    @_locked
+    def add_magic(self, digest: str, account_id: str, expires_at: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                "insert into magic_tokens values (?, ?, ?, null)",
+                (digest, account_id, expires_at.isoformat()),
+            )
+
+    @_locked
+    def magic(self, digest: str) -> dict[str, Any] | None:
+        row = self._db.execute(
+            "select hash, account_id, expires_at, used_at from magic_tokens where hash = ?",
+            (digest,),
+        ).fetchone()
+        if row is None:
+            return None
+        return {
+            "hash": row[0],
+            "account_id": row[1],
+            "expires_at": datetime.fromisoformat(row[2]),
+            "used_at": row[3],
+        }
+
+    @_locked
+    def use_magic(self, digest: str, now: datetime) -> bool:
+        """Marks the token used; False if another request used it first."""
+        with self._db:
+            return bool(
+                self._db.execute(
+                    "update magic_tokens set used_at = ? where hash = ? and used_at is null",
+                    (now.isoformat(), digest),
+                ).rowcount
+            )
+
+    @_locked
+    def magic_rows(self) -> list[tuple[Any, ...]]:
+        return self._db.execute("select * from magic_tokens").fetchall()
 
     @_locked
     def sent(self, key: str) -> bool:
