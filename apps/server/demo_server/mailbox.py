@@ -7,7 +7,7 @@ import hashlib
 from campus_safety.alerts.rules import Draft
 from demo_server.store import Store
 
-KINDS = {"briefing", "digest", "alert", "correction", "all_clear"}
+KINDS = {"briefing", "digest", "alert", "correction", "all_clear", "account"}
 
 
 class MailboxChannel:

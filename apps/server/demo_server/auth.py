@@ -18,7 +18,7 @@ def _hash(token: str) -> str:
 
 def issue(store: Store, account_id: str, now: datetime) -> str:
     token = secrets.token_urlsafe(32)
-    store.add_magic(_hash(token), account_id, now + LIFETIME)
+    store.add_magic(_hash(token), account_id, now, now + LIFETIME)
     return token
 
 
