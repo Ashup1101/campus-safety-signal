@@ -64,3 +64,37 @@ export function nightLabel(night: string): string {
     day: "numeric",
   });
 }
+
+export interface SourceHealth {
+  source: string;
+  label: string;
+  expected_hours: number;
+  last_stored_at: string | null;
+  copies: number;
+  state: "fresh" | "stale" | "failing" | "never";
+  error_kind: string | null;
+}
+
+export interface AlertMetrics {
+  days: number;
+  alerts: number;
+  latency: Record<"web" | "ios", { median_s: number | null; p95_s: number | null; deliveries: number }>;
+  corrections: number;
+  corrections_per_100: number | null;
+  duplicates: number;
+  duplicates_per_100: number | null;
+}
+
+/** "every 36 hours", "every 3 days", "every 90 days", "every year". */
+export function cadenceWords(hours: number): string {
+  if (hours >= 8760) return "every year";
+  if (hours > 48) return `every ${Math.round(hours / 24)} days`;
+  return `every ${hours} hours`;
+}
+
+export function errorWords(kind: string | null): string | null {
+  if (!kind) return null;
+  if (kind === "parse_error") return "the newest copy could not be read";
+  if (kind.startsWith("http_")) return `the site answered with error ${kind.slice(5)}`;
+  return "the newest copy has a problem";
+}
