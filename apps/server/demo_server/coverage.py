@@ -39,10 +39,13 @@ def coverage(warehouse: Path, register: Path) -> dict[str, Any]:
         ).fetchall()
         years = con.execute("select year, rows from gold.bpd_cfs_rows_per_year order by year")
         found["bpd_calls_per_year"] = [{"year": y, "calls": n} for y, n in years.fetchall()]
-        placed = con.execute(
-            "select location_type, count(*), count(lat) from silver.incidents"
-            " where source = 'official' and not is_sensitive group by 1"
-        ).fetchall()
+        try:
+            placed = con.execute(
+                "select location_type, count(*), count(lat) from silver.incidents"
+                " where source = 'official' and not is_sensitive group by 1"
+            ).fetchall()
+        except duckdb.CatalogException:  # an older warehouse: the rest of the panel still shows
+            placed = []
     by_kind = {kind: (total, on_map) for kind, total, on_map in placed}
     found["geocoding"] = [
         {"kind": kind, "incidents": by_kind[kind][0], "placed": by_kind[kind][1]}

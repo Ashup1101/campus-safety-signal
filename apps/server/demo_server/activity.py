@@ -27,6 +27,7 @@ from campus_safety.patterns.levels import LOOKBACK_YEARS, WINDOWS
 from campus_safety.patterns.levels import in_window as _in_window
 from campus_safety.patterns.levels import level as _level
 from campus_safety.patterns.levels import reason as _reason
+from demo_server.area import street_core
 from demo_server.store import Activity
 
 SEGMENTS = Path(__file__).with_name("segments.geojson")
@@ -108,21 +109,31 @@ def _lines(feature: dict[str, Any]) -> tuple[tuple[tuple[float, float], ...], ..
 def translate(
     incidents: Iterable[Incident], hand: dict[str, Any], generated: dict[str, Any]
 ) -> list[Incident]:
-    """Hand-entered incidents name hand-drawn segments; move each onto the generated pieces that
-    lie along the same stretch (their middle on the hand-drawn line). Unmatched ones drop out."""
-    lines = {f["properties"]["id"]: _lines(f) for f in hand["features"]}
-    middles = {f["properties"]["id"]: midpoint(_lines(f)) for f in generated["features"]}
-    near = {
-        hand_id: tuple(
-            g for g, mid in middles.items() if distance_to_lines(mid, line) <= SAME_STRETCH_M
-        )
-        for hand_id, line in lines.items()
+    """Hand-entered incidents name hand-drawn segments; move each onto the generated piece of the
+    same street that lies along it (its middle on the hand-drawn line). A hand-drawn stretch that
+    covers several pieces says nothing about which one, so it drops out rather than counting on
+    every piece; so does one with no matching piece."""
+    lines = {
+        f["properties"]["id"]: (_lines(f), street_core(f["properties"]["name"]))
+        for f in hand["features"]
     }
+    pieces = [
+        (f["properties"]["id"], midpoint(_lines(f)), street_core(f["properties"]["name"]))
+        for f in generated["features"]
+    ]
+    near: dict[str, tuple[str, ...]] = {}
+    for hand_id, (line, street) in lines.items():
+        found = [
+            g
+            for g, mid, core in pieces
+            if core == street and distance_to_lines(mid, line) <= SAME_STRETCH_M
+        ]
+        near[hand_id] = tuple(found) if len(found) == 1 else ()
     moved = []
     for incident in incidents:
-        found = tuple(sorted({g for s in incident.segments for g in near.get(s, ())}))
-        if found:
-            moved.append(replace(incident, segments=found))
+        ids = tuple(sorted({g for s in incident.segments for g in near.get(s, ())}))
+        if ids:
+            moved.append(replace(incident, segments=ids))
     return moved
 
 

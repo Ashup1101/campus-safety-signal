@@ -32,3 +32,17 @@ def test_coverage_counts_placed_incidents_per_location_kind(tmp_path: Path) -> N
         {"kind": "street_segment", "incidents": 2, "placed": 1},
         {"kind": "place", "incidents": 1, "placed": 0},
     ]
+
+
+def test_coverage_still_shows_without_silver_incidents(tmp_path: Path) -> None:
+    db = tmp_path / "w.duckdb"
+    with duckdb.connect(str(db)) as con:
+        con.execute("CREATE SCHEMA gold")
+        con.execute(
+            "CREATE TABLE gold.iu_crime_log_coverage (dataset VARCHAR, kind VARCHAR,"
+            " range_start DATE, range_end DATE, days INT)"
+        )
+        con.execute("CREATE TABLE gold.bpd_cfs_rows_per_year (year INT, rows BIGINT)")
+        con.execute("INSERT INTO gold.bpd_cfs_rows_per_year VALUES (2025, 10)")
+    found = coverage(db, Settings().gaps)
+    assert (found["geocoding"], found["bpd_calls_per_year"]) == ([], [{"year": 2025, "calls": 10}])

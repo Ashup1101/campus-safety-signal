@@ -44,8 +44,8 @@ class ClockPreset(BaseModel):
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or Settings()
     store = Store(settings.db)
-    seed(store, settings)
-    geojson = activity.load_segments(settings.warehouse)
+    geojson = activity.load_segments(settings.warehouse)  # one read: names and levels agree
+    seed(store, settings, geojson=geojson)
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     hub = Hub(store, Clock(), names)
     drills = DrillSource()
