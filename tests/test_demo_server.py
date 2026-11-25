@@ -420,3 +420,19 @@ def test_followups_reach_the_same_card_and_the_mailbox_in_order(store: Store) ->
         ("incident-inc-9", "all_clear"),
     ]
     assert [m["kind"] for m in store.mailbox("student_sam")] == ["all_clear", "correction", "alert"]
+
+
+@pytest.mark.parametrize(
+    ("flag", "env", "on"),
+    [(False, None, True), (True, None, False), (False, "0", False), (False, "1", True)],
+)
+def test_the_live_iu_watcher_is_on_unless_switched_off(
+    flag: bool, env: str | None, on: bool, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from demo_server.cli import live_feed_on
+
+    if env is None:
+        monkeypatch.delenv("DEMO_LIVE_FEED", raising=False)
+    else:
+        monkeypatch.setenv("DEMO_LIVE_FEED", env)
+    assert live_feed_on(no_live_feed=flag) is on

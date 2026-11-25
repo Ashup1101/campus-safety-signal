@@ -6,6 +6,7 @@ drill, all-clear and replay talk to the running local server as the demo console
 import argparse
 import json
 import logging
+import os
 import sys
 import urllib.request
 from typing import Any
@@ -35,6 +36,11 @@ def _as_console(path: str, body: dict[str, Any] | None = None) -> None:
     print(_post(path, body or {}, token)["status"])
 
 
+def live_feed_on(no_live_feed: bool) -> bool:
+    """IU's live alert watcher runs in the demo unless --no-live-feed or DEMO_LIVE_FEED=0."""
+    return not no_live_feed and os.environ.get("DEMO_LIVE_FEED", "1") != "0"
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="demo_server")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -53,7 +59,7 @@ def main(argv: list[str] | None = None) -> int:
 
         from demo_server.app import create_app
 
-        app = create_app(Settings(live_feed=not args.no_live_feed))
+        app = create_app(Settings(live_feed=live_feed_on(args.no_live_feed)))
         uvicorn.run(app, host="127.0.0.1", port=PORT, access_log=False, ws_max_size=65536)
     elif args.command == "seed":
         settings = Settings()
