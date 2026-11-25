@@ -351,6 +351,23 @@ class Store:
         return [dict(zip(keys, row, strict=True)) for row in rows]
 
     @_locked
+    def metric_rows(
+        self,
+    ) -> tuple[list[tuple[Any, ...]], list[tuple[Any, ...]], list[tuple[Any, ...]]]:
+        """Raw rows for metrics.alert_metrics: deliveries with their alert's card, words and
+        received time; IU alerts (id, received); follow-up mail (account, kind, card, words, at)."""
+        deliveries = self._db.execute(
+            "select d.account_id, d.client, d.shown_at, a.id, a.thread_id, a.stored_text,"
+            " a.received_at from deliveries d join alerts a on a.id = d.alert_id"
+        ).fetchall()
+        official = self._db.execute("select id, received_at from alerts").fetchall()
+        mail = self._db.execute(
+            "select account_id, kind, thread_id, body, created_at from mailbox"
+            " where kind in ('alert', 'correction', 'all_clear') and thread_id is not null"
+        ).fetchall()
+        return deliveries, official, mail
+
+    @_locked
     def delivered(self, alert_id: str, account_id: str, client: str, shown_at: datetime) -> None:
         with self._db:
             self._db.execute(

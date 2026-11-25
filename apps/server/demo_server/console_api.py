@@ -3,6 +3,7 @@ real and synthetic data is real-only unless asked (real_only=false); counts and 
 records, names or free text."""
 
 from collections.abc import Callable
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
 
@@ -10,6 +11,8 @@ import duckdb
 from fastapi import Depends, FastAPI, Query
 
 from campus_safety import gaps
+from demo_server import metrics
+from demo_server.store import Store
 
 CONFIG: dict[str, str | bool | int | float | list[str]] = {"memory_limit": "1GB", "threads": 2}
 SYNTHETIC = ("synthetic_rows", "synthetic_seeds", "planted_anomalies")
@@ -33,7 +36,11 @@ def _rows(warehouse: Path, sql: str) -> list[dict[str, Any]]:
 
 
 def register(
-    app: FastAPI, console: Callable[..., Any], warehouse: Path, register_file: Path
+    app: FastAPI,
+    console: Callable[..., Any],
+    warehouse: Path,
+    register_file: Path,
+    store: Store,
 ) -> None:
     Console = Annotated[Any, Depends(console)]
 
@@ -66,3 +73,9 @@ def register(
     def console_archive(_: Console) -> list[dict[str, Any]]:
         """Wayback captures of the IU log per year: listed, parsed, failed, not fetched."""
         return _rows(warehouse, "select * from gold.archive_coverage order by year")
+
+    @app.get("/api/console/alert-metrics")
+    def console_alert_metrics(
+        _: Console, days: Annotated[int, Query(ge=1, le=365)] = 30
+    ) -> dict[str, Any]:
+        return metrics.alert_metrics(store, datetime.now(UTC), days)
