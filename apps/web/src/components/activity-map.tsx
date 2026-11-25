@@ -15,8 +15,8 @@ import {
   type Zone,
 } from "@/shared/api";
 
-const CENTER: [number, number] = [-86.5245, 39.1678];
-const BOUNDS: [number, number, number, number] = [-86.548, 39.15, -86.495, 39.188];
+export const CENTER: [number, number] = [-86.5245, 39.1678];
+export const BOUNDS: [number, number, number, number] = [-86.548, 39.15, -86.495, 39.188];
 
 // The basemap steps back into the palette (cream paper by day, warm ink at night) so the activity
 // lines carry the color, like a Strava heat map over a quiet map.
@@ -41,7 +41,7 @@ const INK = {
   wood_b: "#1a1e19",
 };
 
-function baseStyle(dark: boolean): StyleSpecification {
+export function baseStyle(dark: boolean): StyleSpecification {
   const flavor = dark ? "dark" : "light";
   return {
     version: 8,

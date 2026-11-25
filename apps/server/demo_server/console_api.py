@@ -2,6 +2,7 @@
 real and synthetic data is real-only unless asked (real_only=false); counts and dates only, never
 records, names or free text."""
 
+import json
 from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
@@ -97,3 +98,23 @@ def register(
         )
         card = forecasts.scorecard(open_lake(lake_uri), rows[0]["run_id"]) if rows else None
         return forecasts.build(rows, card, events.load(), events.night_of(datetime.now(UTC)))
+
+    @app.get("/api/console/zones")
+    def console_zones(_: Console) -> dict[str, Any]:
+        """Polygons of the police zones the newest forecast covers (GeoJSON), for the map."""
+        found = _rows(
+            warehouse,
+            "select zonecode, geometry from silver.geo_law_zones where geometry is not null"
+            " and zonecode in (select zonecode from gold.tonight) order by zonecode",
+        )
+        return {
+            "type": "FeatureCollection",
+            "features": [
+                {
+                    "type": "Feature",
+                    "properties": {"zonecode": row["zonecode"]},
+                    "geometry": json.loads(row["geometry"]),
+                }
+                for row in found
+            ],
+        }

@@ -34,6 +34,13 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " range(DATE '2026-10-29', DATE '2026-11-06', INTERVAL 1 DAY) AS n(night),"
                 " (VALUES ('late_night'), ('evening')) AS v(w)"
             )
+            con.execute("CREATE SCHEMA silver")
+            con.execute(
+                "CREATE TABLE silver.geo_law_zones AS SELECT * FROM (VALUES"
+                ' (\'LB101\', \'{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}\'),'
+                ' (\'LB999\', \'{"type":"Polygon","coordinates":[[[0,0],[1,0],[1,1],[0,0]]]}\'))'
+                " AS z(zonecode, geometry)"
+            )
             con.execute(
                 "CREATE TABLE gold.archive_coverage AS SELECT * FROM (VALUES"
                 " (2017, 3, 1, 1, 1), (2025, 1, 1, 0, 0))"
@@ -163,3 +170,13 @@ def test_tonight_lists_each_zone_when_the_run_covers_it() -> None:
     assert found["tonight"]["night"] == date(2026, 10, 30)
     assert [z["zonecode"] for z in found["tonight"]["zones"]] == ["LB101", "LB102"]
     assert found["method_words"] == "forecast model"
+
+
+def test_zone_shapes_cover_the_forecast_zones_only(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/zones"
+    assert client.get(url, headers=login(client, "parent_dad")).status_code == 403
+    body = client.get(url, headers=login(client, "console")).json()
+    assert body["type"] == "FeatureCollection"
+    assert [f["properties"]["zonecode"] for f in body["features"]] == ["LB101"]
+    assert body["features"][0]["geometry"]["type"] == "Polygon"
