@@ -77,3 +77,28 @@ def test_the_student_decides_and_either_side_can_unlink(tmp_path: Path) -> None:
     assert client.post(f"/api/invites/{second['id']}/decline", headers=student).status_code == 200
     assert store.students_of(pat.id) == []
     assert client.delete(f"/api/links/{pat.id}", headers=student).status_code == 404  # no link
+
+
+def test_the_student_sees_the_relationship_the_parent_chose(tmp_path: Path) -> None:
+    app, client = app_and_client(tmp_path)
+    store = app.state.store  # type: ignore[attr-defined]
+    cases = [
+        ("mother", "Mom"),
+        ("guardian", "Guardian"),
+        ("Aunt Maria", "Aunt Maria"),
+        (None, "Pat3"),
+    ]
+    for n, (relationship, label) in enumerate(cases):
+        parent = signed_in(client, store, f"pat{n}@example.test", "parent", f"Pat{n}")
+        student = signed_in(client, store, f"kim{n}@example.test", "student", f"Kim{n}")
+        body = {"student_email": f"kim{n}@example.test"}
+        if relationship:
+            body["relationship"] = relationship
+        invite = client.post("/api/invites", headers=parent, json=body).json()
+        client.post(f"/api/invites/{invite['id']}/accept", headers=student)
+        kim = store.account_by_email(f"kim{n}@example.test")
+        assert list(store.parents_of(kim.id).values()) == [label]
+    parent = signed_in(client, store, "x@example.test", "parent", "X")
+    for bad in ("call 555 1234", "https://x.test", "a" * 31, " "):
+        body = {"student_email": "kim0@example.test", "relationship": bad}
+        assert client.post("/api/invites", headers=parent, json=body).status_code == 400
