@@ -104,6 +104,8 @@ class Account:
     role: Role
     display_name: str
     is_test: bool
+    email: str | None = None  # self-service accounts only; stored lower-case
+    self_service: bool = False
 
 
 @dataclass(frozen=True)
@@ -133,6 +135,7 @@ class Store:
         self._db.execute("pragma foreign_keys = on")
         self._db.executescript(SCHEMA)
         self._add_thread_column()
+        self._add_account_columns()
 
     @_locked
     def _add_thread_column(self) -> None:
@@ -144,6 +147,22 @@ class Store:
                 self._db.execute("update alerts set thread_id = id where thread_id is null")
 
     @_locked
+    def _add_account_columns(self) -> None:
+        """Databases from before sign-up: add email and self_service; old rows keep working."""
+        columns = {row[1] for row in self._db.execute("pragma table_info(accounts)")}
+        with self._db:
+            if "email" not in columns:
+                self._db.execute("alter table accounts add column email text")
+            if "self_service" not in columns:
+                self._db.execute(
+                    "alter table accounts add column self_service integer not null default 0"
+                )
+            self._db.execute(
+                "create unique index if not exists accounts_email on accounts (email)"
+                " where email is not null"
+            )
+
+    @_locked
     def close(self) -> None:
         self._db.close()
 
@@ -151,8 +170,20 @@ class Store:
     def add_account(self, account: Account) -> None:
         with self._db:
             self._db.execute(
-                "insert or replace into accounts values (?, ?, ?, ?)",
-                (account.id, account.role, account.display_name, int(account.is_test)),
+                # Upsert on the id only: an email already used by another account must fail, not
+                # silently replace that account (which "insert or replace" would do).
+                "insert into accounts (id, role, display_name, is_test, email, self_service)"
+                " values (?, ?, ?, ?, ?, ?) on conflict (id) do update set role = excluded.role,"
+                " display_name = excluded.display_name, is_test = excluded.is_test,"
+                " email = excluded.email, self_service = excluded.self_service",
+                (
+                    account.id,
+                    account.role,
+                    account.display_name,
+                    int(account.is_test),
+                    account.email.lower() if account.email else None,
+                    int(account.self_service),
+                ),
             )
 
     @_locked
@@ -172,8 +203,15 @@ class Store:
 
     @_locked
     def accounts(self) -> list[Account]:
-        rows = self._db.execute("select * from accounts order by role, display_name").fetchall()
-        return [Account(r[0], r[1], r[2], bool(r[3])) for r in rows]
+        rows = self._db.execute(
+            "select id, role, display_name, is_test, email, self_service from accounts"
+            " order by role, display_name"
+        ).fetchall()
+        return [Account(r[0], r[1], r[2], bool(r[3]), r[4], bool(r[5])) for r in rows]
+
+    @_locked
+    def account_by_email(self, email: str) -> Account | None:
+        return next((a for a in self.accounts() if a.email == email.strip().lower()), None)
 
     @_locked
     def account(self, account_id: str) -> Account | None:
