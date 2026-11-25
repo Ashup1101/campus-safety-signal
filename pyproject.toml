@@ -22,6 +22,7 @@ rag = "campus_safety.rag.cli:main"
 redteam = "campus_safety.security.cli:main"
 geo = "campus_safety.geo.cli:main"
 t3 = "campus_safety.t3.cli:main"
+t1 = "campus_safety.t1.cli:main"
 
 [dependency-groups]
 agents = [
