@@ -54,6 +54,10 @@ ml = [
     "mlflow-skinny>=3.17.1",
     "presidio-analyzer>=2.2.364",
 ]
+train = [
+    "lightgbm>=4.7.0",
+    "scikit-learn>=1.9.1",
+]
 transform = [
     "dbt-duckdb>=1.11.0",
     "defusedxml>=0.7.1",
@@ -98,6 +102,11 @@ known-first-party = ["campus_safety", "demo_server"]
 strict = true
 files = ["src", "tests", "scripts", "apps/server"]
 mypy_path = "src:scripts:tests:apps/server"
+
+# The `train` group (T1 on GitHub Actions) is not installed on the laptop.
+[[tool.mypy.overrides]]
+module = ["lightgbm", "lightgbm.*", "sklearn", "sklearn.*"]
+ignore_missing_imports = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
