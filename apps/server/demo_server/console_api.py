@@ -14,6 +14,10 @@ from campus_safety import gaps
 CONFIG: dict[str, str | bool | int | float | list[str]] = {"memory_limit": "1GB", "threads": 2}
 SYNTHETIC = ("synthetic_rows", "synthetic_seeds", "planted_anomalies")
 RealOnly = Annotated[bool, Query()]
+CALLS_NOTE = (
+    "Calls for service are not crimes: a call is a request for police help, and many end with no"
+    " report. IU log entries are recorded incidents. Only categories both sources name are shown."
+)
 
 
 def _rows(warehouse: Path, sql: str) -> list[dict[str, Any]]:
@@ -41,3 +45,19 @@ def register(
             row = {k: v for k, v in row.items() if not (real_only and k in SYNTHETIC)}
             found.append({**row, "reason": reasons.get(str(row["gap_id"]), "")})
         return found
+
+    @app.get("/api/console/cross-check")
+    def console_cross_check(_: Console) -> dict[str, Any]:
+        """Real data only (official log and city feed): no real_only switch needed."""
+        return {
+            "note": CALLS_NOTE,
+            "rows": _rows(
+                warehouse,
+                "select month, zonecode, category, iu_count, bpd_count"
+                " from gold.console_cross_check order by month, zonecode, category",
+            ),
+            "calibration": _rows(
+                warehouse,
+                "select * from gold.calibration_bpd_cfs_check order by period_year, period_month",
+            ),
+        }
