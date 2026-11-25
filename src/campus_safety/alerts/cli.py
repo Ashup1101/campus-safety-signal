@@ -14,7 +14,7 @@ from pathlib import Path
 import duckdb
 from botocore.exceptions import BotoCoreError, ClientError
 
-from campus_safety.alerts import directory, events, publish, snapshots
+from campus_safety.alerts import directory, events, followups, publish, snapshots
 from campus_safety.alerts.ledger import LakeLedger, publish_key
 from campus_safety.alerts.rules import Incident, decide
 from campus_safety.lake.storage import LakeConfigError, open_lake
@@ -103,6 +103,7 @@ def publish_new(warehouse: Path, since: datetime) -> int:
             continue
         if not ledger.claim(publish_key(incident.incident_id, "alert"), now, incident.official_at):
             continue
+        followups.record_facts(ledger, incident, now)
         snapshots.store_incident(lake, incident)
         event = events.IncidentConfirmed(
             incident.incident_id,
