@@ -5,7 +5,7 @@ import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api, color, tokens, useDark, useSession, useSocket } from "@/lib/client";
+import { api, color, tokens, useDark, useSocket, type Session } from "@/lib/client";
 import { clockTime, type Clock, type Tone } from "@/shared/api";
 
 interface LatencyRow {
@@ -302,10 +302,9 @@ function TonightModelCard({ card }: { card: TonightModel | null }) {
   );
 }
 
-export function ConsoleView() {
+export function ConsoleView({ session }: { session: Session }) {
   const dark = useDark();
-  const { session, error } = useSession("console");
-  const token = session?.token;
+  const token = session.token;
   const [rows, setRows] = useState<LatencyRow[]>([]);
   const [replays, setReplays] = useState<Replay[]>([]);
   const [coverage, setCoverage] = useState<Coverage | null>(null);
@@ -366,7 +365,6 @@ export function ConsoleView() {
         </div>
         <Badge variant={connected ? "default" : "outline"}>{connected ? "Connected" : "Connecting…"}</Badge>
       </header>
-      {error && <p className="mb-4 rounded-xl bg-muted p-4 text-sm">{error}</p>}
       <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>

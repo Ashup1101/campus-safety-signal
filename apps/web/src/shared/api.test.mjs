@@ -2,7 +2,7 @@
 // runner loads the TypeScript file directly (type stripping, Node 24). Made-up alerts and streets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { THREAD_GAP_MS, areaSketch, areaStreets, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { THREAD_GAP_MS, areaSketch, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -139,4 +139,8 @@ test("Tonight shows only when the server sent it, and names its method", () => {
   assert.equal(tonightMethod(rule), "Simple rule");
   const model = { features: [seg({ tonight: { level: "quiet", reason: "About a usual night here (city calls for service, forecast model)" } })] };
   assert.equal(tonightMethod(model), "Forecast model");
+});
+
+test("only the console role opens the console", () => {
+  assert.deepEqual(["console", "parent", "student"].map(canOpenConsole), [true, false, false]);
 });

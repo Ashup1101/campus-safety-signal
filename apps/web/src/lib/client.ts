@@ -20,6 +20,24 @@ export async function api<T>(path: string, token: string, init?: RequestInit): P
   return (await response.json()) as T;
 }
 
+// The console signs in with an emailed one-time link, or the demo console test account.
+export async function signInWithLink(link: string): Promise<Session> {
+  const token = link.trim().split("/magic/").pop()?.split(/[\s?#]/)[0] ?? "";
+  const response = await fetch(`${SERVER}/api/magic/${encodeURIComponent(token)}`);
+  if (!response.ok) throw new Error("This sign-in link is not valid any more. Ask for a new one.");
+  return (await response.json()) as Session;
+}
+
+export async function demoLogin(accountId: string): Promise<Session> {
+  const response = await fetch(`${SERVER}/api/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ account_id: accountId }),
+  });
+  if (!response.ok) throw new Error("The demo server is not running. Start it with `make demo`.");
+  return (await response.json()) as Session;
+}
+
 // Demo logins only: every demo account is a test account on the local server.
 export function useSession(accountId: string): { session: Session | null; error: string | null } {
   const [session, setSession] = useState<Session | null>(null);

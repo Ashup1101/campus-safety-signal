@@ -180,6 +180,11 @@ export function levelFor(feature: SegmentFeature, window: TimeWindow): SegmentLe
   return feature.properties.levels[window] ?? { level: "quiet", reason: "No data for this window" };
 }
 
+// The website is the IUPD console only; the app never opens it (the server also refuses).
+export function canOpenConsole(role: Role): boolean {
+  return role === "console";
+}
+
 export function hasTonight(segments: Pick<Segments, "features"> | null): boolean {
   return (segments?.features ?? []).some((f) => f.properties.levels.tonight !== undefined);
 }
