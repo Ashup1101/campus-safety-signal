@@ -36,7 +36,12 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " 9 AS period_month, 1000 AS reported_calls, 990 AS feed_calls,"
                 " -10 AS difference, -1.0::DOUBLE AS pct_difference"
             )
-    settings = Settings(data_dir=tmp_path / "d", warehouse=db, tiles=tmp_path / "t")
+    settings = Settings(
+        data_dir=tmp_path / "d",
+        warehouse=db,
+        tiles=tmp_path / "t",
+        lake_uri=(tmp_path / "lake").as_uri(),
+    )
     return TestClient(create_app(settings))
 
 
@@ -94,3 +99,15 @@ def test_alert_metrics_are_console_only_with_a_bounded_period(tmp_path: Path) ->
     body = client.get(f"{url}?days=7", headers=console).json()
     assert body["days"] == 7 and set(body["latency"]) == {"web", "ios"}
     assert client.get(f"{url}?days=0", headers=console).status_code == 422
+
+
+def test_health_lists_every_configured_source(tmp_path: Path) -> None:
+    from campus_safety.lake import health
+
+    client = client_for(tmp_path)
+    url = "/api/console/health"
+    assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
+    found = client.get(url, headers=login(client, "console")).json()
+    assert [row["source"] for row in found] == [c.source for c in health.load()]
+    assert {row["state"] for row in found} == {"never"}  # an empty lake
+    assert {"label", "expected_hours", "last_stored_at", "error_kind"} <= set(found[0])

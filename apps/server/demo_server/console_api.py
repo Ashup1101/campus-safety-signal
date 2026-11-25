@@ -11,6 +11,8 @@ import duckdb
 from fastapi import Depends, FastAPI, Query
 
 from campus_safety import gaps
+from campus_safety.lake import health
+from campus_safety.lake.storage import open_lake
 from demo_server import metrics
 from demo_server.store import Store
 
@@ -41,6 +43,7 @@ def register(
     warehouse: Path,
     register_file: Path,
     store: Store,
+    lake_uri: str,
 ) -> None:
     Console = Annotated[Any, Depends(console)]
 
@@ -79,3 +82,8 @@ def register(
         _: Console, days: Annotated[int, Query(ge=1, le=365)] = 30
     ) -> dict[str, Any]:
         return metrics.alert_metrics(store, datetime.now(UTC), days)
+
+    @app.get("/api/console/health")
+    def console_health(_: Console) -> list[dict[str, Any]]:
+        """Every configured source: fresh, stale, failing or never, with times (no page text)."""
+        return health.report(open_lake(lake_uri), health.load(), datetime.now(UTC))

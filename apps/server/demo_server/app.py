@@ -171,7 +171,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     Me = Annotated[Account, Depends(current)]
     Console = Annotated[Account, Depends(console)]
-    console_api.register(app, console, settings.warehouse, settings.gaps, store)
+    console_api.register(app, console, settings.warehouse, settings.gaps, store, settings.lake_uri)
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
