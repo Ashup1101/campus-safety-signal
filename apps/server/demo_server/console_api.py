@@ -10,10 +10,10 @@ from typing import Annotated, Any
 import duckdb
 from fastapi import Depends, FastAPI, Query
 
-from campus_safety import gaps
+from campus_safety import events, gaps
 from campus_safety.lake import health
 from campus_safety.lake.storage import open_lake
-from demo_server import metrics
+from demo_server import forecasts, metrics
 from demo_server.store import Store
 
 CONFIG: dict[str, str | bool | int | float | list[str]] = {"memory_limit": "1GB", "threads": 2}
@@ -87,3 +87,13 @@ def register(
     def console_health(_: Console) -> list[dict[str, Any]]:
         """Every configured source: fresh, stale, failing or never, with times (no page text)."""
         return health.report(open_lake(lake_uri), health.load(), datetime.now(UTC))
+
+    @app.get("/api/console/forecasts")
+    def console_forecasts(_: Console) -> dict[str, Any]:
+        rows = _rows(
+            warehouse,
+            "select zonecode, night, expected, level, method, reason, run_id from gold.tonight"
+            " where \"window\" = 'late_night' order by night, zonecode",
+        )
+        card = forecasts.scorecard(open_lake(lake_uri), rows[0]["run_id"]) if rows else None
+        return forecasts.build(rows, card, events.load(), events.night_of(datetime.now(UTC)))

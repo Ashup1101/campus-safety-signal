@@ -27,6 +27,14 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " 'LB101' AS zonecode, 'theft' AS category, 1 AS iu_count, 2 AS bpd_count"
             )
             con.execute(
+                "CREATE TABLE gold.tonight AS SELECT zone AS zonecode, night::DATE AS night,"
+                " w AS \"window\", 1.5::DOUBLE AS expected, 'quiet' AS level, 'rule' AS method,"
+                " 'About a usual night here' AS reason, 'gh-1' AS run_id"
+                " FROM (VALUES ('LB101'), ('LB102')) AS z(zone),"
+                " range(DATE '2026-10-29', DATE '2026-11-06', INTERVAL 1 DAY) AS n(night),"
+                " (VALUES ('late_night'), ('evening')) AS v(w)"
+            )
+            con.execute(
                 "CREATE TABLE gold.archive_coverage AS SELECT * FROM (VALUES"
                 " (2017, 3, 1, 1, 1), (2025, 1, 1, 0, 0))"
                 " AS t(year, listed, parsed, failed, not_fetched)"
@@ -111,3 +119,47 @@ def test_health_lists_every_configured_source(tmp_path: Path) -> None:
     assert [row["source"] for row in found] == [c.source for c in health.load()]
     assert {row["state"] for row in found} == {"never"}  # an empty lake
     assert {"label", "expected_hours", "last_stored_at", "error_kind"} <= set(found[0])
+
+
+def test_forecasts_name_the_method_and_mark_event_nights(tmp_path: Path) -> None:
+    from test_t1_import import run_dir
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.t1 import importer
+
+    client = client_for(tmp_path)
+    importer.import_run(FileLake(tmp_path / "lake"), run_dir(tmp_path / "run"))
+    url = "/api/console/forecasts"
+    assert client.get(url, headers=login(client, "student_sam")).status_code == 403
+    body = client.get(url, headers=login(client, "console")).json()
+    assert body["method_words"] == "simple rule" and "not crimes" in body["note"]
+    nights = body["outlook"]["nights"]
+    assert [n["night"] for n in nights][:2] == ["2026-10-29", "2026-10-30"] and len(nights) == 7
+    assert nights[1]["event"] == "Halloween weekend" and nights[0]["event"] is None
+    assert nights[0]["campus_expected"] == 3.0  # two zones, late night only
+    assert [z["zonecode"] for z in body["outlook"]["zones"]] == ["LB101", "LB102"]
+    assert body["scorecard"]["method"] == "rule" and body["scorecard"]["scores"]["rule"]
+    assert body["tonight"] == {"night": None, "zones": []}  # the run does not cover today
+
+
+def test_forecasts_without_a_run_are_empty_not_invented(tmp_path: Path) -> None:
+    client = client_for(tmp_path, with_gaps=False)
+    body = client.get("/api/console/forecasts", headers=login(client, "console")).json()
+    assert body["method"] is None and body["scorecard"] is None
+    assert body["outlook"] == {"nights": [], "zones": []}
+
+
+def test_tonight_lists_each_zone_when_the_run_covers_it() -> None:
+    from datetime import date
+
+    from demo_server import forecasts
+
+    rows = [
+        {"zonecode": z, "night": date(2026, 10, 30), "expected": 2.0, "level": "elevated",
+         "method": "model", "reason": "Busier than usual", "run_id": "gh-2"}
+        for z in ("LB101", "LB102")
+    ]  # fmt: skip
+    found = forecasts.build(rows, None, [], date(2026, 10, 30))
+    assert found["tonight"]["night"] == date(2026, 10, 30)
+    assert [z["zonecode"] for z in found["tonight"]["zones"]] == ["LB101", "LB102"]
+    assert found["method_words"] == "forecast model"
