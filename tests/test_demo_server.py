@@ -436,3 +436,14 @@ def test_the_live_iu_watcher_is_on_unless_switched_off(
     else:
         monkeypatch.setenv("DEMO_LIVE_FEED", env)
     assert live_feed_on(no_live_feed=flag) is on
+
+
+def test_watcher_health_is_console_only(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "demo", warehouse=tmp_path / "none.duckdb", tiles=tmp_path / "t"
+    )
+    client = TestClient(create_app(settings))  # live feed off in tests
+    console = {"Authorization": f"Bearer {login(client, 'console')}"}
+    parent = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
+    assert client.get("/api/watcher", headers=parent).status_code == 403
+    assert client.get("/api/watcher", headers=console).json() == {"enabled": False}
