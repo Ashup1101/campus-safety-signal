@@ -14,6 +14,7 @@ from fastapi.middleware.gzip import GZipMiddleware
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 
+from campus_safety import events
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
@@ -21,6 +22,8 @@ from demo_server import activity, points, tonight_model
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
+from demo_server.mailbox import MailboxChannel
+from demo_server.scheduler import Scheduler
 from demo_server.seed import Settings, seed
 from demo_server.sources import DrillSource, ReplaySource, load_replays
 from demo_server.store import Account, Store
@@ -48,6 +51,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     seed(store, settings, geojson=geojson)
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     hub = Hub(store, Clock(), names)
+    scheduler = Scheduler(
+        store, MailboxChannel(store), settings.warehouse, names, events.load(), hub.clock.now
+    )
     drills = DrillSource()
     replays = ReplaySource(load_replays(settings.manual))
     sources: list[OfficialAlertSource] = [drills, replays]
@@ -62,6 +68,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         tasks = [asyncio.create_task(relay(source)) for source in sources]
+        tasks.append(asyncio.create_task(scheduler.run()))
         yield
         for task in tasks:
             task.cancel()

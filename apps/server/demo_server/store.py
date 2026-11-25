@@ -288,6 +288,12 @@ class Store:
         return bool(fresh)
 
     @_locked
+    def sent(self, key: str) -> bool:
+        return (
+            self._db.execute("select 1 from sent_keys where key = ?", (key,)).fetchone() is not None
+        )
+
+    @_locked
     def mailbox(self, account_id: str, limit: int = 50) -> list[dict[str, object]]:
         rows = self._db.execute(
             "select id, kind, subject, body, thread_id, created_at from mailbox"
