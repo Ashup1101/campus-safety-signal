@@ -11,7 +11,9 @@ import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
+  hasTonight,
   levelFor,
+  tonightMethod,
   threadsOf,
   tonightOf,
   toneOf,
@@ -188,8 +190,11 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
     };
   }, [changeSharing, send]);
 
+  const withTonight = hasTonight(segments);
+  const picked = chosen === "tonight" && !withTonight ? null : chosen;
   const window: TimeWindow =
-    chosen ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
+    picked ?? (clock?.windows.includes("event_night") ? "event_night" : (clock?.windows[0] ?? "late_night"));
+  const windowLabel = window === "tonight" ? "Tonight" : window === "late_night" ? "Late nights" : "Event nights";
   const threads = threadsOf(alerts, now);
   const tonight = tonightOf(segments, window, threads, now);
   const primary = dark ? "#e8667a" : "#9b1c31";
@@ -214,14 +219,20 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
-        <Scoreboard tonight={tonight} windowLabel={window === "late_night" ? "Late nights" : "Event nights"} dark={dark} />
+        <Scoreboard tonight={tonight} windowLabel={windowLabel} dark={dark} />
         <View className="mt-3 h-80 overflow-hidden rounded-xl">
           <ActivityMap segments={segments} window={window} dark={dark} onSelect={setSelected} points={points} />
         </View>
         <View className="mt-2 flex-row self-start rounded-full bg-muted p-1 dark:bg-muted-dark">
           <Chip label="Late nights" active={window === "late_night"} onPress={() => setChosen("late_night")} />
           <Chip label="Event nights" active={window === "event_night"} onPress={() => setChosen("event_night")} />
+          {withTonight && <Chip label="Tonight" active={window === "tonight"} onPress={() => setChosen("tonight")} />}
         </View>
+        {window === "tonight" && (
+          <Text className="mt-2 text-xs text-muted-foreground dark:text-muted-foreground-dark">
+            Expected from city calls for service (calls are not crimes). Made by: {tonightMethod(segments)}.
+          </Text>
+        )}
         {selected && (
           <Pressable onPress={() => setSelected(null)} className="mt-3 rounded-xl bg-card p-4 dark:bg-card-dark">
             <Text className="font-semibold text-foreground dark:text-foreground-dark">
