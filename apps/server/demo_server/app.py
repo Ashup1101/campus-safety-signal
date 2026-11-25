@@ -236,6 +236,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def invites(me: Me) -> list[dict[str, Any]]:
         return store.invites(me, datetime.now(UTC))
 
+    @app.delete("/api/me", status_code=204)
+    def delete_me(me: Me) -> None:
+        if not me.self_service:
+            raise HTTPException(
+                403, "the demo's test accounts stay; delete works for your own account"
+            )
+        store.delete_account(me)
+        for bearer in [t for t, account_id in tokens.items() if account_id == me.id]:
+            tokens.pop(bearer)
+
     @app.get("/api/accounts")
     def accounts() -> list[dict[str, str]]:
         return [{"id": a.id, "role": a.role, "name": a.display_name} for a in store.accounts()]
