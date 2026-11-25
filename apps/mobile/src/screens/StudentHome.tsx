@@ -7,6 +7,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCard";
 import { CheckingInBadge } from "../components/CheckingInBadge";
+import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
@@ -64,6 +65,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
   const [clock, setClock] = useState<Clock | null>(null);
   const [segments, setSegments] = useState<Segments | null>(null);
   const [points, setPoints] = useState<IncidentPoints | null>(null);
+  const [mail, setMail] = useState<MailboxMessage[]>([]);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
   const [selected, setSelected] = useState<SegmentFeature | null>(null);
   const [note, setNote] = useState<string | null>(null);
@@ -86,6 +88,10 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
         setClock(map.clock);
         setAlerts(history);
       },
+      () => {},
+    );
+    api<MailboxMessage[]>("/api/mailbox", token).then(
+      (found) => live && setMail(found),
       () => {},
     );
     api<IncidentPoints>("/api/incidents?days=90", token).then(
@@ -252,6 +258,7 @@ export function StudentHome({ session, onLeave }: { session: Session; onLeave: (
             <Text style={{ color: dark ? tokens.warm.dark : tokens.warm.light }}>{note}</Text>
           </Pressable>
         )}
+        <Inbox messages={mail} muted={muted} />
         <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-dark">
           <Text className="font-semibold text-foreground dark:text-foreground-dark">Location sharing</Text>
           <Text className="mb-3 mt-1 text-sm text-muted-foreground dark:text-muted-foreground-dark">
