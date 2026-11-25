@@ -167,9 +167,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/watcher")
     def watcher_health(_: Console) -> dict[str, object]:
+        schedule = scheduler.upcoming()
         if watcher is None:
-            return {"enabled": False}
-        return {"enabled": True, **watcher.health.as_dict()}
+            return {"enabled": False, **schedule}
+        return {"enabled": True, **watcher.health.as_dict(), **schedule}
 
     @app.get("/api/mailbox")
     def mailbox(me: Me) -> list[dict[str, object]]:

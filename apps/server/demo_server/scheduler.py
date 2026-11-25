@@ -121,6 +121,24 @@ class Scheduler:
                         sent += self.channel.deliver(account_id, draft, "digest", key)
         return sent
 
+    def upcoming(self) -> dict[str, object]:
+        """When the next briefing and the next digest are due (local wall time), for the console."""
+        now = events.local(self.now())
+        opens = sorted(
+            (datetime.combine(min(e.nights) - timedelta(days=1), BRIEFING_AT), e.name)
+            for e in self.calendar
+        )
+        briefing = next(((at, name) for at, name in opens if at > now), None)
+        digest = datetime.combine(now.date(), DIGEST_AT)
+        if digest <= now:
+            digest += timedelta(days=1)
+        return {
+            "next_briefing": (
+                {"event": briefing[1], "at": briefing[0].isoformat()} if briefing else None
+            ),
+            "next_digest": digest.isoformat(),
+        }
+
     def tick(self) -> int:
         """Send whatever is due now; returns how many new messages landed."""
         now = events.local(self.now())

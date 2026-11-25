@@ -446,4 +446,5 @@ def test_watcher_health_is_console_only(tmp_path: Path) -> None:
     console = {"Authorization": f"Bearer {login(client, 'console')}"}
     parent = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
     assert client.get("/api/watcher", headers=parent).status_code == 403
-    assert client.get("/api/watcher", headers=console).json() == {"enabled": False}
+    found = client.get("/api/watcher", headers=console).json()
+    assert found["enabled"] is False and set(found) == {"enabled", "next_briefing", "next_digest"}
