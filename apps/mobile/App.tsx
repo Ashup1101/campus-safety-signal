@@ -14,7 +14,7 @@ import { StudentHome } from "./src/screens/StudentHome";
 function Screens({ session, onLeave }: { session: Session; onLeave: () => void }) {
   const [settings, setSettings] = useState(false);
   if (session.account.role !== "console" && settings) {
-    return <Settings session={session} onBack={() => setSettings(false)} />;
+    return <Settings session={session} onBack={() => setSettings(false)} onDeleted={onLeave} />;
   }
   if (session.account.role === "student") {
     return <StudentHome key={session.account.id} session={session} onLeave={onLeave} onSettings={() => setSettings(true)} />;
