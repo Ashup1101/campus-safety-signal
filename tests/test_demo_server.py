@@ -380,3 +380,11 @@ def test_mailbox_shows_only_the_signed_in_accounts_messages(tmp_path: Path) -> N
     assert [m["subject"] for m in client.get("/api/mailbox", headers=mom).json()] == ["Briefing"]
     assert client.get("/api/mailbox", headers=dad).json() == []
     assert client.get("/api/mailbox").status_code == 401
+
+
+def test_the_server_starts_and_stops_with_the_scheduler_running(tmp_path: Path) -> None:
+    settings = Settings(
+        data_dir=tmp_path / "demo", warehouse=tmp_path / "none.duckdb", tiles=tmp_path / "t"
+    )
+    with TestClient(create_app(settings)) as client:  # runs the lifespan: relays + scheduler
+        assert client.get("/api/health").json() == {"status": "ok"}
