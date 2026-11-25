@@ -57,6 +57,10 @@ LINKS_PER_HOUR = 5
 WEB = "http://localhost:3100"
 
 
+class Invite(BaseModel):
+    student_email: str
+
+
 class ClockPreset(BaseModel):
     preset: Literal["live", "late_night", "event_night"]
 
@@ -176,6 +180,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "token": bearer,
             "account": {"id": account.id, "role": account.role, "name": account.display_name},
         }
+
+    @app.post("/api/invites", status_code=201)
+    def invite(body: Invite, me: Me) -> dict[str, object]:
+        if me.role != "parent":
+            raise HTTPException(403, "only parents send invites")
+        email = body.student_email.strip().lower()
+        if not EMAIL.match(email):
+            raise HTTPException(400, "check the student's email")
+        invite_id = store.add_invite(me.id, email, datetime.now(UTC))
+        if invite_id is None:
+            raise HTTPException(409, "an invite to this student is already waiting")
+        return {"id": invite_id, "status": "pending"}
+
+    @app.get("/api/invites")
+    def invites(me: Me) -> list[dict[str, Any]]:
+        return store.invites(me, datetime.now(UTC))
 
     @app.get("/api/accounts")
     def accounts() -> list[dict[str, str]]:
