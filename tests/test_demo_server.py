@@ -361,3 +361,22 @@ def test_tonight_model_card_is_console_only_and_reads_the_newest_import(tmp_path
     card = client.get("/api/tonight-model", headers=console).json()
     assert (card["method"], card["model"], card["run_id"]) == ("rule", None, "gh-1")
     assert set(card["scores"]) == {"model", "rule", "last_week"}
+
+
+def test_mailbox_shows_only_the_signed_in_accounts_messages(tmp_path: Path) -> None:
+    from campus_safety.alerts.rules import Draft
+    from demo_server.mailbox import MailboxChannel
+
+    settings = Settings(
+        data_dir=tmp_path / "demo", warehouse=tmp_path / "none.duckdb", tiles=tmp_path / "t"
+    )
+    app = create_app(settings)
+    client = TestClient(app)
+    mom = {"Authorization": f"Bearer {login(client, 'parent_mom')}"}
+    dad = {"Authorization": f"Bearer {login(client, 'parent_dad')}"}
+    MailboxChannel(app.state.store).deliver(
+        "parent_mom", Draft("Briefing", "Made up"), "briefing", "k1"
+    )
+    assert [m["subject"] for m in client.get("/api/mailbox", headers=mom).json()] == ["Briefing"]
+    assert client.get("/api/mailbox", headers=dad).json() == []
+    assert client.get("/api/mailbox").status_code == 401
