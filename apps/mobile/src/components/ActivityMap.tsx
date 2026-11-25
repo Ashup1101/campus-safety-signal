@@ -7,6 +7,7 @@ import {
   type IncidentPoints,
   type SegmentFeature,
   type Segments,
+  type Student,
   type TimeWindow,
 } from "../shared/api";
 import tokens from "../shared/tokens.json";
@@ -36,12 +37,14 @@ export function ActivityMap({
   dark,
   onSelect,
   points = null,
+  students = [],
 }: {
   segments: Segments | null;
   window: TimeWindow;
   dark: boolean;
   onSelect: (feature: SegmentFeature) => void;
   points?: IncidentPoints | null;
+  students?: Student[]; // parent screens: linked students sharing right now (never stored)
 }) {
   const features = segments?.features ?? [];
   const tone = dark ? "dark" : "light";
@@ -108,6 +111,16 @@ export function ActivityMap({
           />
         </Marker>
       ))}
+      {students
+        .filter((s) => s.sharing === "on" && s.location)
+        .map((s) => (
+          <Marker
+            key={`student-${s.id}`}
+            coordinate={{ latitude: s.location!.lat, longitude: s.location!.lon }}
+            title={`${s.name}, sharing now`}
+            pinColor={tokens.student[tone]}
+          />
+        ))}
     </MapView>
   );
 }
