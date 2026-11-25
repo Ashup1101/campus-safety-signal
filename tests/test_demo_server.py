@@ -388,3 +388,35 @@ def test_the_server_starts_and_stops_with_the_scheduler_running(tmp_path: Path) 
     )
     with TestClient(create_app(settings)) as client:  # runs the lifespan: relays + scheduler
         assert client.get("/api/health").json() == {"status": "ok"}
+
+
+def test_followups_reach_the_same_card_and_the_mailbox_in_order(store: Store) -> None:
+    from campus_safety.alerts.rules import Draft
+
+    recipients = ["parent_mom", "student_sam"]
+
+    async def scenario() -> tuple[FakePeer, list[bool]]:
+        hub = hub_for(store)
+        mom = FakePeer()
+        await hub.join(account(store, "parent_mom"), mom)
+        steps = [
+            ("correction", Draft("Correction: theft", "Made up.")),  # before any alert: refused
+            ("alert", Draft("Theft near Kirkwood", "Made up.")),
+            ("correction", Draft("Correction: theft", "Changed.")),
+            ("all_clear", Draft("All clear: theft", "Over.")),
+            ("correction", Draft("Correction: theft", "Too late.")),  # after all-clear: refused
+        ]
+        sent = [
+            await hub.publish_followup("inc-9", kind, draft, recipients) for kind, draft in steps
+        ]
+        return mom, sent
+
+    mom, sent = asyncio.run(scenario())
+    assert sent == [False, True, True, True, False]
+    cards = mom.of("followup")
+    assert [(m["thread_id"], m["kind"]) for m in cards] == [
+        ("incident-inc-9", "alert"),
+        ("incident-inc-9", "correction"),
+        ("incident-inc-9", "all_clear"),
+    ]
+    assert [m["kind"] for m in store.mailbox("student_sam")] == ["all_clear", "correction", "alert"]

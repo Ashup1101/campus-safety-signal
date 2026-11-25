@@ -9,17 +9,21 @@
 """
 
 import asyncio
+import hashlib
 import logging
 import math
 import uuid
 from collections import defaultdict
+from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
 from typing import Any, Protocol
 
 from campus_safety import events
+from campus_safety.alerts.rules import Draft
 from campus_safety.official.alerts import OfficialAlert
 from demo_server.area import area_for
+from demo_server.mailbox import MailboxChannel
 from demo_server.store import Account, Store
 from demo_server.threads import Threads
 
@@ -92,6 +96,7 @@ class Hub:
         self.threads = Threads()
         self._live: dict[str, bool] = {}  # open thread id -> test accounts only
         self._check_ins: dict[str, dict[str, dict[str, Any]]] = {}  # thread -> student -> check-in
+        self._followups: dict[str, str] = {}  # engine thread id -> last kind sent
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -269,6 +274,34 @@ class Hub:
         peers = [peer for peers in self._peers.values() for peer in peers]
         await asyncio.gather(*(self._safe(p, {"type": "clock", "clock": state}) for p in peers))
         return state
+
+    async def publish_followup(
+        self, incident_id: str, kind: str, draft: Draft, recipients: Sequence[str]
+    ) -> bool:
+        """An engine alert (IU crime log or two-outlet news) and its correction or all-clear, on one
+        card (thread incident-<id>) for every recipient and in their mailbox. Order is enforced:
+        nothing before the alert, nothing after the all-clear. IU's own alerts use publish()."""
+        thread_id = f"incident-{incident_id}"
+        last = self._followups.get(thread_id)
+        if last == "all_clear" or (kind != "alert" and last is None) or (kind == "alert" and last):
+            return False
+        self._followups[thread_id] = kind
+        mailbox = MailboxChannel(self.store)
+        digest = hashlib.sha256(f"{draft.title}|{draft.body}".encode()).hexdigest()[:12]
+        for account_id in recipients:
+            key = f"{kind}:{incident_id}:{account_id}:{digest}"
+            mailbox.deliver(account_id, draft, kind, key, thread_id)
+        message = {
+            "type": "followup",
+            "thread_id": thread_id,
+            "kind": kind,
+            "title": draft.title,
+            "body": draft.body,
+        }
+        peers = [p for a in recipients for p in list(self._peers.get(a, set()))]
+        await asyncio.gather(*(self._safe(p, message) for p in peers))
+        log.info("%s follow-up sent to %d devices", kind, len(peers))
+        return True
 
     async def publish(self, alert: OfficialAlert) -> dict[str, Any]:
         """Store the alert (descriptions removed) and send it verbatim to every eligible device
