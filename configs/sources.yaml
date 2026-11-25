@@ -1,0 +1,17 @@
+# How often a new stored copy of each source is expected, in hours (console Health tab).
+# Unchanged pages are not stored again, so a slow-changing source gets a long cadence: past it
+# the source shows as stale. Labels are plain words for the console.
+sources:
+  iu_crime_log: {label: IU crime log, expected_hours: 36}
+  iu_crime_notices: {label: IU crime notices, expected_hours: 2160}
+  iu_rave_feed: {label: IU alerts feed, expected_hours: 2160}
+  bpd_calls_for_service: {label: City police calls (BPD), expected_hours: 72}
+  city_gis_law_zones: {label: City police zones map, expected_hours: 8760}
+  city_gis_streets: {label: City streets map, expected_hours: 8760}
+  city_gis_addresses: {label: City address points, expected_hours: 8760}
+  city_news_releases: {label: City news releases, expected_hours: 336}
+  city_bps_packets: {label: Board of Public Safety packets (calibration), expected_hours: 1440}
+  news_bloomingtonian: {label: The Bloomingtonian, expected_hours: 168}
+  news_b_square_bulletin: {label: The B Square Bulletin, expected_hours: 168}
+  news_ids: {label: Indiana Daily Student, expected_hours: 72}
+  news_ipm: {label: WFIU/IPM news, expected_hours: 168}
