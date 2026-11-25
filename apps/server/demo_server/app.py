@@ -21,7 +21,7 @@ from campus_safety.geo.place import distance_to_lines
 from campus_safety.lake.storage import open_lake
 from campus_safety.official.alerts import OfficialAlertSource
 from campus_safety.official.rave import RaveFeedSource
-from demo_server import activity, auth, points, tonight_model
+from demo_server import activity, ask, auth, points, tonight_model
 from demo_server.area import area_for
 from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
@@ -72,6 +72,10 @@ AREA_M = 400.0
 class Here(BaseModel):
     lat: Annotated[float, Field(ge=39.0, le=39.4)]
     lon: Annotated[float, Field(ge=-86.8, le=-86.3)]
+
+
+class Question(BaseModel):
+    question: Annotated[str, Field(min_length=1, max_length=500)]
 
 
 class Invite(BaseModel):
@@ -245,6 +249,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         store.delete_account(me)
         for bearer in [t for t, account_id in tokens.items() if account_id == me.id]:
             tokens.pop(bearer)
+
+    @app.post("/api/ask")
+    def ask_question(body: Question, me: Me) -> dict[str, Any]:
+        today = date.today()
+        if not settings.rag_index.exists():
+            raise HTTPException(503, "the question index is not built yet (run `rag build`)")
+        if not store.take_ask(me.id, today.isoformat(), ask.DAILY):
+            raise HTTPException(429, f"up to {ask.DAILY} questions a day; try again tomorrow")
+        return ask.answer(settings.rag_index, body.question, today)
 
     @app.get("/api/accounts")
     def accounts() -> list[dict[str, str]]:

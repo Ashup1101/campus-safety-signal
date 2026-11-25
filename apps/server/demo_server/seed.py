@@ -38,6 +38,7 @@ class Settings:
     manual: Path = ROOT / "data" / "manual" / "demo_incidents.yaml"
     tiles: Path = ROOT / "data" / "demo" / "tiles"
     gaps: Path = ROOT / "configs" / "gaps.yaml"
+    rag_index: Path = ROOT / "data" / "rag" / "index.duckdb"
     lake_uri: str = (ROOT / "data" / "lake").as_uri()
     live_feed: bool = False
     replay_speed: float = 60.0
