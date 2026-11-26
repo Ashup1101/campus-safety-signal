@@ -226,3 +226,13 @@ export function outcomeWords(counts: Record<string, number>): string {
     .map(([state, n]) => `${n} ${OUTCOME_WORDS[state] ?? state}`);
   return parts.length ? parts.join(", ") : "none yet";
 }
+
+export interface QueuedNote {
+  id: number;
+  thread_id: string;
+  tag: string;
+  text: string | null;
+  state: "held" | "hidden";
+  reports: number;
+  created_at: string;
+}
