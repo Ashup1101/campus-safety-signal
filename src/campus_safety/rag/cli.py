@@ -5,11 +5,14 @@ and its citations."""
 
 import argparse
 import logging
+import os
 import statistics
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from pathlib import Path
 
 from campus_safety.env import load_keys
+from campus_safety.lake.storage import LakeConfigError, open_lake
+from campus_safety.models import gates
 from campus_safety.news import providers
 from campus_safety.rag import index as rag_index
 from campus_safety.rag import metrics
@@ -17,6 +20,14 @@ from campus_safety.rag.graph import Agent, Generate
 
 log = logging.getLogger("rag")
 WAREHOUSE = Path("data", "warehouse", "warehouse.duckdb")
+
+
+def _t4() -> Callable[[str], bool] | None:
+    """T4 from the lake when its newest run won; otherwise the rule checks alone."""
+    try:
+        return gates.text_gate(open_lake(os.environ.get("LAKE_URI")), "t4")
+    except LakeConfigError:
+        return None
 
 
 def build(warehouse: Path, path: Path) -> int:
@@ -28,7 +39,7 @@ def build(warehouse: Path, path: Path) -> int:
 def ask(path: Path, question: str, generate: Generate) -> int:
     index = rag_index.Index(path)
     try:
-        state = Agent(index, generate).ask(question)
+        state = Agent(index, generate, screen=_t4()).ask(question)
     finally:
         index.close()
     print(state["answer"])
@@ -50,7 +61,7 @@ def evaluate(path: Path, questions: Path, generate: Generate, limit: int = 20) -
     index = rag_index.Index(path)
     faith, cite, refused, empty = [], [], 0, 0
     try:
-        agent = Agent(index, generate)
+        agent = Agent(index, generate, screen=_t4())
         for question in lines:
             state = agent.ask(question)
             if state.get("refused"):
