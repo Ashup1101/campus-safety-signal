@@ -4,6 +4,7 @@ import { Clock3, History, Megaphone, MoonStar, PartyPopper, ShieldCheck, Sun } f
 import { useCallback, useEffect, useState } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ConsoleTabs } from "@/components/console-tabs";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, color, tokens, useDark, useSocket, type Session } from "@/lib/client";
 import { clockTime, type Clock, type Tone } from "@/shared/api";
@@ -365,7 +366,11 @@ export function ConsoleView({ session }: { session: Session }) {
         </div>
         <Badge variant={connected ? "default" : "outline"}>{connected ? "Connected" : "Connecting…"}</Badge>
       </header>
-      <div className="grid gap-4 lg:grid-cols-3">
+      <ConsoleTabs
+        token={token}
+        dark={dark}
+        overview={
+          <div className="grid gap-4 lg:grid-cols-3">
         <Card>
           <CardHeader>
             <CardTitle>Drill</CardTitle>
@@ -475,7 +480,9 @@ export function ConsoleView({ session }: { session: Session }) {
             <TonightModelCard card={tonightModel} />
           </CardContent>
         </Card>
-      </div>
+          </div>
+        }
+      />
     </div>
   );
 }

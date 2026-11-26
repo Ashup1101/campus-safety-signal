@@ -24,7 +24,7 @@ export function ConsoleOutlook({ forecasts, dark }: { forecasts: Forecasts | nul
       <p className="text-sm text-muted-foreground">
         Expected late-night calls for service (10 pm to 4 am), not crimes. Made by: {forecasts.method_words}.
       </p>
-      <ol className="flex h-32 items-end gap-2" aria-label="Expected calls across campus zones per night">
+      <ol className="flex h-32 items-end gap-2" aria-label="Expected calls across all forecast zones per night">
         {nights.map((n) => (
           <li key={n.night} className="flex flex-1 flex-col items-center gap-1 text-xs">
             <span>{n.campus_expected.toFixed(0)}</span>
