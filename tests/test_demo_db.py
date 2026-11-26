@@ -182,3 +182,13 @@ def test_cli_needs_a_postgres_url_and_hides_connection_errors(
     assert migrate.main(["migrate"]) == 1
     out = capsys.readouterr().out
     assert "secret" not in out and "connected: no" in out
+
+
+def test_cli_reads_the_url_from_dotenv(
+    pg_url: str, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    dotenv = tmp_path / ".env"
+    dotenv.write_text(f"OTHER=1\nDEMO_DATABASE_URL='{pg_url}'\n")
+    monkeypatch.setenv("CAMPUS_SAFETY_DOTENV", str(dotenv))
+    monkeypatch.setenv("DEMO_DATABASE_URL", "")  # empty: .env fills it; undone after the test
+    assert migrate.main(["migrate"]) == 0 and migrate.main(["check"]) == 0
