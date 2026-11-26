@@ -163,6 +163,8 @@ export type ServerMessage =
   | { type: "check_in"; check_in: CheckIn }
   | { type: "check_in_cleared"; thread_id: string }
   | { type: "band_request"; request_id: string; from: string }
+  | { type: "ok_request"; request_id: string; from: string }
+  | { type: "ok_result"; request_id: string; student_id: string; state: OkState }
   | {
       type: "band_result";
       request_id: string;
@@ -179,7 +181,8 @@ export type ClientMessage =
   | { type: "heads_up"; segment_id: string }
   | { type: "check_in"; thread_id: string; state: CheckInState; place?: ShelterPlace }
   | { type: "band_answer"; request_id: string; band: Band; answered_at: string; signature: string }
-  | { type: "band_answer"; request_id: string; declined: true };
+  | { type: "band_answer"; request_id: string; declined: true }
+  | { type: "ok_answer"; request_id: string; answer: "ok" | "call_me" | "off" };
 
 // Red is for live official alerts only; an official "Normal" status is an all-clear.
 export function toneOf(alert: Alert): Tone {
@@ -339,6 +342,7 @@ export function tonightOf(segments: Segments | null, window: TimeWindow, threads
 // word ever leaves the phone, never the point.
 export type Band = "inside" | "nearby" | "away";
 export type BandState = "answered" | "unverified" | "declined" | "unreachable";
+export type OkState = "ok" | "call_me" | "off" | "no_answer";
 
 export interface Area {
   lat: number;

@@ -114,3 +114,46 @@ def test_only_a_linked_parent_may_ask(tmp_path: Path) -> None:
     assert ask("parent_mom") == 202
     assert ask("parent_dad") == 403  # Dad is Alex's parent
     assert ask("student_alex") == 403
+
+
+def test_are_you_ok_asks_the_student_first_and_tells_the_parent_only_without_an_answer(
+    store: Store,  # noqa: F811
+) -> None:
+    async def scenario() -> tuple[FakePeer, FakePeer]:
+        hub = hub_for(store)
+        hub.ok_timeout = 0.02
+        mom, sam = await joined(store, hub)
+        mom_account, sam_account = account(store, "parent_mom"), account(store, "student_sam")
+        first = await hub.ask_ok(mom_account, "student_sam")
+        assert mom.of("ok_result") == []  # nothing for the parent until the student answers
+        await hub.message(sam_account, {"type": "ok_answer", "request_id": first, "answer": "ok"})
+        second = await hub.ask_ok(mom_account, "student_sam")
+        await asyncio.sleep(0.05)  # ten minutes in the test clock: no answer yet
+        await hub.message(
+            sam_account, {"type": "ok_answer", "request_id": second, "answer": "call_me"}
+        )
+        third = await hub.ask_ok(mom_account, "student_sam")
+        await hub.message(sam_account, {"type": "ok_answer", "request_id": third, "answer": "off"})
+        await hub.message(sam_account, {"type": "ok_answer", "request_id": third, "answer": "ok"})
+        assert hub.pending_ok_requests() == 0
+        return mom, sam
+
+    mom, sam = asyncio.run(scenario())
+    assert [m["from"] for m in sam.of("ok_request")] == ["Mom", "Mom", "Mom"]
+    assert [m["state"] for m in mom.of("ok_result")] == ["ok", "no_answer", "call_me", "off"]
+
+
+def test_only_a_linked_parent_sends_are_you_ok(tmp_path: Path) -> None:
+    client = TestClient(
+        create_app(
+            Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+        )
+    )
+
+    def ask(who: str) -> int:
+        token = client.post("/api/login", json={"account_id": who}).json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        return client.post("/api/are-you-ok/student_sam", headers=headers).status_code
+
+    assert ask("parent_mom") == 202
+    assert ask("parent_dad") == 403
