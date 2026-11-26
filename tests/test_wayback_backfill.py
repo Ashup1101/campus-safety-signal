@@ -162,3 +162,12 @@ def test_one_failed_year_does_not_stop_the_others(
     summary = backfill.backfill(FileLake(tmp_path / "lake"), delay=0, sleep=lambda _: None)
     assert summary.listings_failed == 1
     assert summary.fetched == 2
+
+
+def test_the_crime_log_cli_loads_without_duckdb() -> None:
+    """The live-page canary installs no dev group: the CLI must import without duckdb."""
+    import subprocess
+    import sys
+
+    code = "import sys; sys.modules['duckdb'] = None; import campus_safety.iu_crime_log.cli"
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0  # noqa: S603 (fixed code)

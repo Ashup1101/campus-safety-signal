@@ -11,11 +11,14 @@ import time
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
+from typing import TYPE_CHECKING
 
 from campus_safety import fetch, wayback
 from campus_safety.lake import bronze
-from campus_safety.lake.parquet import Columns
 from campus_safety.lake.storage import Lake
+
+if TYPE_CHECKING:  # lake.parquet needs duckdb, which the live-page canary does not install
+    from campus_safety.lake.parquet import Columns
 
 SOURCE = "iu_crime_log_wayback"
 LISTING_SOURCE = (
@@ -57,7 +60,7 @@ def _kept(ext: str, capture: wayback.Capture) -> bool:
     return ext != "pdf" or capture.original.lower().endswith(".pdf")
 
 
-CAPTURES: Columns = (
+CAPTURES: "Columns" = (
     ("kind", "VARCHAR"),  # html | pdf
     ("raw_url", "VARCHAR"),
     ("captured_at", "TIMESTAMP"),
