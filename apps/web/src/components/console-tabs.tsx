@@ -21,6 +21,7 @@ import {
   type CrossCheck,
   type Forecasts,
   type GapRow,
+  type DatabaseInfo,
   type SourceHealth,
   type TrendWeek,
   type ZoneShapes,
@@ -229,6 +230,7 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
   const [realOnly, setRealOnly] = useState(() => (typeof window === "undefined" ? true : readRealOnly()));
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const health = useConsole<SourceHealth[]>(tab === "Health" ? "/api/console/health" : null, token);
+  const database = useConsole<DatabaseInfo>(tab === "Health" ? "/api/console/database" : null, token);
 
   const toggle = () => {
     setRealOnly((value) => {
@@ -354,7 +356,7 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
           )}
           {tab === name && name === "Health" && (
             <Panel title="Data health" description="How fresh each public source is (real data only).">
-              <ConsoleHealth sources={health} />
+              <ConsoleHealth sources={health} database={database} />
             </Panel>
           )}
         </div>

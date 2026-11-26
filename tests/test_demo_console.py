@@ -132,6 +132,22 @@ def test_health_lists_every_configured_source(tmp_path: Path) -> None:
     assert {"label", "expected_hours", "last_stored_at", "error_kind"} <= set(found[0])
 
 
+def test_health_names_the_database_without_its_address(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/database"
+    assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
+    found = client.get(url, headers=login(client, "console")).json()
+    if found["backend"] == "sqlite":
+        assert found == {
+            "backend": "sqlite",
+            "label": "SQLite on this laptop",
+            "schema_version": None,
+        }
+    else:  # --demo-db postgres
+        assert found["label"] == f"Postgres (schema v{found['schema_version']})"
+    assert str(tmp_path) not in str(found) and "host" not in str(found)
+
+
 def test_forecasts_name_the_method_and_mark_event_nights(tmp_path: Path) -> None:
     from test_t1_import import run_dir
 

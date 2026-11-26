@@ -121,6 +121,11 @@ def register(
         """Every configured source: fresh, stale, failing or never, with times (no page text)."""
         return health.report(open_lake(lake_uri), health.load(), datetime.now(UTC))
 
+    @app.get("/api/console/database")
+    def console_database(_: Console) -> dict[str, Any]:
+        """SQLite on this laptop or Postgres with its schema version (no host or credentials)."""
+        return store.database()
+
     @app.get("/api/console/forecasts")
     def console_forecasts(_: Console) -> dict[str, Any]:
         rows = _rows(
