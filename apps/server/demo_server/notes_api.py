@@ -206,3 +206,18 @@ def register(
         log.info("moderator %s", action)
         await changed(thread_id)
         return {"done": action}
+
+    class Switch(BaseModel):
+        enabled: bool
+
+    @app.get("/api/console/notes/switch")
+    def notes_switch(_: Console) -> dict[str, bool]:
+        return {"enabled": store.setting("notes_enabled", "on") == "on"}
+
+    @app.post("/api/console/notes/switch")
+    async def set_notes_switch(body: Switch, _: Console) -> dict[str, bool]:
+        """IU's kill switch: off hides every note and blocks posting at once; on restores them."""
+        store.set_setting("notes_enabled", "on" if body.enabled else "off")
+        log.info("notes switched %s", "on" if body.enabled else "off")
+        await changed("*")
+        return {"enabled": body.enabled}
