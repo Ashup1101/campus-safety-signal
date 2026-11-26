@@ -168,6 +168,7 @@ export type ServerMessage =
   | { type: "arrived_home"; student_id: string; student_name: string; at: string }
   | { type: "notes_changed"; thread_id: string }
   | { type: "signing"; key_id: string; secret: string; label: string }
+  | { type: "consent_needed"; kind: string }
   | {
       type: "band_result";
       request_id: string;
