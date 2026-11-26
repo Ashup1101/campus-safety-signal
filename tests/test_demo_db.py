@@ -192,3 +192,25 @@ def test_cli_reads_the_url_from_dotenv(
     monkeypatch.setenv("CAMPUS_SAFETY_DOTENV", str(dotenv))
     monkeypatch.setenv("DEMO_DATABASE_URL", "")  # empty: .env fills it; undone after the test
     assert migrate.main(["migrate"]) == 0 and migrate.main(["check"]) == 0
+
+
+def test_a_rejected_duplicate_rolls_back_its_block_and_the_database_keeps_working(
+    database: Database,
+) -> None:
+    database.execute("insert into kv values (?, ?, ?)", ("x", "y", 0))
+    with pytest.raises(IntegrityError), database:
+        database.execute("insert into kv values (?, ?, ?)", ("new", "y", 0))
+        database.execute("insert into kv values (?, ?, ?)", ("x", "y", 0))
+    assert database.execute("select k from kv order by k").fetchall() == [("x",)]
+    with database:
+        database.execute("insert into kv values (?, ?, ?)", ("z", "y", 0))
+    assert database.execute("select count(*) from kv").fetchone() == (2,)
+
+
+def test_postgres_never_prepares_statements_for_the_transaction_pooler(pg_url: str) -> None:
+    db = Database(pg_url)
+    for _ in range(12):  # psycopg would prepare after 5 runs by default
+        db.execute("select count(*) from pg_class where relname = ?", ("x",))
+    with db:
+        assert db.execute("select count(*) from pg_prepared_statements").fetchone() == (0,)
+    db.close()
