@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import pytest
+from fastapi.routing import APIRoute
 from fastapi.testclient import TestClient
 
 from demo_server.app import create_app
@@ -50,3 +51,33 @@ def test_only_parents_invite_and_only_the_invited_student_answers(client: TestCl
         == 403
     )
     assert client.post("/api/invites/1/accept", headers=mom).status_code == 404
+
+
+@pytest.mark.parametrize("account_id", ["student_sam", "parent_mom", None])
+def test_every_console_api_route_refuses_families_and_strangers(
+    tmp_path: Path, account_id: str | None
+) -> None:
+    """Walks the app's own route table, so a console route added later is covered too."""
+    settings = Settings(
+        data_dir=tmp_path / "d",
+        warehouse=tmp_path / "n.duckdb",
+        tiles=tmp_path / "t",
+        lake_uri=(tmp_path / "lake").as_uri(),
+    )
+    app = create_app(settings)
+    client = TestClient(app)
+    me = headers(client, account_id) if account_id else {}
+    paths = sorted(
+        r.path
+        for r in app.routes
+        if isinstance(r, APIRoute)
+        and r.path.startswith("/api/console/")
+        and "GET" in (r.methods or ())
+    )
+    assert (
+        len(paths) >= 8
+    )  # gaps, cross-check, archive, alert-metrics, health, forecasts, zones, trends
+    for path in paths:
+        assert client.get(path, headers=me).status_code in ((403,) if account_id else (401, 403)), (
+            path
+        )
