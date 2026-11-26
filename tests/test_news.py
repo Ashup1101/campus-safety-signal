@@ -449,3 +449,45 @@ def test_load_keys_reads_only_model_keys(tmp_path: Path, monkeypatch: pytest.Mon
     assert os.environ["OPENAI_API_KEY"] == "sk-test" and "AWS_PROFILE" not in os.environ
     monkeypatch.setenv("OPENAI_API_KEY", "already-set")
     assert load_keys(dotenv) == [] and os.environ["OPENAI_API_KEY"] == "already-set"
+
+
+def import_text_model(
+    lake: FileLake, name: str, source: Path, coef: float, method: str, run_id: str = "gh-1"
+) -> None:
+    """A made-up T2/T4 run: one word ("shooting") pushes the score by coef."""
+    from campus_safety.models import registry
+
+    source.mkdir(parents=True)
+    card = {"run_id": run_id, "method": method, "trained_at": "2026-11-26T00:00:00+00:00"}
+    (source / "scorecard.json").write_text(json.dumps(card))
+    weights = {
+        "vocabulary": {"shooting": 0},
+        "idf": [1.0],
+        "coef": [coef],
+        "intercept": -1.0,
+        "threshold": 0.5,
+    }
+    (source / "model.json").write_text(json.dumps(weights))
+    registry.import_run(lake, name, source)
+
+
+def test_t2_decides_relevance_only_when_it_won(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    lake = FileLake(tmp_path / "lake")
+    seed_lake(lake)
+    monkeypatch.setenv("LAKE_URI", lake.uri)
+    calls: list[str] = []
+
+    def generate(system: str, user: str, **_: object) -> str:
+        calls.append(user)
+        return json.dumps({**dict.fromkeys(FIELDS), "incident_type": "other", "iu_related": False})
+
+    monkeypatch.setattr(gemini, "generate", generate)
+    import_text_model(lake, "t2", tmp_path / "lost", coef=-5.0, method="rules")  # lost: ignored
+    assert main(["--cache", str(tmp_path / "a"), "--model", "fake", "extract", "--limit", "1"]) == 0
+    assert len(calls) == 1
+    import_text_model(lake, "t2", tmp_path / "won", coef=-5.0, method="model", run_id="gh-2")
+    calls.clear()
+    assert main(["--cache", str(tmp_path / "b"), "--model", "fake", "extract"]) == 0
+    assert calls == []  # the winning model scores every item low: no model calls at all
