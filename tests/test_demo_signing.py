@@ -53,3 +53,30 @@ def test_provisioning_stamps_the_time(tmp_path: Path) -> None:
     at = datetime(2026, 11, 26, tzinfo=UTC)
     key_id, _secret = store.provision_key("student_alex", at)
     assert store.device_key("student_alex") == (key_id, _secret)
+
+
+def test_signatures_verify_and_replays_are_refused() -> None:
+    from datetime import timedelta
+
+    from demo_server import signing
+
+    _, secret = signing.new_key()
+    _, other = signing.new_key()
+    now = datetime(2026, 11, 26, 23, 0, tzinfo=UTC)
+    at = now.isoformat()
+    good = signing.sign(secret, "r1", "nearby", at)
+    check = signing.Verifier()
+    assert not check.check(secret, "r1", "away", at, good, now)  # altered band
+    assert not check.check(other, "r1", "nearby", at, good, now)  # wrong key
+    assert not check.check(
+        secret, "r1", "upstairs", at, signing.sign(secret, "r1", "upstairs", at), now
+    )
+    assert check.check(secret, "r1", "nearby", at, good, now)
+    assert not check.check(secret, "r1", "nearby", at, good, now + timedelta(seconds=30))  # replay
+    late = (now - timedelta(minutes=3)).isoformat()
+    assert not check.check(
+        secret, "r2", "inside", late, signing.sign(secret, "r2", "inside", late), now
+    )
+    # After the window a request id is forgotten (memory stays small); its answer is stale anyway.
+    assert check.check(secret, "r3", "inside", at, signing.sign(secret, "r3", "inside", at), now)
+    assert "r1" not in check.seen(now + timedelta(minutes=3))
