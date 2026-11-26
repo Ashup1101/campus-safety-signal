@@ -108,6 +108,30 @@ create table if not exists ask_usage (
     count integer not null,
     primary key (account_id, day)
 );
+create table if not exists notes (
+    id integer primary key,
+    thread_id text not null,
+    account_id text not null references accounts (id),
+    tag text not null,
+    text text,
+    state text not null check (state in ('held', 'pending', 'visible', 'hidden')),
+    created_at text not null,
+    updated_at text not null,
+    unique (thread_id, account_id)
+);
+create table if not exists note_reports (
+    note_id integer not null references notes (id) on delete cascade,
+    account_id text not null references accounts (id),
+    primary key (note_id, account_id)
+);
+create table if not exists bans (
+    account_id text primary key references accounts (id),
+    until text not null
+);
+create table if not exists settings (
+    key text primary key,
+    value text not null
+);
 create table if not exists device_keys (
     account_id text primary key references accounts (id),
     key_id text not null,
@@ -248,6 +272,121 @@ class Store:
                 "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
             )
         self.provision_key(student_id, datetime.now(UTC))
+
+    # Community notes (v9): no location anywhere; one note per person per incident thread.
+    NOTE_COLUMNS = ("id", "thread_id", "account_id", "tag", "text", "state", "created_at")
+
+    @_locked
+    def put_note(
+        self,
+        thread_id: str,
+        account_id: str,
+        tag: str,
+        text: str | None,
+        state: str,
+        now: datetime,
+    ) -> int:
+        """Create, or edit the person's existing note on this thread. Returns its id."""
+        at = now.isoformat()
+        with self._db:
+            self._db.execute(
+                "insert into notes"
+                " (thread_id, account_id, tag, text, state, created_at, updated_at)"
+                " values (?, ?, ?, ?, ?, ?, ?) on conflict (thread_id, account_id) do update set"
+                " tag = excluded.tag, text = excluded.text, state = excluded.state,"
+                " updated_at = excluded.updated_at",
+                (thread_id, account_id, tag, text, state, at, at),
+            )
+            row = self._db.execute(
+                "select id from notes where thread_id = ? and account_id = ?",
+                (thread_id, account_id),
+            ).fetchone()
+        return int(row[0])
+
+    @_locked
+    def note(self, note_id: int) -> dict[str, Any] | None:
+        row = self._db.execute(
+            f"select {', '.join(self.NOTE_COLUMNS)} from notes where id = ?",  # noqa: S608 (fixed names)
+            (note_id,),
+        ).fetchone()
+        return dict(zip(self.NOTE_COLUMNS, row, strict=True)) if row else None
+
+    @_locked
+    def notes_of(self, thread_id: str) -> list[dict[str, Any]]:
+        rows = self._db.execute(
+            f"select {', '.join(self.NOTE_COLUMNS)} from notes where thread_id = ? order by id",  # noqa: S608
+            (thread_id,),
+        ).fetchall()
+        return [dict(zip(self.NOTE_COLUMNS, r, strict=True)) for r in rows]
+
+    @_locked
+    def notes_in(self, state: str) -> list[dict[str, Any]]:
+        rows = self._db.execute(
+            f"select {', '.join(self.NOTE_COLUMNS)} from notes where state = ? order by id",  # noqa: S608
+            (state,),
+        ).fetchall()
+        return [dict(zip(self.NOTE_COLUMNS, r, strict=True)) for r in rows]
+
+    @_locked
+    def set_note_state(self, note_id: int, state: str) -> None:
+        with self._db:
+            self._db.execute("update notes set state = ? where id = ?", (state, note_id))
+
+    @_locked
+    def delete_note(self, note_id: int) -> bool:
+        with self._db:
+            return bool(self._db.execute("delete from notes where id = ?", (note_id,)).rowcount)
+
+    @_locked
+    def delete_notes(self, thread_id: str | None = None, account_id: str | None = None) -> int:
+        """All notes of a thread (expiry) or of a person (ban, delete)."""
+        with self._db:
+            if thread_id is not None:
+                cursor = self._db.execute("delete from notes where thread_id = ?", (thread_id,))
+            else:
+                cursor = self._db.execute("delete from notes where account_id = ?", (account_id,))
+        return int(cursor.rowcount)
+
+    @_locked
+    def add_report(self, note_id: int, account_id: str) -> bool:
+        """False when this person already reported this note."""
+        with self._db:
+            return bool(
+                self._db.execute(
+                    "insert or ignore into note_reports values (?, ?)", (note_id, account_id)
+                ).rowcount
+            )
+
+    @_locked
+    def report_count(self, note_id: int) -> int:
+        row = self._db.execute(
+            "select count(*) from note_reports where note_id = ?", (note_id,)
+        ).fetchone()
+        return int(row[0])
+
+    @_locked
+    def ban(self, account_id: str, until: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                "insert or replace into bans values (?, ?)", (account_id, until.isoformat())
+            )
+
+    @_locked
+    def banned(self, account_id: str, now: datetime) -> bool:
+        row = self._db.execute(
+            "select until from bans where account_id = ?", (account_id,)
+        ).fetchone()
+        return bool(row) and datetime.fromisoformat(row[0]) > now
+
+    @_locked
+    def setting(self, key: str, default: str) -> str:
+        row = self._db.execute("select value from settings where key = ?", (key,)).fetchone()
+        return str(row[0]) if row else default
+
+    @_locked
+    def set_setting(self, key: str, value: str) -> None:
+        with self._db:
+            self._db.execute("insert or replace into settings values (?, ?)", (key, value))
 
     @_locked
     def provision_key(self, student_id: str, now: datetime) -> tuple[str, str]:
@@ -601,6 +740,9 @@ class Store:
                 "deliveries",
                 "ask_usage",
                 "device_keys",
+                "note_reports",
+                "notes",
+                "bans",
             ):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
             self._db.execute("delete from sent_keys where instr(key, ?) > 0", (account.id,))
