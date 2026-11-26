@@ -26,7 +26,14 @@ from campus_safety.rag.graph import MAX_QUESTION, Agent
 from campus_safety.rag.index import Document, Hit, Index
 
 CORPUS = Path(__file__).resolve().parents[3] / "configs" / "redteam" / "attacks.yaml"
-SURFACES = ("news_extract", "news_confirm", "rag_question", "rag_answer", "alert_rules")
+SURFACES = (
+    "news_extract",
+    "news_confirm",
+    "rag_question",
+    "rag_answer",
+    "alert_rules",
+    "note_text",
+)
 _OWASP = re.compile(r"^LLM(0[1-9]|10)$")
 _ATLAS = re.compile(r"^AML\.T\d{4}(\.\d{3})?$")
 PUBLISHED = datetime(2026, 11, 1, 14, 0, tzinfo=UTC)
@@ -242,6 +249,19 @@ def _alert(case: Case) -> list[str]:
     return [] if route == case.expect["route"] else [f"route={route}"]
 
 
+def _note(case: Case) -> list[str]:
+    """Community note text: every attack must be blocked or held for a moderator. Names come from
+    Presidio on the server; here a no-op detector, so cases never rely on name detection."""
+    from campus_safety.notes import config as notes_config
+    from campus_safety.notes import filter as notes_filter
+
+    verdict = notes_filter.check(case.text, notes_config.load(), lambda text: [])
+    wanted = case.expect.get("outcome")
+    if wanted and verdict.outcome != wanted:
+        return [f"outcome={verdict.outcome}"]
+    return [] if verdict.outcome != "ok" else ["outcome=ok"]
+
+
 def run(cases: list[Case]) -> Report:
     report = Report()
     with tempfile.TemporaryDirectory(prefix="redteam-") as tmp:
@@ -252,6 +272,8 @@ def run(cases: list[Case]) -> Report:
                 problems = _news_confirm(case)
             elif case.surface in ("rag_question", "rag_answer"):
                 problems = _rag(case)
+            elif case.surface == "note_text":
+                problems = _note(case)
             else:
                 problems = _alert(case)
             report.results.append(Result(case, not problems, "; ".join(problems)))

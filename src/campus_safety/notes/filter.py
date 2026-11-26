@@ -15,16 +15,31 @@ Names = Callable[[str], list[str]]
 
 _HIDDEN = re.compile("[​-‏‪-‮⁠-⁤﻿]")
 _LINK = re.compile(
-    r"https?://|www\.|\b[\w-]+\s*(?:\.|\[\.\]|\(\.\)|\s+dot\s+)\s*"
+    r"h[tx]{2}ps?://|www\.|\b[\w-]+\s*(?:\.|\[\.\]|\(\.\)|\s+dot\s+)\s*"
     r"(?:com|org|net|edu|gov|io|ly|gl|me|co|us|info|app|link|xyz|test)\b",
     re.IGNORECASE,
 )
 _EMAIL = re.compile(r"[\w.+-]+\s*(?:@|\[at\]|\(at\))\s*[\w-]+", re.IGNORECASE)
 _PHONE = re.compile(r"(?:\+?1[\s.-]?)?\(?\d{3}\)?[\s.-]?\d{3}[\s.-]?\d{4}\b")
 _MONEY = re.compile(
-    r"venmo|cash\s?app|paypal|zelle|gofundme|donat|\$\s?\d|send\s+(?:me\s+)?money|\bpay\s+me\b",
+    r"venmo|cash[\s-]?app|paypal|zelle|gofundme|donat|\$\s?\d|send\s+(?:me\s+)?money|\bpay\s+me\b",
     re.IGNORECASE,
 )
+
+
+# Clothing and body words describe a person; notes describe places.
+_PERSON_WORDS = re.compile(
+    r"\b(?:hoodie|jacket|shirt|t-shirt|jeans|pants|shorts|hat|cap|mask|tattoo|beard|"
+    r"dreads|braids|backpack)s?\b",
+    re.IGNORECASE,
+)
+# Claims to speak for IU or the police, and instructions aimed at software: a moderator decides.
+_IMPERSONATION = re.compile(
+    r"\b(?:iupd|iu police|police (?:say|said|confirm)|official|verified|confirmed by)\b|"
+    r"\bsystem\s*:|\bignore (?:all|previous|the)\b",
+    re.IGNORECASE,
+)
+_LEET = str.maketrans({"0": "o", "1": "i", "3": "e", "4": "a", "5": "s", "@": "a", "$": "s"})
 
 
 @dataclass(frozen=True)
@@ -55,11 +70,13 @@ def check(text: str, cfg: NotesConfig, names: Names) -> Verdict:
     ):
         if pattern.search(clean):
             return Verdict("blocked", reason)
-    if strip_descriptors(clean) != clean:
+    if strip_descriptors(clean) != clean or _PERSON_WORDS.search(clean):
         return Verdict("blocked", "description of a person")
     if names(clean):
         return Verdict("blocked", "name")
-    lowered = clean.lower()
+    lowered = clean.lower().translate(_LEET)
     if any(re.search(rf"\b{re.escape(word)}\b", lowered) for word in cfg.alarming_words):
+        return Verdict("held", "needs review")
+    if _IMPERSONATION.search(clean):
         return Verdict("held", "needs review")
     return Verdict("ok")
