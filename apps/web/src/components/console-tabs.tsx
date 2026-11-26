@@ -8,6 +8,7 @@ import { ConsoleHealth } from "@/components/console-health";
 import { ConsoleModels } from "@/components/console-models";
 import { ConsoleNotes } from "@/components/console-notes";
 import { ConsoleOutlook } from "@/components/console-outlook";
+import { ConsolePilot } from "@/components/console-pilot";
 import { ConsoleReassurance } from "@/components/console-reassurance";
 import { ConsoleTrends } from "@/components/console-trends";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +26,7 @@ import {
   type ZoneShapes,
 } from "@/lib/console";
 
-const TABS = ["Overview", "Forecasts", "Gaps", "Cross-check", "Archive", "Alerts", "Notes", "Models", "Health"] as const;
+const TABS = ["Overview", "Forecasts", "Gaps", "Cross-check", "Archive", "Alerts", "Notes", "Models", "Pilot", "Health"] as const;
 type Tab = (typeof TABS)[number];
 
 function useConsole<T>(path: string | null, token: string): T | null {
@@ -344,6 +345,11 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
           {tab === name && name === "Models" && (
             <Panel title="Models" description="Which method each small model uses, and why. Rules stay until a model wins.">
               <ConsoleModels token={token} />
+            </Panel>
+          )}
+          {tab === name && name === "Pilot" && (
+            <Panel title="Pilot" description="The pilot in numbers: delivery, reach, choices and surveys. Never a person.">
+              <ConsolePilot token={token} />
             </Panel>
           )}
           {tab === name && name === "Health" && (
