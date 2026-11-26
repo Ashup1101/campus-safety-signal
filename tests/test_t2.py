@@ -57,3 +57,26 @@ def test_ground_truth_file(tmp_path: Path) -> None:
     )
     assert dataset.ground_truth(path) == {"i1": True, "i2": False}
     assert dataset.ground_truth(tmp_path / "missing.yaml") == {}
+
+
+def test_exported_weights_score_on_the_laptop_without_sklearn() -> None:
+    from campus_safety.t2 import model
+
+    weights = {
+        "vocabulary": {"robbery": 0, "concert": 1},
+        "idf": [1.0, 1.0],
+        "coef": [4.0, -4.0],
+        "intercept": 0.0,
+        "threshold": 0.5,
+    }
+    assert model.flags(weights, "Robbery near Kirkwood") and not model.flags(
+        weights, "Concert review"
+    )
+    assert model.tokens("Shots fired") == ["shots", "fired", "shots fired"]
+
+
+def test_precision_at_the_rules_recall() -> None:
+    from campus_safety.t2 import train
+
+    threshold, precision = train.at_recall([0.9, 0.8, 0.2, 0.1], [True, False, True, False], 0.5)
+    assert (threshold, precision) == (0.9, 1.0)
