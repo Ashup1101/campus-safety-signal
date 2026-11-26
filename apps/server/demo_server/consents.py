@@ -1,6 +1,7 @@
 """Consents (Sprint 11): what each person agreed to, per feature, with the policy version and the
 time. Features that need a consent check it on the server (consent gates)."""
 
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime
 from typing import Annotated, Any
 
@@ -31,7 +32,28 @@ def granted(store: Store, account_id: str, kind: str) -> bool:
     return state(store.consents(account_id).get(kind)) == "granted"
 
 
-def register(app: FastAPI, me: Any, store: Store) -> None:
+def allowed(store: Store, account: Account, kind: str) -> bool:
+    """Built-in demo personas were set up with every consent; accounts people create themselves
+    must say yes first."""
+    return not account.self_service or granted(store, account.id, kind)
+
+
+def recipients(store: Store, account_ids: list[str], kind: str) -> list[str]:
+    found = []
+    for account_id in account_ids:
+        account = store.account(account_id)
+        if account is not None and allowed(store, account, kind):
+            found.append(account_id)
+    return found
+
+
+def register(
+    app: FastAPI,
+    me: Any,
+    store: Store,
+    withdrawn: Callable[[Account, str], Awaitable[None]],
+) -> None:
+    """withdrawn(account, kind) stops a running feature at once (e.g. live sharing)."""
     Me = Annotated[Account, Depends(me)]
 
     def view(account_id: str) -> list[dict[str, Any]]:
@@ -52,8 +74,10 @@ def register(app: FastAPI, me: Any, store: Store) -> None:
         return view(who.id)
 
     @app.post("/api/consents/{kind}")
-    def choose(kind: str, body: Choice, who: Me) -> dict[str, Any]:
+    async def choose(kind: str, body: Choice, who: Me) -> dict[str, Any]:
         if kind not in KINDS:
             raise HTTPException(404, "unknown consent")
         store.set_consent(who.id, kind, body.granted, VERSION, datetime.now(UTC))
+        if not body.granted:
+            await withdrawn(who, kind)
         return next(c for c in view(who.id) if c["kind"] == kind)

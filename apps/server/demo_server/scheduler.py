@@ -20,6 +20,7 @@ from campus_safety import events
 from campus_safety.alerts import briefings, digests
 from campus_safety.events import Event
 from campus_safety.patterns.categories import category
+from demo_server import consents
 from demo_server.mailbox import MailboxChannel
 from demo_server.store import Store, Zone
 
@@ -78,7 +79,7 @@ class Scheduler:
             if not opens <= now < closes:
                 continue
             draft = briefings.briefing(event, self._busy(), self._tonight())
-            for account_id in self._family():
+            for account_id in consents.recipients(self.store, self._family(), "briefings"):
                 key = f"briefing:{event.event_id}:{account_id}"
                 sent += self.channel.deliver(account_id, draft, "briefing", key)
         return sent
@@ -109,7 +110,7 @@ class Scheduler:
         if now.weekday() == 0:
             periods.append(("weekly", end - timedelta(days=7)))
         sent = 0
-        for account_id in self._family():
+        for account_id in consents.recipients(self.store, self._family(), "digests"):
             for zone in self.store.zones(account_id):
                 for period, start in periods:
                     key = f"digest:{period}:{end.date()}:{account_id}:{zone.name}"

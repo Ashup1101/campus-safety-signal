@@ -23,7 +23,7 @@ from typing import Any, Protocol
 from campus_safety import events
 from campus_safety.alerts.rules import Draft
 from campus_safety.official.alerts import OfficialAlert
-from demo_server import signing
+from demo_server import consents, signing
 from demo_server.area import area_for
 from demo_server.mailbox import MailboxChannel
 from demo_server.store import Account, Store
@@ -267,6 +267,10 @@ class Hub:
         if parent.role != "parent" or label is None:
             return None
         request_id = secrets.token_hex(8)
+        student = self.store.account(student_id)
+        if student is None or not consents.allowed(self.store, student, "location_precise"):
+            await self._band_result(parent.id, student_id, request_id, "declined")
+            return request_id
         if not self.online(student_id):
             await self._band_result(parent.id, student_id, request_id, "unreachable")
             return request_id
@@ -404,7 +408,15 @@ class Hub:
         await self._to_parents(student.id, message)
         log.info("arrived home sent")
 
+    async def consent_withdrawn(self, account: Account, kind: str) -> None:
+        """Withdrawing a consent stops its feature at once: sharing (and precise location) end."""
+        if kind in ("sharing", "location_precise") and self.sharing(account.id) != "off":
+            await self._set_sharing(account, "off")
+
     async def _set_sharing(self, student: Account, state: str) -> None:
+        if state == "on" and not consents.allowed(self.store, student, "sharing"):
+            await self._send(student.id, {"type": "consent_needed", "kind": "sharing"})
+            return
         previous = self.sharing(student.id)
         self._sharing[student.id] = state
         if state != "on":
