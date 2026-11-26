@@ -478,3 +478,37 @@ export function hmacSha256Hex(secretHex: string, message: string): string {
 export function signBand(secretHex: string, requestId: string, band: Band, answeredAt: string): string {
   return hmacSha256Hex(secretHex, `${requestId}|${band}|${answeredAt}`);
 }
+
+/** What a parent reads after a check-in. Only a verified answer names a band. */
+export function bandResultText(
+  name: string,
+  result: { state: BandState; band?: Band; answered_at?: string },
+  now: number = Date.now(),
+): string {
+  switch (result.state) {
+    case "answered": {
+      const minutes = result.answered_at ? Math.max(0, Math.round((now - Date.parse(result.answered_at)) / 60_000)) : 0;
+      const when = minutes === 0 ? "just now" : `${minutes} min ago`;
+      return `${name} is ${result.band ? BAND_WORDS[result.band] : "checked in"} (${when}).`;
+    }
+    case "unverified":
+      return `Couldn't verify the answer from ${name}'s phone.`;
+    case "declined":
+      return `${name} hasn't turned on check-ins.`;
+    case "unreachable":
+      return `Couldn't reach ${name}'s phone.`;
+  }
+}
+
+export function okResultText(name: string, state: OkState): string {
+  switch (state) {
+    case "ok":
+      return `${name} says they're OK.`;
+    case "call_me":
+      return `${name} asked you to call.`;
+    case "off":
+      return `${name} has turned off "Are you OK?" nudges.`;
+    case "no_answer":
+      return `No answer yet from ${name}.`;
+  }
+}
