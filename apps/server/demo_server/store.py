@@ -133,6 +133,14 @@ create table if not exists settings (
     key text primary key,
     value text not null
 );
+create table if not exists consents (
+    account_id text not null references accounts (id),
+    kind text not null,
+    version text not null,
+    granted_at text,
+    withdrawn_at text,
+    primary key (account_id, kind)
+);
 create table if not exists device_keys (
     account_id text primary key references accounts (id),
     key_id text not null,
@@ -276,6 +284,43 @@ class Store:
                 "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
             )
         self.ensure_key(student_id, datetime.now(UTC))
+
+    @_locked
+    def consents(self, account_id: str) -> dict[str, dict[str, Any]]:
+        rows = self._db.execute(
+            "select kind, version, granted_at, withdrawn_at from consents where account_id = ?",
+            (account_id,),
+        ).fetchall()
+        keys = ("version", "granted_at", "withdrawn_at")
+        return {r[0]: dict(zip(keys, r[1:], strict=True)) for r in rows}
+
+    @_locked
+    def set_consent(
+        self, account_id: str, kind: str, granted: bool, version: str, now: datetime
+    ) -> None:
+        """Yes records the grant (and clears any withdrawal); no withdraws an earlier yes, or
+        records a decline when there was none."""
+        at = now.isoformat()
+        with self._db:
+            current = self._db.execute(
+                "select granted_at from consents where account_id = ? and kind = ?",
+                (account_id, kind),
+            ).fetchone()
+            if granted:
+                self._db.execute(
+                    "insert or replace into consents values (?, ?, ?, ?, null)",
+                    (account_id, kind, version, at),
+                )
+            elif current and current[0]:
+                self._db.execute(
+                    "update consents set withdrawn_at = ? where account_id = ? and kind = ?",
+                    (at, account_id, kind),
+                )
+            else:
+                self._db.execute(
+                    "insert or replace into consents values (?, ?, ?, null, null)",
+                    (account_id, kind, version),
+                )
 
     @_locked
     def ensure_key(self, student_id: str, now: datetime) -> None:
@@ -790,6 +835,7 @@ class Store:
                 "deliveries",
                 "ask_usage",
                 "device_keys",
+                "consents",
                 "note_reports",
                 "notes",
                 "bans",
