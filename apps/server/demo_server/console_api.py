@@ -170,10 +170,13 @@ def register(
             run = t1_run(lake) if name == "t1" else registry.latest(lake, name)
             card = run.card if run is not None else None
             using = card is not None and card.get("method") == "model"
+            trained = card is not None and (card.get("scores") or {}).get("model") is not None
             words = (
                 "Using the model: it beat the rules on its test"
                 if using
                 else "Using rules: the model lost on its test"
+                if trained
+                else "Using rules: this run trained no model"
                 if card is not None
                 else "Using rules: no model imported yet"
             )

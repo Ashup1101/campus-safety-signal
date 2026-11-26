@@ -205,7 +205,8 @@ def test_model_cards_say_which_method_is_in_use(tmp_path: Path) -> None:
     lake = FileLake(tmp_path / "lake")
     run = tmp_path / "t2run"
     run.mkdir()
-    card = {"run_id": "gh-5", "method": "rules", "trained_at": "2026-11-26", "scores": {"x": 1}}
+    scores = {"model": {"precision": 0.5}, "rules": {"precision": 0.6}}
+    card = {"run_id": "gh-5", "method": "rules", "trained_at": "2026-11-26", "scores": scores}
     (run / "scorecard.json").write_text(json.dumps(card))
     (run / "model.json").write_text("{}")
     registry.import_run(lake, "t2", run)
@@ -214,5 +215,20 @@ def test_model_cards_say_which_method_is_in_use(tmp_path: Path) -> None:
     cards = {c["name"]: c for c in client.get(url, headers=login(client, "console")).json()}
     assert set(cards) == {"t1", "t2", "t3", "t4"}
     assert cards["t2"]["words"] == "Using rules: the model lost on its test"
-    assert cards["t2"]["run_id"] == "gh-5" and cards["t2"]["scores"] == {"x": 1}
+    assert cards["t2"]["run_id"] == "gh-5" and cards["t2"]["scores"] == scores
     assert cards["t4"]["words"] == "Using rules: no model imported yet"
+
+
+def test_a_rule_only_run_is_not_called_a_lost_model(tmp_path: Path) -> None:
+    from test_t1_import import run_dir
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.t1 import importer
+
+    client = client_for(tmp_path)
+    importer.import_run(FileLake(tmp_path / "lake"), run_dir(tmp_path / "run"))  # rule-only run
+    cards = {
+        c["name"]: c
+        for c in client.get("/api/console/models", headers=login(client, "console")).json()
+    }
+    assert cards["t1"]["words"] == "Using rules: this run trained no model"
