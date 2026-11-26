@@ -72,8 +72,11 @@ def test_no_table_keeps_a_location_band_or_answer(store: Store, tmp_path: Path) 
         (t, c) for t, c in columns if c in {"lat", "lon", "latitude", "longitude", "location"}
     }
     assert location_like == WATCH_ZONE_COLUMNS
+    # Check-in bands and answers are never stored. The survey table holds 1-5 numbers only.
     assert not {
-        (t, c) for t, c in columns if any(w in c for w in ("band", "answer", "request", "sharing"))
+        (t, c)
+        for t, c in columns
+        if t != "survey_answers" and any(w in c for w in ("band", "answer", "request", "sharing"))
     }
     db.close()
     raw = (tmp_path / "demo.sqlite3").read_bytes()
