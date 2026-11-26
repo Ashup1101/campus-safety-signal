@@ -4,6 +4,7 @@ records, names or free text."""
 
 import json
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Annotated, Any
@@ -14,12 +15,39 @@ from fastapi import Depends, FastAPI, Query
 from campus_safety import events, gaps
 from campus_safety.lake import health
 from campus_safety.lake.storage import open_lake
+from campus_safety.models import registry
 from demo_server import forecasts, metrics
 from demo_server.store import Store
 
 CONFIG: dict[str, str | bool | int | float | list[str]] = {"memory_limit": "1GB", "threads": 2}
 SYNTHETIC = ("synthetic_rows", "synthetic_seeds", "planted_anomalies")
 RealOnly = Annotated[bool, Query()]
+MODELS = (
+    ("t1", "Tonight forecast (calls per police zone)"),
+    ("t2", "News relevance (which items reach the language model)"),
+    ("t3", "Crime-log fallback reader"),
+    ("t4", "Prompt-injection screen"),
+)
+
+
+@dataclass(frozen=True)
+class _T1Run:
+    card: dict[str, Any]
+
+
+def t1_run(lake: Any) -> _T1Run | None:
+    """The newest imported T1 run (t1/<run_id>/), shaped like a registry run."""
+    stamps = [
+        (str(json.loads(lake.get(k))["imported_at"]), k.removesuffix("import.json"))
+        for k in lake.keys("t1/")
+        if k.endswith("/import.json")
+    ]
+    if not stamps:
+        return None
+    _, prefix = max(stamps)
+    return _T1Run(json.loads(lake.get(prefix + "scorecard.json")))
+
+
 CALLS_NOTE = (
     "Calls for service are not crimes: a call is a request for police help, and many end with no"
     " report. IU log entries are recorded incidents. Only categories both sources name are shown."
@@ -127,3 +155,32 @@ def register(
             "select week, zonecode, calls, calls_last_year from gold.console_weekly_trends"
             " order by zonecode, week",
         )
+
+    @app.get("/api/console/models")
+    def console_models(_: Console) -> list[dict[str, Any]]:
+        """One card per model (T1 forecast, T2 relevance, T3 fallback, T4 injection screen):
+        which method is in use, in words, with the newest run's scores."""
+        lake = open_lake(lake_uri)
+        cards = []
+        for name, what in MODELS:
+            run = t1_run(lake) if name == "t1" else registry.latest(lake, name)
+            card = run.card if run is not None else None
+            using = card is not None and card.get("method") == "model"
+            words = (
+                "Using the model: it beat the rules on its test"
+                if using
+                else "Using rules: the model lost on its test"
+                if card is not None
+                else "Using rules: no model imported yet"
+            )
+            cards.append(
+                {
+                    "name": name,
+                    "what": what,
+                    "words": words,
+                    "run_id": card.get("run_id") if card else None,
+                    "trained_at": card.get("trained_at") if card else None,
+                    "scores": card.get("scores", {}) if card else {},
+                }
+            )
+        return cards

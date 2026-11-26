@@ -193,3 +193,26 @@ def test_weekly_trends_are_console_only_counts(tmp_path: Path) -> None:
     assert client.get(url, headers=login(client, "console")).json() == [
         {"week": "2026-10-12", "zonecode": "LB101", "calls": 40, "calls_last_year": 35}
     ]
+
+
+def test_model_cards_say_which_method_is_in_use(tmp_path: Path) -> None:
+    import json
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.models import registry
+
+    client = client_for(tmp_path)
+    lake = FileLake(tmp_path / "lake")
+    run = tmp_path / "t2run"
+    run.mkdir()
+    card = {"run_id": "gh-5", "method": "rules", "trained_at": "2026-11-26", "scores": {"x": 1}}
+    (run / "scorecard.json").write_text(json.dumps(card))
+    (run / "model.json").write_text("{}")
+    registry.import_run(lake, "t2", run)
+    url = "/api/console/models"
+    assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
+    cards = {c["name"]: c for c in client.get(url, headers=login(client, "console")).json()}
+    assert set(cards) == {"t1", "t2", "t3", "t4"}
+    assert cards["t2"]["words"] == "Using rules: the model lost on its test"
+    assert cards["t2"]["run_id"] == "gh-5" and cards["t2"]["scores"] == {"x": 1}
+    assert cards["t4"]["words"] == "Using rules: no model imported yet"
