@@ -1,7 +1,7 @@
 import { ChevronDown, ChevronRight, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
-import { api } from "../client";
+import { api, apiSend } from "../client";
 import { NoteComposer } from "./NoteComposer";
 import type { ThreadNotes } from "../shared/api";
 
@@ -23,6 +23,14 @@ export function CommunityNotes({
   const [found, setFound] = useState<ThreadNotes | null>(null);
   const [open, setOpen] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [reported, setReported] = useState<number[]>([]); // hidden for this reader at once
+  const [confirming, setConfirming] = useState<number | null>(null);
+
+  const report = (id: number) => {
+    setReported((r) => [...r, id]);
+    setConfirming(null);
+    apiSend(`/api/notes/${id}/report`, token, "POST").catch(() => {});
+  };
 
   useEffect(() => {
     let live = true;
@@ -67,11 +75,32 @@ export function CommunityNotes({
                   {group.tag} · {group.people} students nearby
                 </Text>
               </View>
-              {group.texts.map((t) => (
-                <Text key={t.id} className="pl-6 text-sm text-foreground dark:text-foreground-dark">
-                  &quot;{t.text}&quot;
-                </Text>
-              ))}
+              {group.texts
+                .filter((t) => !reported.includes(t.id))
+                .map((t) => (
+                  <View key={t.id} className="flex-row items-center gap-2 pl-6">
+                    <Text className="flex-1 text-sm text-foreground dark:text-foreground-dark">&quot;{t.text}&quot;</Text>
+                    {confirming === t.id ? (
+                      <>
+                        <Pressable accessibilityRole="button" onPress={() => report(t.id)} className="min-h-11 justify-center px-2">
+                          <Text className="text-sm underline text-foreground dark:text-foreground-dark">Report it</Text>
+                        </Pressable>
+                        <Pressable accessibilityRole="button" onPress={() => setConfirming(null)} className="min-h-11 justify-center px-2">
+                          <Text className="text-sm text-foreground dark:text-foreground-dark">Cancel</Text>
+                        </Pressable>
+                      </>
+                    ) : (
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel={`Report the note "${t.text}"`}
+                        onPress={() => setConfirming(t.id)}
+                        className="min-h-11 justify-center px-2"
+                      >
+                        <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">Report</Text>
+                      </Pressable>
+                    )}
+                  </View>
+                ))}
             </View>
           ))}
           {student && (
