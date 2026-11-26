@@ -86,8 +86,15 @@ class Database:
             from psycopg_pool import ConnectionPool
 
             self.dialect = "postgres"
+            # No server-side prepared statements: Supabase's transaction pooler (port 6543)
+            # hands each transaction to any backend, where a prepared name may not exist.
             self._pool: Any = ConnectionPool(
-                str(target), min_size=1, max_size=4, open=True, name="demo-store"
+                str(target),
+                min_size=1,
+                max_size=4,
+                open=True,
+                name="demo-store",
+                kwargs={"prepare_threshold": None},
             )
             self._sqlite: sqlite3.Connection | None = None
         else:
