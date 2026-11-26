@@ -152,3 +152,26 @@ def test_text_checks_after_the_all_clear(api: tuple[Any, TestClient]) -> None:
         client, "student_sam", {"tag": "Road closed", "text": "heard a shooter", **KIRKWOOD_400}
     )
     assert held.json()["state"] == "held"
+
+
+def test_readers_see_only_confirmed_notes_without_who(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    app.state.store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+    road = {"tag": "Road closed", "text": "Dunn closed", **KIRKWOOD_400}
+    assert post(client, "student_sam", road).status_code == 201
+
+    def read(who: str) -> dict[str, Any]:
+        found = client.get("/api/threads/t1/notes", headers=auth(client, who))
+        return dict(found.json())
+
+    first = read("parent_mom")
+    assert first["notes"] == [] and first["label"] == "Community notes (unverified)"
+    assert read("student_sam")["mine"]["state"] == "pending"  # the poster sees their own
+    assert post(client, "student_alex", {"tag": "Road closed", **KIRKWOOD_400}).status_code == 201
+    shown = read("parent_mom")
+    assert shown["notes"] == [
+        {"tag": "Road closed", "people": 2, "texts": ["Dunn closed"], "by": "IU student nearby"}
+    ]
+    assert "student_sam" not in str(shown) and shown["mine"] is None
+    app.state.store.set_setting("notes_enabled", "off")
+    assert read("parent_mom")["notes"] == []  # kill switch hides everything

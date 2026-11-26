@@ -173,7 +173,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     Me = Annotated[Account, Depends(current)]
     Console = Annotated[Account, Depends(console)]
     console_api.register(app, console, settings.warehouse, settings.gaps, store, settings.lake_uri)
-    notes_api.register(app, current, store, geojson, notes_config.load())
+    notes_api.register(
+        app,
+        current,
+        store,
+        geojson,
+        notes_config.load(),
+        lambda: "event_night" in hub.clock.windows(),
+        hub.notes_changed,
+    )
 
     @app.get("/api/health")
     def health() -> dict[str, str]:
