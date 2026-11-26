@@ -6,9 +6,9 @@ import json
 from collections.abc import Sequence
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Protocol
 
-from campus_safety.t2.dataset import Dataset, Row
+from campus_safety.t2.dataset import Dataset
 from campus_safety.t2.model import score, tokens
 
 
@@ -18,7 +18,15 @@ def _precision_recall(predicted: Sequence[bool], actual: Sequence[bool]) -> tupl
     return (hits / shown if shown else 0.0, hits / wanted if wanted else 0.0)
 
 
-def fit(train: Sequence[Row]) -> dict[str, Any]:
+class Labeled(Protocol):
+    @property
+    def text(self) -> str: ...
+
+    @property
+    def label(self) -> bool: ...
+
+
+def fit(train: Sequence[Labeled]) -> dict[str, Any]:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
 
