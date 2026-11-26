@@ -185,3 +185,30 @@ def test_log_run_and_kaggle_import(tmp_path: Path, monkeypatch: pytest.MonkeyPat
     assert run.data.metrics["train_seconds"] == 60
     assert run.data.params["hyperparameters.lora_r"] == "16"
     assert run.data.params["gpu"] == "Tesla T4"
+
+
+def test_t3_import_registers_kaggle_outputs_and_keeps_rules(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import json
+    import logging
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.models import registry
+    from campus_safety.t3.cli import main as t3_main
+
+    caplog.set_level(logging.INFO)
+    lake = FileLake(tmp_path / "lake")
+    monkeypatch.setenv("LAKE_URI", lake.uri)
+    missing = tmp_path / "none"
+    assert t3_main(["import", str(missing)]) == 0 and "no Kaggle outputs" in caplog.text
+    outputs = tmp_path / "kaggle"
+    outputs.mkdir()
+    (outputs / "run_info.json").write_text(json.dumps({"run_name": "k1", "train_seconds": 60}))
+    (outputs / "metrics.json").write_text(json.dumps({"t3": {"test": {"exact": 0.5}}}))
+    (outputs / "model.gguf").write_bytes(b"weights stay out of the lake")
+    assert t3_main(["import", str(outputs)]) == 0
+    assert t3_main(["import", str(outputs)]) == 0  # unchanged
+    run = registry.latest(lake, "t3")
+    assert run is not None and not registry.uses_model(run)  # rules until verified rows exist
+    assert set(run.hashes) == {"metrics.json", "run_info.json", "scorecard.json"}

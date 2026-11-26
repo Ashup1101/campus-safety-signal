@@ -92,6 +92,44 @@ def track_kaggle(outputs: Path) -> int:
     return 0
 
 
+def import_kaggle(outputs: Path) -> int:
+    """Register the owner's Kaggle run (run_info.json + metrics.json) in the lake model registry.
+    The model weights (GGUF) stay out of the lake: they run in Ollama, never on this laptop. The
+    switch stays on rules until verified rows exist (method "rules")."""
+    import hashlib
+    import os
+    import shutil
+    import tempfile
+
+    from campus_safety.lake.storage import open_lake
+    from campus_safety.models import registry
+    from campus_safety.t3.track import kaggle_metrics
+
+    if not (outputs / "run_info.json").exists() or not (outputs / "metrics.json").exists():
+        log.info("t3 import: no Kaggle outputs at %s yet; the switch stays on rules", outputs)
+        return 0
+    run_info = json.loads((outputs / "run_info.json").read_text())
+    metrics = kaggle_metrics(json.loads((outputs / "metrics.json").read_text()))
+    if not isinstance(run_info, dict):
+        log.error("t3 import refused: run_info.json is not an object")
+        return 1
+    digest = hashlib.sha256((outputs / "metrics.json").read_bytes()).hexdigest()[:10]
+    card = {
+        "run_id": f"kaggle-{digest}",
+        "method": "rules",  # until verified fallback rows exist
+        "trained_at": str(run_info.get("finished_at") or ""),
+        "scores": metrics,
+    }
+    with tempfile.TemporaryDirectory() as tmp:
+        staging = Path(tmp)
+        for name in ("run_info.json", "metrics.json"):
+            shutil.copyfile(outputs / name, staging / name)
+        (staging / "scorecard.json").write_text(json.dumps(card, sort_keys=True))
+        status = registry.import_run(open_lake(os.environ.get("LAKE_URI")), "t3", staging)
+    log.info("t3 import %s: %s (%d metrics)", card["run_id"], status, len(metrics))
+    return 0
+
+
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="t3", description=__doc__)
     commands = parser.add_subparsers(dest="command", required=True)
@@ -111,6 +149,8 @@ def main(argv: Sequence[str] | None = None) -> int:
     baseline_parser.add_argument("--limit", type=int)
     track_parser = commands.add_parser("track-kaggle", help="log the notebook's outputs to MLflow")
     track_parser.add_argument("outputs", type=Path, help="the downloaded t3_outputs folder")
+    import_parser = commands.add_parser("import", help="register the Kaggle run in the lake")
+    import_parser.add_argument("outputs", type=Path, nargs="?", default=Path("data/t3/kaggle"))
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
     from campus_safety.t3.ollama import OllamaError
@@ -122,6 +162,8 @@ def main(argv: Sequence[str] | None = None) -> int:
             return baseline(args.model, args.split, args.out, args.limit)
         if args.command == "track-kaggle":
             return track_kaggle(args.outputs)
+        if args.command == "import":
+            return import_kaggle(args.outputs)
         return export(args.out)
     except (LakeConfigError, OllamaError) as e:
         log.error("%s", e)
