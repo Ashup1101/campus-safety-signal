@@ -193,6 +193,8 @@ class Store:
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, check_same_thread=False)
         self._db.execute("pragma foreign_keys = on")
+        # Deleted rows (notes, accounts, links) are overwritten, not left in free pages.
+        self._db.execute("pragma secure_delete = on")
         self._db.executescript(SCHEMA.replace("{MAILBOX}", MAILBOX))
         self._add_thread_column()
         self._add_account_columns()
