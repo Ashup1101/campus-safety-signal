@@ -25,7 +25,8 @@
           "locationWhenInUsePermission": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved."
         }
       ],
-      "expo-notifications"
+      "expo-notifications",
+      "expo-secure-store"
     ]
   }
 }
