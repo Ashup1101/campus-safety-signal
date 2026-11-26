@@ -5,6 +5,7 @@ import { ConsoleAlertMetrics } from "@/components/console-alert-metrics";
 import { ChartWithTable } from "@/components/console-charts";
 import { ConsoleForecastMap } from "@/components/console-forecast-map";
 import { ConsoleHealth } from "@/components/console-health";
+import { ConsoleNotes } from "@/components/console-notes";
 import { ConsoleOutlook } from "@/components/console-outlook";
 import { ConsoleReassurance } from "@/components/console-reassurance";
 import { ConsoleTrends } from "@/components/console-trends";
@@ -23,7 +24,7 @@ import {
   type ZoneShapes,
 } from "@/lib/console";
 
-const TABS = ["Overview", "Forecasts", "Gaps", "Cross-check", "Archive", "Alerts", "Health"] as const;
+const TABS = ["Overview", "Forecasts", "Gaps", "Cross-check", "Archive", "Alerts", "Notes", "Health"] as const;
 type Tab = (typeof TABS)[number];
 
 function useConsole<T>(path: string | null, token: string): T | null {
@@ -329,6 +330,14 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
               <ConsoleAlertMetrics token={token} />
               <h3 className="pt-2 text-sm font-medium">Family check-ins (counts only, since the demo started)</h3>
               <ConsoleReassurance token={token} />
+            </Panel>
+          )}
+          {tab === name && name === "Notes" && (
+            <Panel
+              title="Community notes"
+              description="Review held and hidden notes, and IU's switch for all notes. Writers are never shown."
+            >
+              <ConsoleNotes token={token} />
             </Panel>
           )}
           {tab === name && name === "Health" && (
