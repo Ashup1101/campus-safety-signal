@@ -6,6 +6,7 @@ import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, ThreadCard } from "../components/AlertCard";
 import { AreaCheck } from "../components/AreaCheck";
 import { CommunityNotes } from "../components/CommunityNotes";
+import { Survey } from "../components/Survey";
 import { CheckInCard, type Reassure } from "../components/CheckInCard";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { api, apiSend, useSocket, type Session } from "../client";
@@ -171,6 +172,7 @@ export function ParentHome({
             <Text style={{ color: dark ? tokens.warm.dark : tokens.warm.light }}>{notice}</Text>
           </Pressable>
         )}
+        <Survey token={token} />
         {students.length === 0 ? (
           <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
             No student linked yet. Invite your student from Settings; they decide whether to accept.

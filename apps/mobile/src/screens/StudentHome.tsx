@@ -9,6 +9,7 @@ import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCar
 import { CheckingInBadge } from "../components/CheckingInBadge";
 import { AreaCheck } from "../components/AreaCheck";
 import { CommunityNotes } from "../components/CommunityNotes";
+import { Survey } from "../components/Survey";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
@@ -334,6 +335,7 @@ export function StudentHome({
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
+        <Survey token={token} />
         {asking && <ConsentSheet kind={asking.kind} onChoose={choose} />}
         {okRequest && (
           <AreYouOk
