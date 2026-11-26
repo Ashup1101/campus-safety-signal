@@ -26,3 +26,18 @@ def corroborated(
             texts = [str(n["text"]) for n in posted if n.get("text")]
             shown.append({"tag": tag, "people": len(people), "texts": texts})
     return sorted(shown, key=lambda s: (-s["people"], s["tag"]))
+
+
+def refusal(
+    tag: str, text: str | None, *, live: bool, all_clear: bool, cfg: NotesConfig
+) -> str | None:
+    """Why this note may not be posted now, in plain words; None when it may."""
+    if tag not in cfg.tags:
+        return "unknown tag"
+    if live and tag not in cfg.safety_tags:
+        return "only safety tags during a live alert"
+    if live and text:
+        return "text waits for IU's all-clear"
+    if tag in cfg.after_all_clear_tags and not all_clear:
+        return "only after IU's all-clear"
+    return None
