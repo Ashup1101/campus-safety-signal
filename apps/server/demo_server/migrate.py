@@ -107,6 +107,9 @@ def main(argv: list[str] | None = None) -> int:
     run.add_argument("--dry-run", action="store_true", help="print the pending SQL, apply nothing")
     sub.add_parser("check", help="connected, schema version, row-level security (no data shown)")
     args = parser.parse_args(argv)
+    from campus_safety.env import load_keys
+
+    load_keys(names=("DEMO_DATABASE_URL",))  # from .env when not already set; never printed
     url = os.environ.get("DEMO_DATABASE_URL", "")
     if not url.startswith(("postgres://", "postgresql://")):
         print("DEMO_DATABASE_URL is not set to a Postgres connection string.")

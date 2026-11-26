@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test audit check backup schedule unschedule \
+.PHONY: install lint format typecheck test audit check backup schedule unschedule db-migrate db-check \
 	infra-check infra-plan infra-apply lambda-package cloud-off cloud-on transform demo-seed demo-drill demo-all-clear demo-replay \
 	demo-assets demo demo-stop demo-record demo-walk demo-walk-home apps-check
 
@@ -119,6 +119,15 @@ infra-apply: $(TF)
 DEMO := PYTHONPATH=apps/server nice -n 10 uv run python -m demo_server
 demo-seed:
 	$(DEMO) seed
+
+# Supabase / Postgres family data: DEMO_DATABASE_URL in .env (read by the command, never echoed).
+# Unset = SQLite in data/demo/. make db-migrate brings the schema up to date; make db-check
+# reports connection, schema version and row-level security (names and counts only).
+db-migrate:
+	$(DEMO).migrate migrate
+
+db-check:
+	$(DEMO).migrate check
 
 demo-drill:
 	$(DEMO) drill

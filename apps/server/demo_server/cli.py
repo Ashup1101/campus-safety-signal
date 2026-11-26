@@ -11,6 +11,7 @@ import sys
 import urllib.request
 from typing import Any
 
+from campus_safety.env import load_keys
 from demo_server.seed import Settings, seed
 from demo_server.store import Store
 
@@ -41,6 +42,9 @@ def live_feed_on(no_live_feed: bool) -> bool:
     return not no_live_feed and os.environ.get("DEMO_LIVE_FEED", "1") != "0"
 
 
+DATABASE_KEYS = ("DEMO_DATABASE_URL",)
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="demo_server")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -53,6 +57,7 @@ def main(argv: list[str] | None = None) -> int:
     replay.add_argument("replay_id")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(name)s: %(message)s")
+    load_keys(names=DATABASE_KEYS)  # Postgres (Supabase) when .env sets it; never printed
 
     if args.command == "serve":
         import uvicorn
