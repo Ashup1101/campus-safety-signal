@@ -1,7 +1,8 @@
 """Demo accounts (all test accounts), links, watch zones, and activity levels."""
 
 import logging
-from dataclasses import dataclass
+import os
+from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -42,10 +43,14 @@ class Settings:
     lake_uri: str = (ROOT / "data" / "lake").as_uri()
     live_feed: bool = False
     replay_speed: float = 60.0
+    # Postgres (Supabase) when set; a secret, so never shown in repr or logs.
+    database_url: str | None = field(
+        default_factory=lambda: os.environ.get("DEMO_DATABASE_URL") or None, repr=False
+    )
 
     @property
-    def db(self) -> Path:
-        return self.data_dir / "demo.sqlite3"
+    def db(self) -> Path | str:
+        return self.database_url or self.data_dir / "demo.sqlite3"
 
 
 def seed(

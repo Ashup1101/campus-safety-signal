@@ -3,12 +3,14 @@
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
+from demo_target import store_at
+
 from demo_server.seed import ACCOUNTS
 from demo_server.store import Store
 
 
 def test_parallel_lookups_never_lose_an_account(tmp_path: Path) -> None:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     ids = [a.id for a in ACCOUNTS] * 200

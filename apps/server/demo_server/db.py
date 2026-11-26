@@ -65,7 +65,7 @@ class Result:
     rows: list[tuple[Any, ...]] = field(default_factory=list)
     rowcount: int = 0
 
-    def fetchone(self) -> tuple[Any, ...] | None:
+    def fetchone(self) -> Any:  # a row tuple or None, typed loosely like sqlite3
         return self.rows[0] if self.rows else None
 
     def fetchall(self) -> list[tuple[Any, ...]]:

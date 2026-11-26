@@ -6,6 +6,8 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from typing import Any
 
+from demo_target import store_at
+
 from campus_safety.official.alerts import OfficialAlert
 from demo_server.hub import Clock, Hub
 from demo_server.seed import ACCOUNTS
@@ -94,7 +96,7 @@ class Peer:
 
 
 def test_hub_sends_the_drill_and_its_all_clear_on_one_thread(tmp_path: Path) -> None:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
 

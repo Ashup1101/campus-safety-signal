@@ -11,7 +11,7 @@ from campus_safety.env import DOTENV_VAR
 def no_real_keys(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempPathFactory) -> None:
     """CLIs load model keys from .env; tests must never see the owner's real keys."""
     monkeypatch.setenv(DOTENV_VAR, str(tmp_path_factory.getbasetemp() / "no.env"))
-    for name in ("GEMINI_API_KEY", "OPENAI_API_KEY"):
+    for name in ("GEMINI_API_KEY", "OPENAI_API_KEY", "DEMO_DATABASE_URL"):
         monkeypatch.delenv(name, raising=False)
 
 
@@ -45,3 +45,29 @@ def pg_url(_pg_server: Any) -> Iterator[str]:
     yield f"postgresql://{info.get('user', 'postgres')}@/{name}?{query}"
     with psycopg.connect(admin, autocommit=True) as conn:
         conn.execute(f"drop database if exists {name} with (force)")
+
+
+def pytest_addoption(parser: pytest.Parser) -> None:
+    parser.addoption(
+        "--demo-db",
+        choices=("sqlite", "postgres"),
+        default="sqlite",
+        help="database for the demo server tests (postgres = embedded, migrated, per test)",
+    )
+
+
+@pytest.fixture(autouse=True)
+def demo_database(request: pytest.FixtureRequest, no_real_keys: None) -> None:
+    """With --demo-db postgres, each demo test (API and store) gets a fresh migrated database."""
+    if request.config.getoption("--demo-db") != "postgres":
+        return
+    name = request.node.module.__name__.split(".")[-1]
+    if not name.startswith("test_demo_") or name == "test_demo_db":
+        return
+    if request.node.get_closest_marker("sqlite_only"):
+        pytest.skip("checks the SQLite file itself")
+    from demo_server import migrate
+
+    url: str = request.getfixturevalue("pg_url")
+    migrate.migrate(url)
+    request.getfixturevalue("monkeypatch").setenv("DEMO_DATABASE_URL", url)

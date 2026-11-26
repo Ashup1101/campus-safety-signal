@@ -13,6 +13,8 @@ from demo_server.db import (
     to_postgres,
     upsert_sql,
 )
+from demo_server.seed import Settings
+from demo_server.store import Store
 
 
 def test_embedded_postgres_answers(pg_url: str) -> None:
@@ -120,3 +122,21 @@ def test_a_role_without_bypass_sees_no_rows(pg_url: str) -> None:
         conn.execute("set role anon_test")
         assert conn.execute("select count(*) from settings").fetchone() == (0,)
         conn.execute("reset role")
+
+
+def test_store_refuses_an_unmigrated_database_without_showing_the_url(pg_url: str) -> None:
+    with pytest.raises(RuntimeError, match="make db-migrate") as found:
+        Store(pg_url)
+    assert "postgresql" not in str(found.value) and "host=" not in str(found.value)
+    migrate.migrate(pg_url)
+    Store(pg_url).close()
+
+
+def test_settings_pick_the_backend_and_hide_the_url(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+) -> None:
+    assert Settings(data_dir=tmp_path).db == tmp_path / "demo.sqlite3"
+    monkeypatch.setenv("DEMO_DATABASE_URL", "postgresql://svc:secret@db.example.test/postgres")
+    settings = Settings(data_dir=tmp_path)
+    assert settings.db == "postgresql://svc:secret@db.example.test/postgres"
+    assert "secret" not in repr(settings)

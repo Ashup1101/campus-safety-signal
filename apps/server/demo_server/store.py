@@ -4,9 +4,10 @@ Live location and "parent viewing" presence never come here: they live in the hu
 Alert text is stored with suspect descriptions removed; only the live relay carries it verbatim.
 """
 
-import sqlite3
+import re
 import threading
 from collections.abc import Callable
+from contextlib import AbstractContextManager, nullcontext
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from functools import wraps
@@ -16,15 +17,23 @@ from typing import Any, Literal
 from campus_safety.official.alerts import OfficialAlert
 from campus_safety.official.descriptors import strip_descriptors
 from demo_server import signing
+from demo_server.db import Database, insert_ignore_sql, is_postgres_url, upsert_sql
 from demo_server.threads import THREAD_GAP
 
+LINK = upsert_sql("links", ("parent_id", "student_id", "parent_label"), ("parent_id", "student_id"))
+CONSENT = upsert_sql(
+    "consents",
+    ("account_id", "kind", "version", "granted_at", "withdrawn_at"),
+    ("account_id", "kind"),
+)
 Role = Literal["student", "parent", "console"]
 INVITE_LIFETIME = timedelta(days=7)
 
 
 def _locked[**P, R](method: Callable[P, R]) -> Callable[P, R]:
     """FastAPI runs sync handlers in a thread pool; one sqlite connection must serve one call at a
-    time, or parallel lookups interleave and lose rows (spurious 401s and 404s)."""
+    time, or parallel lookups interleave and lose rows (spurious 401s and 404s). Postgres gives
+    each thread its own pooled connection, so it needs no lock."""
 
     @wraps(method)
     def call(*args: P.args, **kwargs: P.kwargs) -> R:
@@ -216,12 +225,20 @@ class Activity:
 
 
 class Store:
-    def __init__(self, path: Path) -> None:
+    def __init__(self, target: Path | str) -> None:
+        """A SQLite file path (default), or a migrated Postgres URL (demo-db migrate)."""
+        self._lock: AbstractContextManager[Any]
+        if is_postgres_url(str(target)):
+            self.path: Path | None = None
+            self._lock = nullcontext()
+            self._check_schema(str(target))
+            self._db = Database(str(target))
+            return
+        path = Path(target)
         path.parent.mkdir(parents=True, exist_ok=True)
         self.path = path
-        # One event loop thread uses it; the flag only allows creating it elsewhere.
         self._lock = threading.RLock()
-        self._db = sqlite3.connect(path, check_same_thread=False)
+        self._db = Database(path)
         self._db.execute("pragma foreign_keys = on")
         # Deleted rows (notes, accounts, links) are overwritten, not left in free pages.
         self._db.execute("pragma secure_delete = on")
@@ -231,7 +248,22 @@ class Store:
         self._widen_mailbox_kinds()
         self._add_invite_relationship()
 
-    @_locked
+    @staticmethod
+    def _check_schema(url: str) -> None:
+        """Refuse to start on an empty or older Postgres schema (the message never has the URL)."""
+        import psycopg
+
+        from demo_server import migrate
+
+        with psycopg.connect(url) as conn:
+            have = migrate.current_version(conn)
+        want = migrate.newest_version()
+        if have < want:
+            raise RuntimeError(
+                f"The database schema is version {have}, the server needs {want}."
+                " Run `make db-migrate` first."
+            )
+
     def _add_thread_column(self) -> None:
         """Databases from before threads: add the column; each old alert is its own thread."""
         columns = {row[1] for row in self._db.execute("pragma table_info(alerts)")}
@@ -240,7 +272,6 @@ class Store:
                 self._db.execute("alter table alerts add column thread_id text")
                 self._db.execute("update alerts set thread_id = id where thread_id is null")
 
-    @_locked
     def _add_account_columns(self) -> None:
         """Databases from before sign-up: add email and self_service; old rows keep working."""
         columns = {row[1] for row in self._db.execute("pragma table_info(accounts)")}
@@ -256,7 +287,6 @@ class Store:
                 " where email is not null"
             )
 
-    @_locked
     def _add_invite_relationship(self) -> None:
         """Invites from before relationships: add the column; old invites show the parent's name."""
         columns = {row[1] for row in self._db.execute("pragma table_info(invites)")}
@@ -264,7 +294,6 @@ class Store:
             with self._db:
                 self._db.execute("alter table invites add column relationship text")
 
-    @_locked
     def _widen_mailbox_kinds(self) -> None:
         """Mailboxes from before sign-up do not accept the 'account' kind: rebuild, keep rows."""
         row = self._db.execute("select sql from sqlite_master where name = 'mailbox'").fetchone()
@@ -302,9 +331,7 @@ class Store:
     @_locked
     def link(self, parent_id: str, student_id: str, label: str) -> None:
         with self._db:
-            self._db.execute(
-                "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
-            )
+            self._db.execute(LINK, (parent_id, student_id, label))
         self.ensure_key(student_id, datetime.now(UTC))
 
     @_locked
@@ -329,26 +356,23 @@ class Store:
                 (account_id, kind),
             ).fetchone()
             if granted:
-                self._db.execute(
-                    "insert or replace into consents values (?, ?, ?, ?, null)",
-                    (account_id, kind, version, at),
-                )
+                self._db.execute(CONSENT, (account_id, kind, version, at, None))
             elif current and current[0]:
                 self._db.execute(
                     "update consents set withdrawn_at = ? where account_id = ? and kind = ?",
                     (at, account_id, kind),
                 )
             else:
-                self._db.execute(
-                    "insert or replace into consents values (?, ?, ?, null, null)",
-                    (account_id, kind, version),
-                )
+                self._db.execute(CONSENT, (account_id, kind, version, None, None))
 
     @_locked
     def set_subscription(self, account_id: str, kind: str, state: str) -> None:
         with self._db:
             self._db.execute(
-                "insert or replace into subscriptions values (?, ?, ?)", (account_id, kind, state)
+                upsert_sql(
+                    "subscriptions", ("account_id", "kind", "state"), ("account_id", "kind")
+                ),
+                (account_id, kind, state),
             )
 
     @_locked
@@ -540,7 +564,8 @@ class Store:
         with self._db:
             return bool(
                 self._db.execute(
-                    "insert or ignore into note_reports values (?, ?)", (note_id, account_id)
+                    insert_ignore_sql("note_reports", ("note_id", "account_id")),
+                    (note_id, account_id),
                 ).rowcount
             )
 
@@ -555,7 +580,8 @@ class Store:
     def ban(self, account_id: str, until: datetime) -> None:
         with self._db:
             self._db.execute(
-                "insert or replace into bans values (?, ?)", (account_id, until.isoformat())
+                upsert_sql("bans", ("account_id", "until"), ("account_id",)),
+                (account_id, until.isoformat()),
             )
 
     @_locked
@@ -573,7 +599,7 @@ class Store:
     @_locked
     def set_setting(self, key: str, value: str) -> None:
         with self._db:
-            self._db.execute("insert or replace into settings values (?, ?)", (key, value))
+            self._db.execute(upsert_sql("settings", ("key", "value"), ("key",)), (key, value))
 
     @_locked
     def provision_key(self, student_id: str, now: datetime) -> tuple[str, str]:
@@ -581,8 +607,12 @@ class Store:
         key_id, secret = signing.new_key()
         with self._db:
             self._db.execute(
-                "insert or replace into device_keys values (?, ?, ?, ?, 0)",
-                (student_id, key_id, secret, now.isoformat()),
+                upsert_sql(
+                    "device_keys",
+                    ("account_id", "key_id", "secret", "created_at", "delivered"),
+                    ("account_id",),
+                ),
+                (student_id, key_id, secret, now.isoformat(), 0),
             )
         return key_id, secret
 
@@ -660,12 +690,12 @@ class Store:
         theirs."""
         with self._db:
             if zone.id is None:
-                cursor = self._db.execute(
+                row = self._db.execute(
                     "insert into zones (account_id, name, lat, lon, radius_m)"
-                    " values (?, ?, ?, ?, ?)",
+                    " values (?, ?, ?, ?, ?) returning id",
                     (account_id, zone.name, zone.lat, zone.lon, zone.radius_m),
-                )
-                return cursor.lastrowid
+                ).fetchone()
+                return int(row[0])
             changed = self._db.execute(
                 "update zones set name = ?, lat = ?, lon = ?, radius_m = ?"
                 " where id = ? and account_id = ?",
@@ -709,7 +739,7 @@ class Store:
     def alerts(self, include_test: bool, limit: int = 50) -> list[dict[str, object]]:
         rows = self._db.execute(
             "select id, source, kind, status, verification, official_at, received_at,"
-            " stored_text, link, thread_id from alerts where test_only = 0 or ?"
+            " stored_text, link, thread_id from alerts where (test_only = 0 or ? = 1)"
             " order by received_at desc limit ?",
             (int(include_test), limit),
         )
@@ -738,7 +768,7 @@ class Store:
     def delivered(self, alert_id: str, account_id: str, client: str, shown_at: datetime) -> None:
         with self._db:
             self._db.execute(
-                "insert or ignore into deliveries values (?, ?, ?, ?)",
+                insert_ignore_sql("deliveries", ("alert_id", "account_id", "client", "shown_at")),
                 (alert_id, account_id, client, shown_at.isoformat()),
             )
 
@@ -774,7 +804,7 @@ class Store:
         now = datetime.now().astimezone().isoformat(timespec="seconds")
         with self._db:
             fresh = self._db.execute(
-                "insert or ignore into sent_keys values (?, ?)", (key, now)
+                insert_ignore_sql("sent_keys", ("key", "sent_at")), (key, now)
             ).rowcount
             if fresh:
                 self._db.execute(
@@ -845,12 +875,12 @@ class Store:
                 (parent_id, email, since),
             ).fetchone():
                 return None
-            cursor = self._db.execute(
+            row = self._db.execute(
                 "insert into invites (parent_id, student_email, status, created_at, relationship)"
-                " values (?, ?, 'pending', ?, ?)",
+                " values (?, ?, 'pending', ?, ?) returning id",
                 (parent_id, email, now.isoformat(), relationship),
-            )
-        return cursor.lastrowid
+            ).fetchone()
+        return int(row[0])
 
     @_locked
     def invites(self, account: "Account", now: datetime) -> list[dict[str, Any]]:
@@ -890,9 +920,7 @@ class Store:
                     "select display_name from accounts where id = ?", (row[0],)
                 ).fetchone()
                 label = row[1] or parent[0]  # what the student sees: "Mom", "Guardian", own words
-                self._db.execute(
-                    "insert or replace into links values (?, ?, ?)", (row[0], student.id, label)
-                )
+                self._db.execute(LINK, (row[0], student.id, label))
         if accept:
             self.ensure_key(student.id, now)
         return str(row[0])
@@ -942,7 +970,8 @@ class Store:
                 "bans",
             ):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
-            self._db.execute("delete from sent_keys where instr(key, ?) > 0", (account.id,))
+            pattern = "%" + re.sub(r"([\\%_])", r"\\\1", account.id) + "%"
+            self._db.execute("delete from sent_keys where key like ? escape '\\'", (pattern,))
             self._db.execute("delete from accounts where id = ?", (account.id,))
 
     @_locked
@@ -956,7 +985,7 @@ class Store:
                 return False
             self._db.execute(
                 "insert into ask_usage values (?, ?, 1) on conflict (account_id, day)"
-                " do update set count = count + 1",
+                " do update set count = ask_usage.count + 1",
                 (account_id, day),
             )
         return True
@@ -981,10 +1010,11 @@ class Store:
     def replace_activity(self, rows: list[Activity]) -> None:
         with self._db:
             self._db.execute("delete from activity")
-            self._db.executemany(
-                "insert into activity values (?, ?, ?, ?, ?, ?)",
-                [(r.segment_id, r.window, r.level, r.reason, r.incidents, r.serious) for r in rows],
-            )
+            for r in rows:
+                self._db.execute(
+                    "insert into activity values (?, ?, ?, ?, ?, ?)",
+                    (r.segment_id, r.window, r.level, r.reason, r.incidents, r.serious),
+                )
 
     @_locked
     def activity(self) -> list[Activity]:

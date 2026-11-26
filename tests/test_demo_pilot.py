@@ -3,13 +3,15 @@
 from datetime import UTC, datetime
 from pathlib import Path
 
+from demo_target import store_at
+
 from demo_server import consents, pilot
 from demo_server.seed import ACCOUNTS
 from demo_server.store import Store
 
 
 def test_pilot_numbers_never_name_anyone(tmp_path: Path) -> None:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     now = datetime.now(UTC)

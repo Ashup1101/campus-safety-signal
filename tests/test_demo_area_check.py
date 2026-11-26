@@ -12,6 +12,7 @@ from demo_server.seed import Settings
 HERE = {"lat": 39.16655, "lon": -86.5290}  # inside the hand-drawn Kirkwood 400 block
 
 
+@pytest.mark.sqlite_only  # reads the SQLite file's bytes
 def test_nearby_levels_and_nothing_kept(tmp_path: Path, caplog: pytest.LogCaptureFixture) -> None:
     caplog.set_level(logging.DEBUG)
     settings = Settings(

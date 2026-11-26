@@ -9,6 +9,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
+from demo_target import columns as table_columns
+from demo_target import rows, store_at, tables
 from test_demo_server import FakePeer, account, hub_for
 
 from demo_server import signing
@@ -55,7 +57,7 @@ def scenario(store: Store) -> list[str]:
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for a in ACCOUNTS:
         store.add_account(a)
     for parent, student, label in LINKS:
@@ -65,9 +67,8 @@ def store(tmp_path: Path) -> Store:
 
 def test_no_table_keeps_a_location_band_or_answer(store: Store, tmp_path: Path) -> None:
     ids = scenario(store)
-    db = sqlite3.connect(tmp_path / "demo.sqlite3")
-    tables = [r[0] for r in db.execute("select name from sqlite_master where type = 'table'")]
-    columns = {(t, c[1]) for t in tables for c in db.execute(f"pragma table_info({t})")}
+    target = store_at(tmp_path)
+    columns = {(t, c) for t in tables(target) for c in table_columns(target, t)}
     location_like = {
         (t, c) for t, c in columns if c in {"lat", "lon", "latitude", "longitude", "location"}
     }
@@ -78,8 +79,9 @@ def test_no_table_keeps_a_location_band_or_answer(store: Store, tmp_path: Path) 
         for t, c in columns
         if t != "survey_answers" and any(w in c for w in ("band", "answer", "request", "sharing"))
     }
-    db.close()
-    raw = (tmp_path / "demo.sqlite3").read_bytes()
+    # The SQLite file's bytes (deleted pages too); on Postgres, every row of every table.
+    everything = [rows(target, t) for t in tables(target)]
+    raw = store.path.read_bytes() if store.path else repr(everything).encode()
     for needle in ("39.123457", "86.512345", "nearby", "call_me", *ids):
         assert needle.encode() not in raw, needle
 
@@ -93,6 +95,7 @@ def test_logs_name_no_one_and_nowhere(store: Store, caplog: pytest.LogCaptureFix
     assert "check-in request answered" in caplog.text and "arrived home sent" in caplog.text
 
 
+@pytest.mark.sqlite_only  # reads the SQLite file's bytes
 def test_notes_leave_no_text_location_or_writer_in_logs_or_the_file(
     tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
 ) -> None:

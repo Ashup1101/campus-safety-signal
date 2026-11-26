@@ -4,6 +4,7 @@ from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from demo_target import store_at
 
 from demo_server import auth
 from demo_server.store import Account, Store
@@ -13,7 +14,7 @@ NOW = datetime(2026, 11, 25, 10, 0, tzinfo=UTC)
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     store.add_account(
         Account("p1", "parent", "Pat", False, email="pat@example.test", self_service=True)
     )

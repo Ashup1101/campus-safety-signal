@@ -118,3 +118,4 @@ ignore_missing_imports = true
 testpaths = ["tests"]
 pythonpath = ["scripts", "apps/server"]
 addopts = "-ra --strict-markers"
+markers = ["sqlite_only: checks the SQLite file itself; skipped with --demo-db postgres"]
