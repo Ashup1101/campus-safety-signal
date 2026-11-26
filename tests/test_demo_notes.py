@@ -248,3 +248,21 @@ def test_the_kill_switch_hides_everything_and_blocks_posting(api: tuple[Any, Tes
         ).status_code
         == 403
     )
+
+
+def test_notes_vanish_a_day_after_the_incident_closes(store: Store) -> None:
+    opened = NOW - timedelta(days=3)
+    store.add_alert("a1", alert("Severe"), opened, "closed")
+    store.add_alert("a2", alert("Normal"), opened + timedelta(hours=1), "closed")
+    store.add_alert("a3", alert("Severe"), NOW - timedelta(hours=2), "open")
+    store.add_alert("a4", alert("Severe"), NOW - timedelta(hours=31), "grey")  # no all-clear
+    for thread in ("closed", "open", "grey"):
+        store.put_note(thread, "student_sam", "Road closed", None, "pending", opened)
+    assert store.expire_notes(NOW - timedelta(days=2) + timedelta(minutes=30), hours=24) == 0
+    # A day after the all-clear; a day after the grey card went quiet (6 h without an update).
+    assert store.expire_notes(NOW, hours=24) == 2
+    assert [store.notes_of(t) != [] for t in ("closed", "open", "grey")] == [False, True, False]
+    db = sqlite3.connect(store.path)
+    assert [
+        r[0] for r in db.execute("select name from sqlite_master where name like '%history%'")
+    ] == []
