@@ -60,7 +60,11 @@ def _rows(warehouse: Path, sql: str) -> list[dict[str, Any]]:
     with duckdb.connect(str(warehouse), read_only=True, config=CONFIG) as con:
         try:
             cursor = con.execute(sql)
-        except duckdb.CatalogException:
+        except (
+            duckdb.CatalogException,
+            duckdb.BinderException,
+            duckdb.IOException,
+        ):  # missing, older or locked (a transform is writing)
             return []
         names = [c[0] for c in cursor.description]
         return [dict(zip(names, row, strict=True)) for row in cursor.fetchall()]
