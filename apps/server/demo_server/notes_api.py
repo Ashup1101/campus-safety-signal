@@ -15,6 +15,7 @@ from campus_safety.geo.place import distance_to_lines
 from campus_safety.notes import filter as text_filter
 from campus_safety.notes import rules
 from campus_safety.notes.config import NotesConfig
+from demo_server import consents
 from demo_server.area import area_for
 from demo_server.store import Account, Store
 from demo_server.threads import THREAD_GAP
@@ -76,6 +77,8 @@ def register(
             raise HTTPException(403, "only students nearby can post")
         if store.setting("notes_enabled", "on") != "on":
             raise HTTPException(403, "notes are switched off")
+        if not consents.allowed(store, student, "notes"):
+            raise HTTPException(403, "turn on community notes in Settings first")
         if store.banned(student.id, now):
             raise HTTPException(403, "posting is paused for this account")
 
