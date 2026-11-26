@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac } from "node:crypto";
-import { BAND_WORDS, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { activeWindows, BAND_WORDS, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -175,4 +175,12 @@ test("arrived home only inside the home area on an event night", () => {
   assert.equal(reachedHomeOnEventNight(home, home, ["late_night"]), false);
   assert.equal(reachedHomeOnEventNight({ lat: 39.01, lon: -86.0 }, home, ["event_night"]), false);
   assert.equal(reachedHomeOnEventNight(home, null, ["event_night"]), false);
+});
+
+test("heads-up windows add Tonight during late night when a forecast covers today", () => {
+  const withTonight = { features: [{ properties: { levels: { tonight: { level: "high", reason: "x" } } } }] };
+  const without = { features: [{ properties: { levels: {} } }] };
+  assert.deepEqual(activeWindows(["late_night", "event_night"], withTonight), ["late_night", "event_night", "tonight"]);
+  assert.deepEqual(activeWindows(["late_night"], without), ["late_night"]);
+  assert.deepEqual(activeWindows([], withTonight), []);
 });

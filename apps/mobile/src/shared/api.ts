@@ -207,6 +207,13 @@ export function hasTonight(segments: Pick<Segments, "features"> | null): boolean
 }
 
 // Which method made tonight's levels, from the reason the server writes ("..., simple rule)").
+/** Windows a heads-up checks right now: the clock's (late night, event night), plus Tonight's
+ * forecast during late night when one covers today. */
+export function activeWindows(clockWindows: string[], segments: Pick<Segments, "features"> | null): TimeWindow[] {
+  const found = clockWindows.filter((w): w is TimeWindow => w === "late_night" || w === "event_night");
+  return found.includes("late_night") && hasTonight(segments) ? [...found, "tonight"] : found;
+}
+
 export function tonightMethod(segments: Pick<Segments, "features"> | null): string | null {
   const reason = (segments?.features ?? []).find((f) => f.properties.levels.tonight)?.properties.levels.tonight?.reason;
   if (!reason) return null;

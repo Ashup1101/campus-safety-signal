@@ -16,6 +16,7 @@ import { AreYouOk } from "../components/AreYouOk";
 import { answerBand } from "../signing";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
+  activeWindows,
   hasTonight,
   levelFor,
   reachedHomeOnEventNight,
@@ -229,7 +230,8 @@ export function StudentHome({
           } else if (now.sharing === "on" && now.viewers.length > 0) {
             send({ type: "location", ...point });
           }
-          const hit = highSegmentHere(point, now.segments?.features ?? [], now.clock?.windows ?? []);
+          const windows = activeWindows(now.clock?.windows ?? [], now.segments);
+          const hit = highSegmentHere(point, now.segments?.features ?? [], windows);
           if (hit && lastHeadsUp.current !== hit.feature.id) {
             lastHeadsUp.current = hit.feature.id;
             const { reason } = levelFor(hit.feature, hit.window);
