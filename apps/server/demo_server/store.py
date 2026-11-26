@@ -273,6 +273,26 @@ class Store:
             )
         self.provision_key(student_id, datetime.now(UTC))
 
+    @_locked
+    def thread_info(self, thread_id: str) -> dict[str, Any] | None:
+        """An alert thread for notes: its words, whether test accounts only, when it opened and
+        when IU's all-clear ("Normal") closed it (None while open)."""
+        rows = self._db.execute(
+            "select stored_text, test_only, status, received_at from alerts where thread_id = ?"
+            " order by received_at",
+            (thread_id,),
+        ).fetchall()
+        if not rows:
+            return None
+        closed = next((r[3] for r in rows if str(r[2]).strip().lower() == "normal"), None)
+        return {
+            "text": " ".join(str(r[0]) for r in rows),
+            "test_only": bool(rows[0][1]),
+            "opened_at": datetime.fromisoformat(rows[0][3]),
+            "last_at": datetime.fromisoformat(rows[-1][3]),
+            "closed_at": datetime.fromisoformat(closed) if closed else None,
+        }
+
     # Community notes (v9): no location anywhere; one note per person per incident thread.
     NOTE_COLUMNS = ("id", "thread_id", "account_id", "tag", "text", "state", "created_at")
 

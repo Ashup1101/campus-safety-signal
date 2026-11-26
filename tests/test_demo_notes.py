@@ -58,3 +58,97 @@ def test_reports_bans_settings_and_delete(store: Store) -> None:
     assert sam is not None
     store.delete_account(sam)
     assert store.notes_of("t1") == [] and not store.banned("student_sam", NOW)
+
+
+# --- posting through the API ---
+
+from typing import Any  # noqa: E402
+
+from fastapi.testclient import TestClient  # noqa: E402
+
+from campus_safety.official.alerts import OfficialAlert  # noqa: E402
+from demo_server import notes_api  # noqa: E402
+from demo_server.app import create_app  # noqa: E402
+from demo_server.seed import Settings  # noqa: E402
+
+KIRKWOOD_400 = {"lat": 39.16655, "lon": -86.5290}  # on the hand-drawn 400 block
+FAR = {"lat": 39.20, "lon": -86.60}
+
+
+def alert(status: str) -> OfficialAlert:
+    return OfficialAlert(
+        source="feed",
+        kind="web_page",
+        text="DRILL: Police activity in the 400 block of E Kirkwood Ave. Avoid the area.",
+        verification="drill",
+        official_at=None,
+        status=status,
+    )
+
+
+@pytest.fixture
+def api(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> tuple[Any, TestClient]:
+    monkeypatch.setattr(notes_api, "names_detector", lambda text: [])
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+    )
+    return app, TestClient(app)
+
+
+def auth(client: TestClient, who: str) -> dict[str, str]:
+    token = client.post("/api/login", json={"account_id": who}).json()["token"]
+    return {"Authorization": f"Bearer {token}"}
+
+
+def post(client: TestClient, who: str, body: dict[str, Any], method: str = "post") -> Any:
+    return client.request(
+        method.upper(), "/api/threads/t1/note", headers=auth(client, who), json=body
+    )
+
+
+def test_students_nearby_post_one_note_and_can_edit_or_withdraw(
+    api: tuple[Any, TestClient],
+) -> None:
+    app, client = api
+    store = app.state.store
+    now = datetime.now(UTC)  # the API checks expiry against the real clock
+    store.add_alert("a1", alert("Severe"), now - timedelta(minutes=5), "t1")
+    store.add_alert("a2", alert("Normal"), now - timedelta(minutes=1), "t1")  # all-clear
+    made = post(
+        client, "student_sam", {"tag": "Road closed", "text": "Dunn closed", **KIRKWOOD_400}
+    )
+    assert made.status_code == 201 and made.json()["state"] == "pending"
+    edited = post(client, "student_sam", {"tag": "Area reopened", **KIRKWOOD_400}, "put")
+    assert edited.json()["id"] == made.json()["id"]
+    assert [n["tag"] for n in store.notes_of("t1")] == ["Area reopened"]
+    assert post(client, "student_sam", {}, "delete").status_code == 204
+    assert store.notes_of("t1") == []
+
+
+def test_who_and_where_may_post(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    store = app.state.store
+    store.add_alert("a1", alert("Severe"), datetime.now(UTC), "t1")
+    body = {"tag": "Police on scene", **KIRKWOOD_400}
+    assert post(client, "parent_mom", body).status_code == 403  # parents read only
+    assert post(client, "student_sam", {**body, **FAR}).json()["detail"] == "not near this area"
+    store.ban("student_alex", datetime.now(UTC) + timedelta(days=1))
+    assert post(client, "student_alex", body).status_code == 403
+    live = post(client, "student_sam", {"tag": "Crowd gathering", **KIRKWOOD_400})
+    assert live.json()["detail"] == "only safety tags during a live alert"
+    blocked = {"tag": "Police on scene", "text": "call 812-555-0100", **KIRKWOOD_400}
+    assert post(client, "student_sam", blocked).json()["detail"] == "text waits for IU's all-clear"
+    assert post(client, "student_sam", body).status_code == 201
+    other = client.post("/api/threads/nope/note", headers=auth(client, "student_sam"), json=body)
+    assert other.status_code == 404
+
+
+def test_text_checks_after_the_all_clear(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    app.state.store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+    phone = {"tag": "Road closed", "text": "call 812-555-0100", **KIRKWOOD_400}
+    assert post(client, "student_sam", phone).json()["detail"] == "phone number"
+    held = post(
+        client, "student_sam", {"tag": "Road closed", "text": "heard a shooter", **KIRKWOOD_400}
+    )
+    assert held.json()["state"] == "held"
