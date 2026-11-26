@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Pressable, Text } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import type { Session } from "./src/client";
+import { AppFooter } from "./src/components/AppFooter";
 import { Login } from "./src/screens/Login";
 import { ParentHome } from "./src/screens/ParentHome";
 import { Settings } from "./src/screens/Settings";
@@ -38,6 +39,7 @@ export default function App() {
     <SafeAreaProvider>
       <StatusBar style="auto" />
       {session ? <Screens session={session} onLeave={() => setSession(null)} /> : <Login onSession={setSession} />}
+      <AppFooter />
     </SafeAreaProvider>
   );
 }
