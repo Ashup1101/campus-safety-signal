@@ -11,7 +11,8 @@ import { AreaCheck } from "../components/AreaCheck";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
-import { signingKey } from "../home";
+import { reassurance, signingKey } from "../home";
+import { AreYouOk } from "../components/AreYouOk";
 import { answerBand } from "../signing";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
@@ -68,6 +69,7 @@ export function StudentHome({
   const dark = useColorScheme() === "dark";
   const token = session.token;
   const [viewers, setViewers] = useState<string[]>([]);
+  const [okRequest, setOkRequest] = useState<{ request_id: string; from: string } | null>(null);
   const [sharing, setSharing] = useState<Sharing>("off");
   const [untilHome, setUntilHome] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -127,6 +129,18 @@ export function StudentHome({
       case "band_request":
         answerBand(message.request_id).then(reply);
         break;
+      case "ok_request": {
+        const request = { request_id: message.request_id, from: message.from };
+        reassurance.get().then((settings) => {
+          if (!settings.areYouOk) {
+            reply({ type: "ok_answer", request_id: request.request_id, answer: "off" });
+            return;
+          }
+          setOkRequest(request);
+          notify(`${request.from} is asking: are you OK?`, "Open the app to answer.");
+        });
+        break;
+      }
       case "check_in": {
         const latest = message.check_in;
         setCheckIns((list) => [...list.filter((c) => c.thread_id !== latest.thread_id), latest]);
@@ -243,6 +257,15 @@ export function StudentHome({
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
+        {okRequest && (
+          <AreYouOk
+            from={okRequest.from}
+            onAnswer={(answer) => {
+              send({ type: "ok_answer", request_id: okRequest.request_id, answer });
+              setOkRequest(null);
+            }}
+          />
+        )}
         <Scoreboard tonight={tonight} windowLabel={windowLabel} dark={dark} />
         <View className="mt-3 h-80 overflow-hidden rounded-xl">
           <ActivityMap segments={segments} window={window} dark={dark} onSelect={setSelected} points={points} />

@@ -460,6 +460,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(403, "only a linked parent can ask")
         return {"request_id": request_id}
 
+    @app.post("/api/are-you-ok/{student_id}", status_code=202)
+    async def are_you_ok(student_id: str, me: Me) -> dict[str, str]:
+        """A linked parent sends "Are you OK?"; the student is asked first."""
+        request_id = await hub.ask_ok(me, student_id)
+        if request_id is None:
+            raise HTTPException(403, "only a linked parent can ask")
+        return {"request_id": request_id}
+
     @app.get("/api/latency")
     def latency(_: Console) -> list[dict[str, object]]:
         # Check-ins are counted, never shown: no names, states or places reach the console.

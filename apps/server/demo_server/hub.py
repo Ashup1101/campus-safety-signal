@@ -32,6 +32,9 @@ from demo_server.threads import Threads
 SHARING = ("on", "paused", "off")
 CLIENTS = ("web", "ios")
 BAND_TIMEOUT_S = 60.0  # no answer by then: "couldn't reach the phone", never "away"
+OK_TIMEOUT_S = 600.0  # "Are you OK?": the parent hears "No answer yet" only after 10 minutes
+OK_FORGET_AFTER = 6  # an unanswered nudge is forgotten after 6 x the timeout (an hour)
+OK_ANSWERS = ("ok", "call_me", "off")
 CHECK_IN_STATES = ("safe", "sheltering")
 # Same fixed list as SHELTER_PLACES in apps/*/src/shared/api.ts (no free text, so no names).
 SHELTER_PLACES = ("my room", "a campus building", "a friend's place", "the library", "off campus")
@@ -105,6 +108,8 @@ class Hub:
         self._timers: set[asyncio.Task[None]] = set()
         self.band_timeout = BAND_TIMEOUT_S
         self.verifier = signing.Verifier()
+        self._ok: dict[str, tuple[str, str]] = {}  # "Are you OK?" id -> (parent, student)
+        self.ok_timeout = OK_TIMEOUT_S
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -185,6 +190,56 @@ class Hub:
             await self._check_in(account, data)
         elif kind == "band_answer":
             await self._band_answer(account, data)
+        elif kind == "ok_answer":
+            await self._ok_answer(account, data)
+
+    def pending_ok_requests(self) -> int:
+        return len(self._ok)
+
+    def _later(self, work: Any) -> None:
+        timer = asyncio.create_task(work)
+        self._timers.add(timer)
+        timer.add_done_callback(self._timers.discard)
+
+    async def ask_ok(self, parent: Account, student_id: str) -> str | None:
+        """ "Are you OK?" goes to the student only; the parent hears the answer, or "No answer yet"
+        after ok_timeout. None when the parent is not linked."""
+        label = self.store.parents_of(student_id).get(parent.id)
+        if parent.role != "parent" or label is None:
+            return None
+        request_id = secrets.token_hex(8)
+        self._ok[request_id] = (parent.id, student_id)
+        await self._send(
+            student_id, {"type": "ok_request", "request_id": request_id, "from": label}
+        )
+        self._later(self._ok_expire(request_id))
+        return request_id
+
+    async def _ok_expire(self, request_id: str) -> None:
+        await asyncio.sleep(self.ok_timeout)
+        entry = self._ok.get(request_id)
+        if entry:
+            await self._ok_result(entry, request_id, "no_answer")
+            await asyncio.sleep(self.ok_timeout * (OK_FORGET_AFTER - 1))
+            self._ok.pop(request_id, None)
+
+    async def _ok_answer(self, student: Account, data: dict[str, Any]) -> None:
+        request_id, answer = data.get("request_id"), data.get("answer")
+        entry = self._ok.get(request_id) if isinstance(request_id, str) else None
+        if entry is None or entry[1] != student.id or answer not in OK_ANSWERS:
+            return
+        del self._ok[str(request_id)]
+        await self._ok_result(entry, str(request_id), str(answer))
+
+    async def _ok_result(self, entry: tuple[str, str], request_id: str, state: str) -> None:
+        message = {
+            "type": "ok_result",
+            "request_id": request_id,
+            "student_id": entry[1],
+            "state": state,
+        }
+        await self._send(entry[0], message)
+        log.info("are-you-ok %s", state)
 
     def pending_band_requests(self) -> int:
         return len(self._band)
@@ -203,9 +258,7 @@ class Hub:
         await self._send(
             student_id, {"type": "band_request", "request_id": request_id, "from": label}
         )
-        timer = asyncio.create_task(self._band_expire(request_id))
-        self._timers.add(timer)
-        timer.add_done_callback(self._timers.discard)
+        self._later(self._band_expire(request_id))
         return request_id
 
     async def _band_expire(self, request_id: str) -> None:
