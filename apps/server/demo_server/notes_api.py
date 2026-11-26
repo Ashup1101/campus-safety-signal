@@ -151,6 +151,16 @@ def register(
             await changed(str(note["thread_id"]))
         return {"hidden": hidden}
 
+    @app.get("/api/notes/config")
+    def notes_settings(_: Me) -> dict[str, Any]:
+        """What the composer offers: tags, the live-alert and after-all-clear subsets, text size."""
+        return {
+            "tags": list(cfg.tags),
+            "safety_tags": list(cfg.safety_tags),
+            "after_all_clear_tags": list(cfg.after_all_clear_tags),
+            "text_limit": cfg.text_limit,
+        }
+
     @app.get("/api/threads/{thread_id}/notes")
     def read_notes(thread_id: str, who: Me) -> dict[str, Any]:
         """Confirmed notes only, with no account named; the reader's own note (any state)."""

@@ -399,6 +399,7 @@ export function StudentHome({
                 threadId={thread.id}
                 version={(notesVersion[thread.id] ?? 0) + (notesVersion["*"] ?? 0)}
                 muted={dark ? "#c9bba9" : "#5c4f4a"}
+                student={{ live: thread.live, closed: thread.closed }}
               />
             </ThreadCard>
           ))

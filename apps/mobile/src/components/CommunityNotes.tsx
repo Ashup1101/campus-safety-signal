@@ -2,6 +2,7 @@ import { ChevronDown, ChevronRight, Users } from "lucide-react-native";
 import { useEffect, useState } from "react";
 import { Pressable, Text, View } from "react-native";
 import { api } from "../client";
+import { NoteComposer } from "./NoteComposer";
 import type { ThreadNotes } from "../shared/api";
 
 /** Confirmed community notes under IU's alert, collapsed by default and always labeled
@@ -11,14 +12,17 @@ export function CommunityNotes({
   threadId,
   version,
   muted,
+  student,
 }: {
   token: string;
   threadId: string;
   version: number; // bumps when the server says this thread's notes changed
   muted: string;
+  student?: { live: boolean; closed: boolean }; // students may post; parents read only
 }) {
   const [found, setFound] = useState<ThreadNotes | null>(null);
   const [open, setOpen] = useState(false);
+  const [refresh, setRefresh] = useState(0);
 
   useEffect(() => {
     let live = true;
@@ -29,7 +33,7 @@ export function CommunityNotes({
     return () => {
       live = false;
     };
-  }, [token, threadId, version]);
+  }, [token, threadId, version, refresh]);
 
   if (!found || !found.enabled) return null;
   const count = found.notes.length;
@@ -60,7 +64,7 @@ export function CommunityNotes({
               <View className="flex-row items-center gap-2">
                 <Users size={14} color={muted} />
                 <Text className="text-sm font-medium text-foreground dark:text-foreground-dark">
-                  {group.tag} · {group.people} {group.by}s
+                  {group.tag} · {group.people} students nearby
                 </Text>
               </View>
               {group.texts.map((t) => (
@@ -70,6 +74,17 @@ export function CommunityNotes({
               ))}
             </View>
           ))}
+          {student && (
+            <NoteComposer
+              key={found.mine?.tag ?? "new"}
+              token={token}
+              threadId={threadId}
+              live={student.live}
+              closed={student.closed}
+              mine={found.mine}
+              onSaved={() => setRefresh((n) => n + 1)}
+            />
+          )}
           {found.mine && found.mine.state !== "visible" && (
             <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
               Your note: {found.mine.tag}{" "}

@@ -521,3 +521,17 @@ export interface ThreadNotes {
   mine: { tag: string; text: string | null; state: "held" | "pending" | "visible" | "hidden" } | null;
   enabled: boolean;
 }
+
+export interface NotesSettings {
+  tags: string[];
+  safety_tags: string[];
+  after_all_clear_tags: string[];
+  text_limit: number;
+}
+
+/** Tags a student may pick now: safety tags only while IU's alert is live; "it's fine" tags only
+ * after IU's all-clear. Mirrors the server's rules (the server decides). */
+export function allowedTags(settings: NotesSettings, live: boolean, closed: boolean): string[] {
+  if (live) return settings.safety_tags;
+  return settings.tags.filter((t) => closed || !settings.after_all_clear_tags.includes(t));
+}
