@@ -13,6 +13,7 @@ from botocore.exceptions import BotoCoreError, ClientError
 
 from campus_safety.env import load_keys
 from campus_safety.lake.storage import LakeConfigError, open_lake
+from campus_safety.models import gates
 from campus_safety.news import evaluate, providers
 from campus_safety.news.extract import CachedLLMExtractor, Extractor, RulesExtractor
 from campus_safety.news.items import Item
@@ -35,14 +36,17 @@ def extract(cache: Path, provider: str, model: str, limit: int) -> int:
     usage = Usage()
     generate = providers.generator(provider, model, json_mode=True, usage=usage)
     extractor = CachedLLMExtractor(cache, model, generate)
-    relevant = [i for i in found if screen(i.text).relevant]
+    # T2 decides relevance only when its newest run beat the rule; otherwise the rule does.
+    t2 = gates.text_gate(open_lake(os.environ.get("LAKE_URI")), "t2")
+    relevant = [i for i in found if (t2(i.text) if t2 else screen(i.text).relevant)]
     # Flagged items are extracted by rules only, so a model call on them would be wasted credit.
     safe = [i for i in relevant if not screen(i.text).injection_suspected]
     todo = [i for i in safe if not extractor.cached(screen(i.text).text)][:limit]
     log.info(
-        "%d items, %d relevant, %d to extract (cached: %d)",
+        "%d items, %d relevant (by %s), %d to extract (cached: %d)",
         summary.items,
         len(relevant),
+        "T2" if t2 else "rules",
         len(todo),
         len(relevant) - len(todo),
     )
