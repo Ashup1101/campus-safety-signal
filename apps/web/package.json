@@ -5,7 +5,7 @@
   "scripts": {
     "dev": "next dev -p 3100",
     "lint": "eslint",
-    "test": "node --test src/shared/api.test.mjs",
+    "test": "node --test src/shared/api.test.mjs src/lib/console.test.mjs",
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
