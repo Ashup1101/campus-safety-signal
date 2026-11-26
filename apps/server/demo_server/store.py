@@ -409,6 +409,18 @@ class Store:
         return [str(r[0]) for r in rows]
 
     @_locked
+    def reach(self) -> dict[str, int]:
+        """How many family accounts ever saw an alert on a device, out of all family accounts."""
+        family = self._db.execute(
+            "select count(*) from accounts where role in ('student', 'parent')"
+        ).fetchone()[0]
+        reached = self._db.execute(
+            "select count(distinct d.account_id) from deliveries d"
+            " join accounts a on a.id = d.account_id where a.role in ('student', 'parent')"
+        ).fetchone()[0]
+        return {"family_accounts": int(family), "reached": int(reached)}
+
+    @_locked
     def ensure_key(self, student_id: str, now: datetime) -> None:
         """A key for a newly linked student. A second parent linking keeps the phone's key; a
         relink after the last unlink gets a fresh one (unlink drops it)."""

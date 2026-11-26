@@ -16,7 +16,7 @@ from campus_safety import events, gaps
 from campus_safety.lake import health
 from campus_safety.lake.storage import open_lake
 from campus_safety.models import registry
-from demo_server import forecasts, metrics
+from demo_server import forecasts, metrics, pilot
 from demo_server.store import Store
 
 CONFIG: dict[str, str | bool | int | float | list[str]] = {"memory_limit": "1GB", "threads": 2}
@@ -191,3 +191,8 @@ def register(
                 }
             )
         return cards
+
+    @app.get("/api/console/pilot")
+    def console_pilot(_: Console) -> dict[str, Any]:
+        """Pilot numbers on one page: counts, medians and averages, never a person."""
+        return pilot.metrics(store, datetime.now(UTC))
