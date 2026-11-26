@@ -88,3 +88,44 @@ def test_logs_name_no_one_and_nowhere(store: Store, caplog: pytest.LogCaptureFix
     for needle in ("39.12", "86.51", "nearby", "Sam", "student_sam", "Mom", *ids):
         assert needle not in caplog.text, needle
     assert "check-in request answered" in caplog.text and "arrived home sent" in caplog.text
+
+
+def test_notes_leave_no_text_location_or_writer_in_logs_or_the_file(
+    tmp_path: Path, caplog: pytest.LogCaptureFixture, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from fastapi.testclient import TestClient
+    from test_demo_notes import KIRKWOOD_400, alert
+
+    from demo_server import notes_api
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    monkeypatch.setattr(notes_api, "names_detector", lambda text: [])
+    caplog.set_level(logging.DEBUG)
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+    )
+    client = TestClient(app)
+    app.state.store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+
+    def auth(who: str) -> dict[str, str]:
+        token = client.post("/api/login", json={"account_id": who}).json()["token"]
+        return {"Authorization": f"Bearer {token}"}
+
+    words = "Kirkwood closed near Dunn zebra"
+    for who in ("student_sam", "student_alex"):
+        body = {"tag": "Road closed", "text": words, **KIRKWOOD_400}
+        assert client.post("/api/threads/t1/note", headers=auth(who), json=body).status_code == 201
+    note_id = app.state.store.notes_of("t1")[0]["id"]
+    client.post(f"/api/notes/{note_id}/report", headers=auth("parent_mom"))
+    client.post(f"/api/console/notes/{note_id}/ban", headers=auth("console"))
+    client.delete("/api/threads/t1/note", headers=auth("student_alex"))
+    for needle in ("zebra", "39.166", "86.529", "student_sam", "student_alex", "Sam", "Alex"):
+        assert needle not in caplog.text, needle
+    db = sqlite3.connect(tmp_path / "d" / "demo.sqlite3")
+    assert db.execute("select count(*) from notes").fetchone() == (0,)
+    assert db.execute("select count(*) from note_reports").fetchone() == (0,)
+    db.close()
+    assert (
+        b"zebra" not in (tmp_path / "d" / "demo.sqlite3").read_bytes()
+    )  # wiped, not just unlinked
