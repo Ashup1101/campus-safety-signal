@@ -176,6 +176,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     notes_api.register(
         app,
         current,
+        console,
         store,
         geojson,
         notes_config.load(),
