@@ -14,6 +14,8 @@ import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
 import { homeArea, reassurance, signingKey } from "../home";
 import { AreYouOk } from "../components/AreYouOk";
+import { ConsentSheet } from "../components/ConsentSheet";
+import { consentsApi, type ConsentKind, type ConsentState } from "../consents";
 import { answerBand } from "../signing";
 import { notifyAreYouOk, onAreYouOkAnswer, registerAreYouOk } from "../notifications";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
@@ -75,6 +77,25 @@ export function StudentHome({
   const token = session.token;
   const [viewers, setViewers] = useState<string[]>([]);
   const [okRequest, setOkRequest] = useState<{ request_id: string; from: string } | null>(null);
+  // Consents (Sprint 11): asked the first time each feature is used; location waits for a yes.
+  const [consent, setConsent] = useState<Partial<Record<ConsentKind, ConsentState>>>({});
+  const [asking, setAsking] = useState<{ kind: ConsentKind; then?: () => void } | null>(null);
+  useEffect(() => {
+    consentsApi.list(token).then((found) => {
+      const states = Object.fromEntries(found.map((c) => [c.kind, c.state]));
+      setConsent(states);
+      if (states.location_precise === "not_asked") setAsking({ kind: "location_precise" });
+    }, () => {});
+  }, [token]);
+  const choose = async (granted: boolean) => {
+    const current = asking;
+    setAsking(null);
+    if (!current) return;
+    await consentsApi.choose(token, current.kind, granted).catch(() => null);
+    setConsent((c) => ({ ...c, [current.kind]: granted ? "granted" : "declined" }));
+    if (granted) current.then?.();
+  };
+  const locationOk = consent.location_precise === "granted";
   const [sharing, setSharing] = useState<Sharing>("off");
   const [untilHome, setUntilHome] = useState(false);
   const [alerts, setAlerts] = useState<Alert[]>([]);
@@ -136,6 +157,9 @@ export function StudentHome({
       case "signing":
         signingKey.set({ key_id: message.key_id, secret: message.secret });
         break;
+      case "consent_needed":
+        setAsking({ kind: message.kind as ConsentKind });
+        break;
       case "band_request":
         answerBand(message.request_id).then(reply);
         break;
@@ -195,6 +219,12 @@ export function StudentHome({
     [send],
   );
 
+  const share = (home: boolean) => {
+    const start = () => changeSharing("on", home);
+    if (consent.sharing === "granted") start();
+    else setAsking({ kind: "sharing", then: start });
+  };
+
   // The location loop reads the newest state through a ref, so it never restarts.
   // Home area and the student's "Arrived home" switch, read from this phone's secure store.
   const mine = useRef<{ home: Area | null; arrivedHome: boolean; sent: boolean }>({
@@ -224,6 +254,7 @@ export function StudentHome({
     let subscription: Location.LocationSubscription | null = null;
     let stopped = false;
     (async () => {
+      if (!locationOk) return; // no location at all before the student says yes
       const permission = await Location.requestForegroundPermissionsAsync();
       if (!permission.granted || stopped) return;
       subscription = await Location.watchPositionAsync(
@@ -269,7 +300,7 @@ export function StudentHome({
       stopped = true;
       subscription?.remove();
     };
-  }, [changeSharing, send]);
+  }, [changeSharing, send, locationOk]);
 
   const withTonight = hasTonight(segments);
   const picked = chosen === "tonight" && !withTonight ? null : chosen;
@@ -303,6 +334,7 @@ export function StudentHome({
       {banner && <AlertBanner alert={banner} dark={dark} onClose={() => setBanner(null)} />}
       <ScrollView contentContainerClassName="px-4 pb-10">
         <CheckingInBadge viewers={viewers} dark={dark} onPause={() => changeSharing("paused")} />
+        {asking && <ConsentSheet kind={asking.kind} onChoose={choose} />}
         {okRequest && (
           <AreYouOk
             from={okRequest.from}
@@ -361,11 +393,11 @@ export function StudentHome({
           <View className="flex-row flex-wrap gap-2">
             {sharing !== "on" ? (
               <>
-                <Pressable onPress={() => changeSharing("on")} className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark">
+                <Pressable onPress={() => share(false)} className="min-h-11 flex-row items-center rounded-full bg-primary px-4 dark:bg-primary-dark">
                   <MapPin size={14} color={dark ? "#1c1416" : "#f5efe3"} />
                   <Text className="ml-1.5 text-sm font-medium text-primary-foreground dark:text-primary-foreground-dark">Share</Text>
                 </Pressable>
-                <Pressable onPress={() => changeSharing("on", true)} className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark">
+                <Pressable onPress={() => share(true)} className="min-h-11 flex-row items-center rounded-full border border-border px-4 dark:border-border-dark">
                   <House size={14} color={primary} />
                   <Text className="ml-1.5 text-sm text-foreground dark:text-foreground-dark">Share until I&apos;m home</Text>
                 </Pressable>

@@ -2,7 +2,9 @@ import * as Location from "expo-location";
 import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View } from "react-native";
 import { api, apiSend } from "../client";
+import { consentsApi } from "../consents";
 import { allowedTags, type NotesSettings, type ThreadNotes } from "../shared/api";
+import { ConsentSheet } from "./ConsentSheet";
 
 /** A student's own note on this alert: one tag, optional short text after the all-clear. The
  * phone's position is sent once for the nearby check and never saved. */
@@ -26,6 +28,7 @@ export function NoteComposer({
   const [text, setText] = useState(mine?.text ?? "");
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [askNotes, setAskNotes] = useState(false);
 
   useEffect(() => {
     api<NotesSettings>("/api/notes/config", token).then(setSettings, () => {});
@@ -47,6 +50,10 @@ export function NoteComposer({
       const body = { tag, text: live ? null : text.trim() || null, lat: here.coords.latitude, lon: here.coords.longitude };
       const response = await apiSend(path, token, mine ? "PUT" : "POST", body);
       const answer = (await response.json()) as { state?: string; detail?: string };
+      if (response.status === 403 && answer.detail?.includes("community notes")) {
+        setAskNotes(true); // first post: ask for the notes consent, then try again
+        return;
+      }
       if (!response.ok) {
         setNote(`Not posted: ${answer.detail ?? "try again"}.`);
         return;
@@ -67,6 +74,20 @@ export function NoteComposer({
     setNote("Your note was withdrawn.");
     onSaved();
   };
+
+  if (askNotes) {
+    return (
+      <ConsentSheet
+        kind="notes"
+        onChoose={async (granted) => {
+          setAskNotes(false);
+          if (!granted) return setNote("Notes stay off. You can still read them.");
+          await consentsApi.choose(token, "notes", true).catch(() => null);
+          await save();
+        }}
+      />
+    );
+  }
 
   return (
     <View className="mt-2 gap-2">
