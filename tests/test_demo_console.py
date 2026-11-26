@@ -232,3 +232,10 @@ def test_a_rule_only_run_is_not_called_a_lost_model(tmp_path: Path) -> None:
         for c in client.get("/api/console/models", headers=login(client, "console")).json()
     }
     assert cards["t1"]["words"] == "Using rules: this run trained no model"
+
+
+def test_every_page_can_show_when_the_data_was_updated(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    assert client.get("/api/data-updated").json()["updated_at"]  # no sign-in needed: a date only
+    empty = client_for(tmp_path / "none", with_gaps=False)
+    assert empty.get("/api/data-updated").json() == {"updated_at": None}

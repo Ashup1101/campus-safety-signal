@@ -203,6 +203,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/data-updated")
+    def data_updated() -> dict[str, str | None]:
+        """When the public data was last rebuilt, for every page's footer."""
+        path = settings.warehouse
+        if not path.exists():
+            return {"updated_at": None}
+        stamp = datetime.fromtimestamp(path.stat().st_mtime, UTC)
+        return {"updated_at": stamp.isoformat(timespec="minutes")}
+
     def send_link(account: Account) -> bool:
         """A sign-in link to the account's mailbox, at most LINKS_PER_HOUR an hour."""
         now = datetime.now(UTC)
