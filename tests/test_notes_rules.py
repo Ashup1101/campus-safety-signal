@@ -33,3 +33,21 @@ def test_text_only_from_people_whose_tag_is_corroborated() -> None:
     notes = [note("a", "Road closed"), note("b", "Road closed"), note("c", "Quiet now", "all calm")]
     found = rules.corroborated(notes, event_night=False, cfg=CFG)
     assert [f["tag"] for f in found] == ["Road closed"] and found[0]["texts"] == []
+
+
+def test_live_alert_allows_safety_tags_without_text() -> None:
+    assert rules.refusal("Police on scene", None, live=True, all_clear=False, cfg=CFG) is None
+    assert rules.refusal("Police on scene", "on Dunn", live=True, all_clear=False, cfg=CFG) == (
+        "text waits for IU's all-clear"
+    )
+    assert rules.refusal("Crowd gathering", None, live=True, all_clear=False, cfg=CFG) == (
+        "only safety tags during a live alert"
+    )
+
+
+def test_notes_never_contradict_iu() -> None:
+    assert rules.refusal("Area reopened", None, live=False, all_clear=False, cfg=CFG) == (
+        "only after IU's all-clear"
+    )
+    assert rules.refusal("Area reopened", "open again", live=False, all_clear=True, cfg=CFG) is None
+    assert rules.refusal("Unknown tag", None, live=False, all_clear=True, cfg=CFG) == "unknown tag"
