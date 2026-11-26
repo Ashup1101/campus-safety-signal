@@ -305,6 +305,19 @@ class Store:
                 self._db.execute("drop table mailbox_old")
 
     @_locked
+    def database(self) -> dict[str, Any]:
+        """Which database holds family data, in words; never a host, file path or credential."""
+        if self._db.dialect == "sqlite":
+            return {"backend": "sqlite", "label": "SQLite on this laptop", "schema_version": None}
+        row = self._db.execute("select coalesce(max(version), 0) from schema_migrations").fetchone()
+        version = int(row[0])
+        return {
+            "backend": "postgres",
+            "label": f"Postgres (schema v{version})",
+            "schema_version": version,
+        }
+
+    @_locked
     def close(self) -> None:
         self._db.close()
 

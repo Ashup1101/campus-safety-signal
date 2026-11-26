@@ -65,6 +65,12 @@ export function nightLabel(night: string): string {
   });
 }
 
+export interface DatabaseInfo {
+  backend: "sqlite" | "postgres";
+  label: string;
+  schema_version: number | null;
+}
+
 export interface SourceHealth {
   source: string;
   label: string;
