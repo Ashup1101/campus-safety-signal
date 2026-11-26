@@ -1,6 +1,6 @@
 .PHONY: install lint format typecheck test audit check backup schedule unschedule \
 	infra-check infra-plan infra-apply lambda-package cloud-off cloud-on transform demo-seed demo-drill demo-all-clear demo-replay \
-	demo-assets demo demo-stop demo-walk demo-walk-home apps-check
+	demo-assets demo demo-stop demo-record demo-walk demo-walk-home apps-check
 
 # One KEY=value from .env, read without sourcing it (values are never executed).
 env = $(shell sed -n 's/^$(1)=//p' .env 2>/dev/null | tail -n 1 | tr -d "\"'")
@@ -155,6 +155,10 @@ demo:
 
 demo-stop:
 	uv run python scripts/demo.py stop
+
+# A clean recording: stops any demo, sets the demo database aside (.bak), starts one stack, prints the steps.
+demo-record:
+	uv run python scripts/demo.py record
 
 # Move the Simulator along Kirkwood into the 400 block, then home (Share until I'm home).
 demo-walk:
