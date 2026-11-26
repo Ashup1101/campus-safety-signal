@@ -198,3 +198,26 @@ def test_three_reports_hide_a_note_and_nobody_reports_twice(api: tuple[Any, Test
     assert (
         client.post("/api/notes/999/report", headers=auth(client, "parent_mom")).status_code == 404
     )
+
+
+def test_moderators_hide_unhide_and_ban_by_note(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    store = app.state.store
+    store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+    console, mom = auth(client, "console"), auth(client, "parent_mom")
+    held = post(
+        client, "student_sam", {"tag": "Road closed", "text": "heard a shooter", **KIRKWOOD_400}
+    )
+    held_id = held.json()["id"]
+    assert client.get("/api/console/notes/queue", headers=mom).status_code == 403
+    [queued] = client.get("/api/console/notes/queue", headers=console).json()
+    assert (queued["id"], queued["state"], queued["text"]) == (held_id, "held", "heard a shooter")
+    assert "account_id" not in queued  # moderators act on notes, never see who
+    assert client.post(f"/api/console/notes/{held_id}/unhide", headers=console).status_code == 200
+    assert store.note(held_id)["state"] == "pending"
+    assert client.post(f"/api/console/notes/{held_id}/hide", headers=console).status_code == 200
+    assert store.note(held_id)["state"] == "hidden"
+    assert client.post(f"/api/console/notes/{held_id}/ban", headers=console).status_code == 200
+    assert store.notes_of("t1") == []  # a ban removes the person's notes
+    again = post(client, "student_sam", {"tag": "Road closed", **KIRKWOOD_400})
+    assert again.status_code == 403

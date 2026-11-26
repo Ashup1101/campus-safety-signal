@@ -21,6 +21,7 @@ from demo_server.threads import THREAD_GAP
 log = logging.getLogger(__name__)
 LABEL = "Community notes (unverified)"
 PSEUDONYM = "IU student nearby"
+BAN_LENGTH = timedelta(days=7)
 names_detector: text_filter.Names | None = None  # Presidio on first use; tests set a fake
 
 
@@ -41,6 +42,7 @@ class NoteBody(BaseModel):
 def register(
     app: FastAPI,
     me: Callable[..., Any],
+    console: Callable[..., Any],
     store: Store,
     geojson: dict[str, Any],
     cfg: NotesConfig,
@@ -50,6 +52,7 @@ def register(
     """event_night: whether the demo clock is on an event night (3 people instead of 2).
     changed(thread_id): tells every open screen to fetch that thread's notes again."""
     Me = Annotated[Account, Depends(me)]
+    Console = Annotated[Any, Depends(console)]
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     lines = {
         f["properties"]["id"]: tuple(
@@ -162,3 +165,44 @@ def register(
             "mine": {k: mine[k] for k in ("tag", "text", "state")} if mine else None,
             "enabled": enabled,
         }
+
+    # Moderation (console only): act on a note; the console never sees who posted it.
+    def moderated(note_id: int) -> dict[str, Any]:
+        note = store.note(note_id)
+        if note is None:
+            raise HTTPException(404, "no such note")
+        return note
+
+    @app.get("/api/console/notes/queue")
+    def notes_queue(_: Console) -> list[dict[str, Any]]:
+        """Held (alarming words) and hidden (reports or a moderator) notes, oldest first."""
+        queue = store.notes_in("held") + store.notes_in("hidden")
+        return [
+            {
+                "id": n["id"],
+                "thread_id": n["thread_id"],
+                "tag": n["tag"],
+                "text": n["text"],
+                "state": n["state"],
+                "reports": store.report_count(int(n["id"])),
+                "created_at": n["created_at"],
+            }
+            for n in sorted(queue, key=lambda n: int(n["id"]))
+        ]
+
+    @app.post("/api/console/notes/{note_id}/{action}")
+    async def moderate(note_id: int, action: str, _: Console) -> dict[str, str]:
+        note = moderated(note_id)
+        thread_id = str(note["thread_id"])
+        if action == "hide":
+            store.set_note_state(note_id, "hidden")
+        elif action == "unhide":
+            store.set_note_state(note_id, "pending")  # counts toward corroboration again
+        elif action == "ban":
+            store.ban(str(note["account_id"]), datetime.now(UTC) + BAN_LENGTH)
+            store.delete_notes(account_id=str(note["account_id"]))
+        else:
+            raise HTTPException(404, "unknown action")
+        log.info("moderator %s", action)
+        await changed(thread_id)
+        return {"done": action}
