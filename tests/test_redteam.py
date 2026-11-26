@@ -100,3 +100,35 @@ def test_cli_reports_per_owasp_and_fails_on_a_broken_defense(
     )
     assert main(["--corpus", str(broken)]) == 1
     assert "FAILED wrong-expectation" in caplog.text
+
+
+def test_report_shows_t4_next_to_the_rule(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caplog: pytest.LogCaptureFixture
+) -> None:
+    import json
+    import logging
+
+    from campus_safety.lake.storage import FileLake
+    from campus_safety.models import registry
+    from campus_safety.security import cli as security_cli
+
+    caplog.set_level(logging.INFO)
+    lake = FileLake(tmp_path / "lake")
+    monkeypatch.setenv("LAKE_URI", lake.uri)
+    security_cli.t4_line()
+    assert "no model imported" in caplog.text
+    run = tmp_path / "run"
+    run.mkdir()
+    card = {"run_id": "gh-1", "method": "model", "trained_at": "2026-11-26"}
+    (run / "scorecard.json").write_text(json.dumps(card))
+    weights = {
+        "vocabulary": {"ignore": 0},
+        "idf": [1.0],
+        "coef": [6.0],
+        "intercept": -3.0,
+        "threshold": 0.5,
+    }
+    (run / "model.json").write_text(json.dumps(weights))
+    registry.import_run(lake, "t4", run)
+    security_cli.t4_line()
+    assert "rule: caught" in caplog.text and "T4: caught" in caplog.text
