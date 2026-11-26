@@ -575,3 +575,21 @@ def test_archive_coverage_counts_listed_parsed_and_failed_captures_per_year(
         (2017, 3, 1, 1, 1),
         (2025, 1, 1, 0, 0),
     ]
+
+
+def test_weekly_trends_compare_each_week_with_the_same_week_last_year(tmp_path: Path) -> None:
+    lake = FileLake(tmp_path / "lake")
+    snapshot(lake, 0, bloomington(incident()))
+    bpd_calls(
+        lake,
+        ("B1", "2026-10-13T21:00:00.000", "THEFT NP", "LB101"),  # week of Oct 12
+        ("B2", "2026-10-14T21:00:00.000", "NOISE", "LB101"),
+        ("B3", "2025-10-14T21:00:00.000", "NOISE", "LB101"),  # 52 weeks earlier: week of Oct 13
+        ("B4", "2026-10-20T21:00:00.000", "NOISE", "LB101"),  # the newest (maybe partial) week
+        ("B5", "2026-10-13T22:00:00.000", "SEX ASSAULT NP", "LB101"),  # sensitive: never counted
+    )
+    transform(lake, tmp_path / "work")
+    path = tmp_path / "lake" / "gold" / "console_weekly_trends.parquet"
+    assert rows(path, "SELECT week, zonecode, calls, calls_last_year FROM $t") == [
+        (date(2026, 10, 12), "LB101", 2, 1)
+    ]

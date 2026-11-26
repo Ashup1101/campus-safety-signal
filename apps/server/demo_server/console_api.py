@@ -118,3 +118,12 @@ def register(
                 for row in found
             ],
         }
+
+    @app.get("/api/console/trends")
+    def console_trends(_: Console) -> list[dict[str, Any]]:
+        """Calls for service per week and zone vs the same week a year earlier (counts only)."""
+        return _rows(
+            warehouse,
+            "select week, zonecode, calls, calls_last_year from gold.console_weekly_trends"
+            " order by zonecode, week",
+        )

@@ -6,6 +6,7 @@ import { ChartWithTable } from "@/components/console-charts";
 import { ConsoleForecastMap } from "@/components/console-forecast-map";
 import { ConsoleHealth } from "@/components/console-health";
 import { ConsoleOutlook } from "@/components/console-outlook";
+import { ConsoleTrends } from "@/components/console-trends";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, color, tokens } from "@/lib/client";
 import {
@@ -17,6 +18,7 @@ import {
   type Forecasts,
   type GapRow,
   type SourceHealth,
+  type TrendWeek,
   type ZoneShapes,
 } from "@/lib/console";
 
@@ -183,10 +185,12 @@ function ForecastsTab({ token, dark }: { token: string; dark: boolean }) {
   const forecasts = useConsole<Forecasts>("/api/console/forecasts", token);
   const shapes = useConsole<ZoneShapes>("/api/console/zones", token);
   const card = forecasts?.scorecard;
+  const trends = useConsole<TrendWeek[]>("/api/console/trends", token);
   return (
     <>
       <ConsoleForecastMap shapes={shapes} forecasts={forecasts} dark={dark} />
       <ConsoleOutlook forecasts={forecasts} dark={dark} />
+      <ConsoleTrends rows={trends} dark={dark} />
       {card && (
         <Table
           caption="How the forecast scored on past years it did not see"
