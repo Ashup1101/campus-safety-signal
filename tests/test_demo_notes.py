@@ -169,9 +169,32 @@ def test_readers_see_only_confirmed_notes_without_who(api: tuple[Any, TestClient
     assert read("student_sam")["mine"]["state"] == "pending"  # the poster sees their own
     assert post(client, "student_alex", {"tag": "Road closed", **KIRKWOOD_400}).status_code == 201
     shown = read("parent_mom")
-    assert shown["notes"] == [
-        {"tag": "Road closed", "people": 2, "texts": ["Dunn closed"], "by": "IU student nearby"}
-    ]
+    [group] = shown["notes"]
+    assert (group["tag"], group["people"], group["by"]) == ("Road closed", 2, "IU student nearby")
+    assert [t["text"] for t in group["texts"]] == ["Dunn closed"] and len(group["ids"]) == 2
     assert "student_sam" not in str(shown) and shown["mine"] is None
     app.state.store.set_setting("notes_enabled", "off")
     assert read("parent_mom")["notes"] == []  # kill switch hides everything
+
+
+def test_three_reports_hide_a_note_and_nobody_reports_twice(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    store = app.state.store
+    store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+    note = post(
+        client, "student_sam", {"tag": "Road closed", "text": "Dunn closed", **KIRKWOOD_400}
+    )
+    note_id = note.json()["id"]
+
+    def report(who: str) -> Any:
+        return client.post(f"/api/notes/{note_id}/report", headers=auth(client, who))
+
+    assert report("student_sam").status_code == 400  # not your own
+    assert report("parent_mom").json() == {"hidden": False}
+    assert report("parent_mom").status_code == 409  # once per person
+    assert report("parent_dad").json() == {"hidden": False}
+    assert report("student_alex").json() == {"hidden": True}
+    assert store.note(note_id)["state"] == "hidden"
+    assert (
+        client.post("/api/notes/999/report", headers=auth(client, "parent_mom")).status_code == 404
+    )

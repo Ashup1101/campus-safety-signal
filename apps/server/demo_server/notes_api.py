@@ -130,6 +130,24 @@ def register(
         await changed(thread_id)
         return Response(status_code=204)
 
+    @app.post("/api/notes/{note_id}/report")
+    async def report_note(note_id: int, who: Me) -> dict[str, bool]:
+        """Any reader may report a note once; enough reports hide it until a moderator looks."""
+        note = store.note(note_id)
+        if note is None:
+            raise HTTPException(404, "no such note")
+        thread_for(str(note["thread_id"]), who, datetime.now(UTC))
+        if note["account_id"] == who.id:
+            raise HTTPException(400, "you cannot report your own note")
+        if not store.add_report(note_id, who.id):
+            raise HTTPException(409, "already reported")
+        hidden = store.report_count(note_id) >= cfg.report_threshold
+        if hidden and note["state"] in ("pending", "visible"):
+            store.set_note_state(note_id, "hidden")
+            log.info("note hidden by reports")
+            await changed(str(note["thread_id"]))
+        return {"hidden": hidden}
+
     @app.get("/api/threads/{thread_id}/notes")
     def read_notes(thread_id: str, who: Me) -> dict[str, Any]:
         """Confirmed notes only, with no account named; the reader's own note (any state)."""
