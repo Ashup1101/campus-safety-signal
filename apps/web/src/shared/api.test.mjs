@@ -2,7 +2,7 @@
 // runner loads the TypeScript file directly (type stripping, Node 24). Made-up alerts and streets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { THREAD_GAP_MS, areaSketch, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { BAND_WORDS, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -143,4 +143,16 @@ test("Tonight shows only when the server sent it, and names its method", () => {
 
 test("only the console role opens the console", () => {
   assert.deepEqual(["console", "parent", "student"].map(canOpenConsole), [true, false, false]);
+});
+
+test("band: inside the home radius, nearby within twice it or on campus, else away", () => {
+  const home = { lat: 39.0, lon: -86.0, radius_m: 200 }; // far from campus
+  const north = (m) => ({ lat: 39.0 + m / 111_195, lon: -86.0 });
+  assert.ok(Math.abs(metersBetween(home, north(200)) - 200) < 0.5);
+  assert.equal(bandOf(north(199), home), "inside");
+  assert.equal(bandOf(north(201), home), "nearby");
+  assert.equal(bandOf(north(399), home), "nearby");
+  assert.equal(bandOf(north(401), home), "away");
+  assert.equal(bandOf({ lat: 39.1702, lon: -86.5164 }, home), "nearby"); // on campus
+  assert.equal(BAND_WORDS.away, "away from home and campus");
 });
