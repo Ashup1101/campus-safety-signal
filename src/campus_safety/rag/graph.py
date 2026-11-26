@@ -95,10 +95,16 @@ class Agent:
     generate: Generate
     k: int = 8
     calls: int = field(default=0)
+    # T4 (when its newest run won): an extra screen on the question and on retrieved text. The
+    # rule checks above always run too; T4 never replaces them.
+    screen: Callable[[str], bool] | None = None
+    screened: int = field(default=0)
 
     def _screen(self, state: State) -> State:
         question = clean(state["question"], MAX_QUESTION)
         refused = bool(_SENSITIVE.search(question)) or bool(INJECTION.search(question))
+        if not refused and self.screen and self.screen(question):
+            refused, self.screened = True, self.screened + 1
         return {"question": question, "refused": refused, "attempts": 0, "problems": []}
 
     def _retrieve(self, state: State) -> State:
@@ -108,6 +114,10 @@ class Agent:
         )
         if not hits and filters.place:  # the place filter may be too strict: retry without it
             hits = self.index.search(state["question"], self.k, filters.since, filters.until)
+        if self.screen:
+            kept = [hit for hit in hits if not self.screen(hit.doc.text)]
+            self.screened += len(hits) - len(kept)
+            hits = kept
         return {"filters": filters, "hits": hits}
 
     def _draft(self, state: State) -> State:

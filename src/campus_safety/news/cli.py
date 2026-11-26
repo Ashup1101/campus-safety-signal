@@ -41,6 +41,11 @@ def extract(cache: Path, provider: str, model: str, limit: int) -> int:
     relevant = [i for i in found if (t2(i.text) if t2 else screen(i.text).relevant)]
     # Flagged items are extracted by rules only, so a model call on them would be wasted credit.
     safe = [i for i in relevant if not screen(i.text).injection_suspected]
+    t4 = gates.text_gate(open_lake(os.environ.get("LAKE_URI")), "t4")  # extra screen when it won
+    if t4:
+        flagged = [i for i in safe if t4(screen(i.text).text)]
+        safe = [i for i in safe if i not in flagged]
+        log.info("%d items held out of prompts by T4", len(flagged))
     todo = [i for i in safe if not extractor.cached(screen(i.text).text)][:limit]
     log.info(
         "%d items, %d relevant (by %s), %d to extract (cached: %d)",
