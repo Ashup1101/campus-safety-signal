@@ -1,3 +1,4 @@
+import os
 import uuid
 from collections.abc import Iterator
 from typing import Any
@@ -18,10 +19,16 @@ def no_real_keys(monkeypatch: pytest.MonkeyPatch, tmp_path_factory: pytest.TempP
 @pytest.fixture(scope="session")
 def _pg_server(tmp_path_factory: pytest.TempPathFactory) -> Iterator[Any]:
     """One embedded Postgres (no Docker) per run; skips if the package or binaries are missing."""
-    pgserver = pytest.importorskip("pgserver")
+    required = os.environ.get("DEMO_DB_REQUIRED") == "1"  # CI: a missing Postgres is a failure
     try:
-        server = pgserver.get_server(tmp_path_factory.mktemp("pg"), cleanup_mode="stop")
-    except Exception as exc:  # binaries missing or failed to start on this platform
+        import pgserver
+
+        server = pgserver.get_server(  # type: ignore[attr-defined]  # untyped re-export
+            tmp_path_factory.mktemp("pg"), cleanup_mode="stop"
+        )
+    except Exception as exc:  # package or binaries missing, or failed to start on this platform
+        if required:
+            raise
         pytest.skip(f"embedded Postgres unavailable: {type(exc).__name__}")
     yield server
     server.cleanup()
