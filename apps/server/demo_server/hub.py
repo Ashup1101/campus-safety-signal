@@ -12,6 +12,7 @@ import asyncio
 import hashlib
 import logging
 import math
+import secrets
 import uuid
 from collections import defaultdict
 from collections.abc import Sequence
@@ -30,6 +31,7 @@ from demo_server.threads import Threads
 
 SHARING = ("on", "paused", "off")
 CLIENTS = ("web", "ios")
+BAND_TIMEOUT_S = 60.0  # no answer by then: "couldn't reach the phone", never "away"
 CHECK_IN_STATES = ("safe", "sheltering")
 # Same fixed list as SHELTER_PLACES in apps/*/src/shared/api.ts (no free text, so no names).
 SHELTER_PLACES = ("my room", "a campus building", "a friend's place", "the library", "off campus")
@@ -98,6 +100,11 @@ class Hub:
         self._live: dict[str, bool] = {}  # open thread id -> test accounts only
         self._check_ins: dict[str, dict[str, dict[str, Any]]] = {}  # thread -> student -> check-in
         self._followups: dict[str, str] = {}  # engine thread id -> last kind sent
+        # Parent check-ins (v8): request id -> (parent, student). Memory only, dropped on answer.
+        self._band: dict[str, tuple[str, str]] = {}
+        self._timers: set[asyncio.Task[None]] = set()
+        self.band_timeout = BAND_TIMEOUT_S
+        self.verifier = signing.Verifier()
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -176,6 +183,78 @@ class Hub:
             await self._heads_up(account, str(data["segment_id"]))
         elif kind == "check_in":
             await self._check_in(account, data)
+        elif kind == "band_answer":
+            await self._band_answer(account, data)
+
+    def pending_band_requests(self) -> int:
+        return len(self._band)
+
+    async def request_band(self, parent: Account, student_id: str) -> str | None:
+        """A linked parent asks for the student's band. None when they are not linked. The phone
+        answers on its own; a phone that is offline or silent is "unreachable"."""
+        label = self.store.parents_of(student_id).get(parent.id)
+        if parent.role != "parent" or label is None:
+            return None
+        request_id = secrets.token_hex(8)
+        if not self.online(student_id):
+            await self._band_result(parent.id, student_id, request_id, "unreachable")
+            return request_id
+        self._band[request_id] = (parent.id, student_id)
+        await self._send(
+            student_id, {"type": "band_request", "request_id": request_id, "from": label}
+        )
+        timer = asyncio.create_task(self._band_expire(request_id))
+        self._timers.add(timer)
+        timer.add_done_callback(self._timers.discard)
+        return request_id
+
+    async def _band_expire(self, request_id: str) -> None:
+        await asyncio.sleep(self.band_timeout)
+        entry = self._band.pop(request_id, None)
+        if entry:
+            await self._band_result(entry[0], entry[1], request_id, "unreachable")
+
+    async def _band_answer(self, student: Account, data: dict[str, Any]) -> None:
+        request_id = data.get("request_id")
+        entry = self._band.get(request_id) if isinstance(request_id, str) else None
+        if entry is None or entry[1] != student.id:
+            return
+        del self._band[str(request_id)]
+        if data.get("declined") is True:
+            await self._band_result(entry[0], student.id, str(request_id), "declined")
+            return
+        band, at, signature = data.get("band"), data.get("answered_at"), data.get("signature")
+        key = self.store.device_key(student.id)
+        ok = (
+            key is not None
+            and all(isinstance(v, str) for v in (band, at, signature))
+            and self.verifier.check(
+                key[1], str(request_id), str(band), str(at), str(signature), datetime.now(UTC)
+            )
+        )
+        if ok:
+            extra = {"band": band, "answered_at": at}
+            await self._band_result(entry[0], student.id, str(request_id), "answered", extra)
+        else:
+            await self._band_result(entry[0], student.id, str(request_id), "unverified")
+
+    async def _band_result(
+        self,
+        parent_id: str,
+        student_id: str,
+        request_id: str,
+        state: str,
+        extra: dict[str, Any] | None = None,
+    ) -> None:
+        message = {
+            "type": "band_result",
+            "request_id": request_id,
+            "student_id": student_id,
+            "state": state,
+            **(extra or {}),
+        }
+        await self._send(parent_id, message)
+        log.info("check-in request %s", state)  # the state only: never who, where or the band
 
     async def _check_in(self, student: Account, data: dict[str, Any]) -> None:
         """Private "I'm safe" / "I'm sheltering at <place>": linked parents only, memory only,

@@ -452,6 +452,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         asyncio.get_running_loop().create_task(replays.play(replay_id, settings.replay_speed))
         return {"status": "playing"}
 
+    @app.post("/api/check-in/{student_id}", status_code=202)
+    async def check_in_request(student_id: str, me: Me) -> dict[str, str]:
+        """A linked parent asks the student's phone for a band; the answer arrives on the socket."""
+        request_id = await hub.request_band(me, student_id)
+        if request_id is None:
+            raise HTTPException(403, "only a linked parent can ask")
+        return {"request_id": request_id}
+
     @app.get("/api/latency")
     def latency(_: Console) -> list[dict[str, object]]:
         # Check-ins are counted, never shown: no names, states or places reach the console.
