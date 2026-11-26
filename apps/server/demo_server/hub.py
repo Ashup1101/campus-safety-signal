@@ -14,7 +14,7 @@ import logging
 import math
 import secrets
 import uuid
-from collections import defaultdict
+from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
@@ -111,6 +111,8 @@ class Hub:
         self._ok: dict[str, tuple[str, str]] = {}  # "Are you OK?" id -> (parent, student)
         self.ok_timeout = OK_TIMEOUT_S
         self._arrived: set[tuple[str, date]] = set()  # (student, night): "Arrived home" sent
+        self._band_outcomes: Counter[str] = Counter()  # counts only, for the console
+        self._ok_outcomes: Counter[str] = Counter()
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -196,6 +198,14 @@ class Hub:
         elif kind == "arrived_home":
             await self._arrived_home(account)
 
+    def reassurance_counts(self) -> dict[str, dict[str, int]]:
+        """Outcomes since the server started: counts only, never who, where or a band."""
+        return {
+            "check_ins": dict(self._band_outcomes),
+            "are_you_ok": dict(self._ok_outcomes),
+            "arrived_home": {"sent": len(self._arrived)},
+        }
+
     def pending_ok_requests(self) -> int:
         return len(self._ok)
 
@@ -242,6 +252,7 @@ class Hub:
             "state": state,
         }
         await self._send(entry[0], message)
+        self._ok_outcomes[state] += 1
         log.info("are-you-ok %s", state)
 
     def pending_band_requests(self) -> int:
@@ -310,6 +321,7 @@ class Hub:
             **(extra or {}),
         }
         await self._send(parent_id, message)
+        self._band_outcomes[state] += 1
         log.info("check-in request %s", state)  # the state only: never who, where or the band
 
     async def _check_in(self, student: Account, data: dict[str, Any]) -> None:

@@ -201,3 +201,28 @@ export function trendZones(rows: TrendWeek[]): string[] {
   for (const r of rows) totals.set(r.zonecode, (totals.get(r.zonecode) ?? 0) + r.calls);
   return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([z]) => z);
 }
+
+export interface ReassuranceCounts {
+  check_ins: Record<string, number>;
+  are_you_ok: Record<string, number>;
+  arrived_home: { sent: number };
+}
+
+const OUTCOME_WORDS: Record<string, string> = {
+  answered: "answered",
+  unverified: "could not be verified",
+  declined: "check-ins off",
+  unreachable: "phone not reached",
+  ok: "said OK",
+  call_me: "asked for a call",
+  off: "nudges off",
+  no_answer: "no answer in 10 min",
+};
+
+/** "3 answered, 1 phone not reached" or "none yet". */
+export function outcomeWords(counts: Record<string, number>): string {
+  const parts = Object.entries(counts)
+    .filter(([, n]) => n > 0)
+    .map(([state, n]) => `${n} ${OUTCOME_WORDS[state] ?? state}`);
+  return parts.length ? parts.join(", ") : "none yet";
+}

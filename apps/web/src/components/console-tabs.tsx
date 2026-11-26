@@ -6,6 +6,7 @@ import { ChartWithTable } from "@/components/console-charts";
 import { ConsoleForecastMap } from "@/components/console-forecast-map";
 import { ConsoleHealth } from "@/components/console-health";
 import { ConsoleOutlook } from "@/components/console-outlook";
+import { ConsoleReassurance } from "@/components/console-reassurance";
 import { ConsoleTrends } from "@/components/console-trends";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { api, color, tokens } from "@/lib/client";
@@ -326,6 +327,8 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
               description="How fast alerts reach screens, and how often they were corrected or repeated."
             >
               <ConsoleAlertMetrics token={token} />
+              <h3 className="pt-2 text-sm font-medium">Family check-ins (counts only, since the demo started)</h3>
+              <ConsoleReassurance token={token} />
             </Panel>
           )}
           {tab === name && name === "Health" && (
