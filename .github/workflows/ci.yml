@@ -21,6 +21,10 @@ jobs:
       - run: uv run ruff format --check .
       - run: uv run mypy
       - run: uv run pytest
+      - name: demo server tests on Postgres (embedded, no Docker)
+        env:
+          DEMO_DB_REQUIRED: "1"  # fail, do not skip, if Postgres cannot start
+        run: uv run pytest tests/test_demo_*.py --demo-db postgres
       - name: pip-audit
         run: make audit
 
