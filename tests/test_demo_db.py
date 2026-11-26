@@ -96,3 +96,27 @@ def test_migration_numbers_must_not_skip(tmp_path: Path) -> None:
     (tmp_path / "0003_c.sql").write_text("select 1;")
     with pytest.raises(ValueError, match="without gaps"):
         migrate.migration_files(tmp_path)
+
+
+def test_every_table_has_rls_on_and_no_policies(pg_url: str) -> None:
+    migrate.migrate(pg_url)
+    with psycopg.connect(pg_url) as conn:
+        off = conn.execute(
+            "select relname from pg_class c join pg_namespace n on n.oid = c.relnamespace"
+            " where n.nspname = 'public' and c.relkind = 'r' and not c.relrowsecurity"
+        ).fetchall()
+        policies = conn.execute(
+            "select count(*) from pg_policies where schemaname = 'public'"
+        ).fetchone()
+    assert off == [] and policies == (0,)
+
+
+def test_a_role_without_bypass_sees_no_rows(pg_url: str) -> None:
+    migrate.migrate(pg_url)
+    with psycopg.connect(pg_url, autocommit=True) as conn:
+        conn.execute("insert into settings values ('k', 'v')")
+        conn.execute("create role anon_test nologin")
+        conn.execute("grant select on settings to anon_test")
+        conn.execute("set role anon_test")
+        assert conn.execute("select count(*) from settings").fetchone() == (0,)
+        conn.execute("reset role")
