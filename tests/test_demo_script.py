@@ -29,3 +29,28 @@ def test_one_regular_iphone_by_default_overridable() -> None:
 def test_node_path_unchanged_without_node24(tmp_path: Path) -> None:
     demo = load()
     assert demo.node_path("/usr/bin", tmp_path / "missing") == "/usr/bin"
+
+
+def test_record_backs_up_the_demo_database_and_prints_the_steps(
+    tmp_path: Path, capsys: object
+) -> None:
+    demo = load()
+    db = tmp_path / "demo.sqlite3"
+    db.write_text("old demo state")
+    calls: list[str] = []
+
+    def start() -> int:
+        calls.append("start")
+        return 0
+
+    def stop(quiet: bool = False) -> int:
+        calls.append("stop")
+        return 0
+
+    result = demo.record(db, start=start, stop=stop)
+    assert result == 0 and calls == ["stop", "start"]  # one demo at a time
+    assert not db.exists() and [
+        p.name.startswith("demo.sqlite3.bak-") for p in tmp_path.iterdir()
+    ] == [True]
+    out = capsys.readouterr().out  # type: ignore[attr-defined]
+    assert "0:00" in out and "make demo-stop" in out

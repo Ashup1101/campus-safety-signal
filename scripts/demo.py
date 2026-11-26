@@ -145,12 +145,55 @@ def walk(points: list[tuple[float, float]]) -> int:
     return 0
 
 
+DEMO_DB = ROOT / "data" / "demo" / "demo.sqlite3"
+
+
+def start_demo() -> int:
+    return start()
+
+
+def stop_demo(quiet: bool = False) -> int:
+    return stop(quiet)
+
+
+# The 5-minute recording (full script: .notes/demo-script.md, local only).
+STEPS = (
+    "0:00  Why: the same official alert reaches students and parents at the same second.",
+    "0:20  Console sign-in (website). Overview: coverage and gaps; real-data-only switch on.",
+    "0:45  Forecasts tab: zone map, 7-night outlook with event nights, model in use.",
+    "1:15  App as Sam: consent for precise location (Yes), Settings home area, allow check-ins.",
+    "1:45  App as Mom: Check in -> one signed word; Are you OK -> Sam answers first.",
+    "2:15  Console Drill: banner on both phones, latency board; All-clear.",
+    "2:45  Community notes after the all-clear: two students agree, note appears (unverified).",
+    "3:15  Console Notes: review queue and kill switch; Pilot tab numbers.",
+    "3:45  Privacy and terms drafts (needs legal review); delete my account.",
+    "4:30  Ask: an IU feed and incident data for the gaps. Then `make demo-stop`.",
+)
+
+
+def record(
+    db: Path = DEMO_DB,
+    start: Callable[[], int] = lambda: start_demo(),
+    stop: Callable[..., int] = lambda quiet=False: stop_demo(quiet),
+) -> int:
+    """A clean recording: stop any running demo, set the demo database aside (kept as a .bak
+    copy, never deleted) so the server seeds afresh, start one stack, print the timed steps."""
+    stop(quiet=True)
+    if db.exists():
+        db.rename(db.with_name(f"{db.name}.bak-{time.strftime('%Y%m%d-%H%M%S')}"))
+    result = start()
+    print("\n".join(("Recording steps (start your screen recording now):", *STEPS)))
+    print("When done: make demo-stop")
+    return result
+
+
 def main(argv: list[str]) -> int:
     commands: dict[str, Callable[[], int]] = {
         "start": start,
         "stop": stop,
         "walk": lambda: walk(WALK),
         "walk-home": lambda: walk(WALK_HOME),
+        "record": record,
     }
     if len(argv) != 2 or argv[1] not in commands:
         print(f"usage: demo.py {'|'.join(commands)}", file=sys.stderr)
