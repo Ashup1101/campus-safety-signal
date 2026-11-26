@@ -322,3 +322,39 @@ export function tonightOf(segments: Segments | null, window: TimeWindow, threads
     lastMinutes: minutesSince(threads[0]?.latest.received_at, now),
   };
 }
+
+// Parent reassurance (v8): the phone turns one location reading into a coarse band; only the band
+// word ever leaves the phone, never the point.
+export type Band = "inside" | "nearby" | "away";
+
+export interface Area {
+  lat: number;
+  lon: number;
+  radius_m: number;
+}
+
+// IU Bloomington's main campus as a circle around the Old Crescent and the stadium area (approximate,
+// public map); "nearby" counts anywhere on campus.
+export const CAMPUS: Area = { lat: 39.1702, lon: -86.5164, radius_m: 1400 };
+
+export function metersBetween(a: { lat: number; lon: number }, b: { lat: number; lon: number }): number {
+  const rad = Math.PI / 180;
+  const dLat = (b.lat - a.lat) * rad;
+  const dLon = (b.lon - a.lon) * rad;
+  const h = Math.sin(dLat / 2) ** 2 + Math.cos(a.lat * rad) * Math.cos(b.lat * rad) * Math.sin(dLon / 2) ** 2;
+  return 2 * 6_371_000 * Math.asin(Math.sqrt(h));
+}
+
+/** inside: within the home radius; nearby: within twice the radius or on campus; away: otherwise. */
+export function bandOf(here: { lat: number; lon: number }, home: Area, campus: Area = CAMPUS): Band {
+  const fromHome = metersBetween(here, home);
+  if (fromHome <= home.radius_m) return "inside";
+  if (fromHome <= 2 * home.radius_m || metersBetween(here, campus) <= campus.radius_m) return "nearby";
+  return "away";
+}
+
+export const BAND_WORDS: Record<Band, string> = {
+  inside: "in their home area",
+  nearby: "near home or on campus",
+  away: "away from home and campus",
+};
