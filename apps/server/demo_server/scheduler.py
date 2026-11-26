@@ -11,7 +11,7 @@ import asyncio
 import logging
 import math
 from collections.abc import Awaitable, Callable, Sequence
-from datetime import datetime, time, timedelta
+from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
 
 import duckdb
@@ -47,6 +47,7 @@ class Scheduler:
     ) -> None:
         self.store, self.channel, self.warehouse = store, channel, warehouse
         self.names, self.calendar, self.now = names, calendar, now
+        self.notes_expiry_hours = 24  # configs/notes.yaml expiry_hours (set by the app)
 
     def _family(self) -> list[str]:
         return [a.id for a in self.store.accounts() if a.role in ("student", "parent")]
@@ -145,6 +146,9 @@ class Scheduler:
         sent = self._briefings(now) + self._digests(now)
         if sent:
             log.info("scheduler: %d new mailbox messages", sent)
+        expired = self.store.expire_notes(datetime.now(UTC), self.notes_expiry_hours)
+        if expired:
+            log.info("scheduler: %d community notes expired", expired)
         return sent
 
     async def run(

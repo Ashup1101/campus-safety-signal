@@ -16,6 +16,7 @@ from typing import Any, Literal
 from campus_safety.official.alerts import OfficialAlert
 from campus_safety.official.descriptors import strip_descriptors
 from demo_server import signing
+from demo_server.threads import THREAD_GAP
 
 Role = Literal["student", "parent", "console"]
 INVITE_LIFETIME = timedelta(days=7)
@@ -187,6 +188,7 @@ class Activity:
 class Store:
     def __init__(self, path: Path) -> None:
         path.parent.mkdir(parents=True, exist_ok=True)
+        self.path = path
         # One event loop thread uses it; the flag only allows creating it elsewhere.
         self._lock = threading.RLock()
         self._db = sqlite3.connect(path, check_same_thread=False)
@@ -366,6 +368,19 @@ class Store:
             else:
                 cursor = self._db.execute("delete from notes where account_id = ?", (account_id,))
         return int(cursor.rowcount)
+
+    @_locked
+    def expire_notes(self, now: datetime, hours: int) -> int:
+        """Delete every note whose incident closed more than `hours` ago: closed by IU's
+        all-clear, or gone quiet (no update for THREAD_GAP). No history is kept."""
+        threads = [r[0] for r in self._db.execute("select distinct thread_id from notes")]
+        deleted = 0
+        for thread_id in threads:
+            info = self.thread_info(thread_id)
+            closed = info and (info["closed_at"] or info["last_at"] + THREAD_GAP)
+            if info is None or (closed and now - closed > timedelta(hours=hours)):
+                deleted += self.delete_notes(thread_id=thread_id)
+        return deleted
 
     @_locked
     def add_report(self, note_id: int, account_id: str) -> bool:
