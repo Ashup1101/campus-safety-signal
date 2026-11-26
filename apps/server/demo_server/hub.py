@@ -110,6 +110,7 @@ class Hub:
         self.verifier = signing.Verifier()
         self._ok: dict[str, tuple[str, str]] = {}  # "Are you OK?" id -> (parent, student)
         self.ok_timeout = OK_TIMEOUT_S
+        self._arrived: set[tuple[str, date]] = set()  # (student, night): "Arrived home" sent
 
     def online(self, account_id: str) -> bool:
         return bool(self._peers.get(account_id))
@@ -192,6 +193,8 @@ class Hub:
             await self._band_answer(account, data)
         elif kind == "ok_answer":
             await self._ok_answer(account, data)
+        elif kind == "arrived_home":
+            await self._arrived_home(account)
 
     def pending_ok_requests(self) -> int:
         return len(self._ok)
@@ -352,6 +355,27 @@ class Hub:
         point = {"lat": lat, "lon": lon, "at": datetime.now(UTC).isoformat(timespec="seconds")}
         self._location[student.id] = point
         await self._to_parents(student.id, {"type": "location", "student_id": student.id, **point})
+
+    async def _arrived_home(self, student: Account) -> None:
+        """On an event night, a sharing student's phone reached its home area (the phone decides,
+        with the student's switch on): sharing ends and linked parents hear "Arrived home" once."""
+        night = events.night_of(self.clock.now())
+        if (
+            "event_night" not in self.clock.windows()
+            or self.sharing(student.id) != "on"
+            or (student.id, night) in self._arrived
+        ):
+            return
+        self._arrived.add((student.id, night))
+        await self._set_sharing(student, "off")
+        message = {
+            "type": "arrived_home",
+            "student_id": student.id,
+            "student_name": student.display_name,
+            "at": datetime.now(UTC).isoformat(timespec="seconds"),
+        }
+        await self._to_parents(student.id, message)
+        log.info("arrived home sent")
 
     async def _set_sharing(self, student: Account, state: str) -> None:
         previous = self.sharing(student.id)

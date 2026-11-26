@@ -157,3 +157,23 @@ def test_only_a_linked_parent_sends_are_you_ok(tmp_path: Path) -> None:
 
     assert ask("parent_mom") == 202
     assert ask("parent_dad") == 403
+
+
+def test_arrived_home_ends_sharing_once_on_an_event_night(store: Store) -> None:  # noqa: F811
+    async def scenario(preset: str, sharing: str) -> FakePeer:
+        hub = hub_for(store)
+        hub.clock.set(preset)
+        mom, _ = await joined(store, hub)
+        sam = account(store, "student_sam")
+        await hub.message(sam, {"type": "sharing", "state": sharing})
+        await hub.message(sam, {"type": "arrived_home"})
+        await hub.message(sam, {"type": "arrived_home"})  # once per night
+        assert hub.sharing("student_sam") == ("off" if preset == "event_night" else sharing)
+        return mom
+
+    mom = asyncio.run(scenario("event_night", "on"))
+    [arrived] = mom.of("arrived_home")
+    assert arrived["student_id"] == "student_sam" and "lat" not in arrived
+    assert mom.of("sharing")[-1]["state"] == "off"
+    assert asyncio.run(scenario("late_night", "on")).of("arrived_home") == []  # not an event night
+    assert asyncio.run(scenario("event_night", "off")).of("arrived_home") == []  # not sharing

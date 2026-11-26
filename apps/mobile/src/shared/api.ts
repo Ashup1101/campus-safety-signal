@@ -165,6 +165,7 @@ export type ServerMessage =
   | { type: "band_request"; request_id: string; from: string }
   | { type: "ok_request"; request_id: string; from: string }
   | { type: "ok_result"; request_id: string; student_id: string; state: OkState }
+  | { type: "arrived_home"; student_id: string; student_name: string; at: string }
   | {
       type: "band_result";
       request_id: string;
@@ -182,7 +183,8 @@ export type ClientMessage =
   | { type: "check_in"; thread_id: string; state: CheckInState; place?: ShelterPlace }
   | { type: "band_answer"; request_id: string; band: Band; answered_at: string; signature: string }
   | { type: "band_answer"; request_id: string; declined: true }
-  | { type: "ok_answer"; request_id: string; answer: "ok" | "call_me" | "off" };
+  | { type: "ok_answer"; request_id: string; answer: "ok" | "call_me" | "off" }
+  | { type: "arrived_home" };
 
 // Red is for live official alerts only; an official "Normal" status is an all-clear.
 export function toneOf(alert: Alert): Tone {
@@ -368,6 +370,15 @@ export function bandOf(here: { lat: number; lon: number }, home: Area, campus: A
   if (fromHome <= home.radius_m) return "inside";
   if (fromHome <= 2 * home.radius_m || metersBetween(here, campus) <= campus.radius_m) return "nearby";
   return "away";
+}
+
+/** "Arrived home": on an event night, the reading is inside the student's home area. */
+export function reachedHomeOnEventNight(
+  here: { lat: number; lon: number },
+  home: Area | null,
+  windows: string[],
+): boolean {
+  return !!home && windows.includes("event_night") && bandOf(here, home) === "inside";
 }
 
 export const BAND_WORDS: Record<Band, string> = {

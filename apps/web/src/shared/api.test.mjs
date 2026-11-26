@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac } from "node:crypto";
-import { BAND_WORDS, hmacSha256Hex, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { BAND_WORDS, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -167,4 +167,12 @@ test("HMAC-SHA256 matches Node's crypto, including the band signature the server
   const at = "2026-11-26T23:00:00+00:00";
   const expected = createHmac("sha256", Buffer.from(secret, "hex")).update(`r1|inside|${at}`).digest("hex");
   assert.equal(signBand(secret, "r1", "inside", at), expected);
+});
+
+test("arrived home only inside the home area on an event night", () => {
+  const home = { lat: 39.0, lon: -86.0, radius_m: 200 };
+  assert.equal(reachedHomeOnEventNight(home, home, ["late_night", "event_night"]), true);
+  assert.equal(reachedHomeOnEventNight(home, home, ["late_night"]), false);
+  assert.equal(reachedHomeOnEventNight({ lat: 39.01, lon: -86.0 }, home, ["event_night"]), false);
+  assert.equal(reachedHomeOnEventNight(home, null, ["event_night"]), false);
 });
