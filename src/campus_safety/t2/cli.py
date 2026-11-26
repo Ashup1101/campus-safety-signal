@@ -43,10 +43,21 @@ def train(warehouse: Path, out: Path, run_id: str) -> int:
 
 
 def import_dir(name: str, source: Path) -> int:
-    from campus_safety.lake.storage import open_lake
-    from campus_safety.models import registry
+    """Check the weights, then copy the run into the lake registry (write-once)."""
+    import json
 
-    status = registry.import_run(open_lake(os.environ.get("LAKE_URI")), name, source)
+    from campus_safety.lake.storage import open_lake
+    from campus_safety.models import registry, text_model
+
+    try:
+        found = text_model.problems(json.loads((source / "model.json").read_text()))
+        if found:
+            log.error("%s import refused: %s", name, "; ".join(found))
+            return 1
+        status = registry.import_run(open_lake(os.environ.get("LAKE_URI")), name, source)
+    except (OSError, ValueError) as e:
+        log.error("%s import refused: %s", name, type(e).__name__)
+        return 1
     log.info("%s import %s: %s", name, source.name, status)
     return 0
 
@@ -58,8 +69,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     fit.add_argument("--warehouse", type=Path, default=Path("data/warehouse/warehouse.duckdb"))
     fit.add_argument("--out", type=Path, default=Path("data/t2/out"))
     fit.add_argument("--run-id", default=None)
+    load = commands.add_parser("import", help="check a finished run and copy it into the lake")
+    load.add_argument("source", type=Path, help="a downloaded artifact directory")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
+    if args.command == "import":
+        return import_dir("t2", args.source)
     if args.command == "train":
         return train(args.warehouse, args.out, args.run_id or f"train-{uuid.uuid4().hex[:8]}")
     return 2

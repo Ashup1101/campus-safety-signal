@@ -55,3 +55,41 @@ def test_tampered_files_and_pickles_are_refused(tmp_path: Path) -> None:
     (bad / "scorecard.json").write_text(json.dumps({"run_id": "gh-8", "method": "maybe"}))
     with pytest.raises(ValueError, match="scorecard"):
         registry.import_run(lake, "t4", bad)
+
+
+def weights(**change: object) -> dict[str, object]:
+    found: dict[str, object] = {
+        "vocabulary": {"robbery": 0, "kirkwood": 1},
+        "idf": [1.0, 2.0],
+        "coef": [0.5, -0.5],
+        "intercept": 0.1,
+        "threshold": 0.5,
+    }
+    return {**found, **change}
+
+
+def test_text_model_weights_are_checked_before_import(tmp_path: Path) -> None:
+    from campus_safety.models import text_model
+
+    assert text_model.problems(weights()) == []
+    assert text_model.problems(weights(extra=1)) == ["unexpected keys"]
+    assert text_model.problems(weights(idf=[1.0])) == ["lengths differ"]
+    assert text_model.problems(weights(vocabulary={"case 2026012345": 0, "x": 1})) == [
+        "a term looks like a record (long number or email)"
+    ]
+
+
+def test_cli_imports_once_and_refuses_bad_weights(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from campus_safety.t2 import cli
+
+    monkeypatch.setenv("LAKE_URI", FileLake(tmp_path / "lake").uri)
+    good = run_dir(tmp_path / "good")
+    (good / "model.json").write_text(json.dumps(weights()))
+    assert cli.main(["import", str(good)]) == 0
+    assert cli.main(["import", str(good)]) == 0  # unchanged
+    bad = run_dir(tmp_path / "bad", "gh-2")
+    (bad / "model.json").write_text(json.dumps(weights(vocabulary={"kim@example.test": 0, "y": 1})))
+    assert cli.main(["import", str(bad)]) == 1
+    assert [r.run_id for r in registry.runs(FileLake(tmp_path / "lake"), "t2")] == ["gh-1"]

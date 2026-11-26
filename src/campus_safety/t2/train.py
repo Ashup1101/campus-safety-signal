@@ -30,7 +30,7 @@ def fit(train: Sequence[Labeled]) -> dict[str, Any]:
     from sklearn.feature_extraction.text import TfidfVectorizer
     from sklearn.linear_model import LogisticRegression
 
-    vectorizer = TfidfVectorizer(analyzer=tokens, sublinear_tf=True, min_df=1)
+    vectorizer = TfidfVectorizer(analyzer=tokens, sublinear_tf=True, min_df=2)
     x = vectorizer.fit_transform([r.text for r in train])
     model = LogisticRegression(max_iter=1000, class_weight="balanced", random_state=0)
     model.fit(x, [r.label for r in train])
