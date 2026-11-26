@@ -80,3 +80,20 @@ def test_precision_at_the_rules_recall() -> None:
 
     threshold, precision = train.at_recall([0.9, 0.8, 0.2, 0.1], [True, False, True, False], 0.5)
     assert (threshold, precision) == (0.9, 1.0)
+
+
+def test_items_come_from_the_warehouse_without_bodies(tmp_path: Path) -> None:
+    import duckdb
+
+    from campus_safety.t2 import cli
+
+    db = tmp_path / "w.duckdb"
+    with duckdb.connect(str(db)) as con:
+        con.execute("create schema silver")
+        con.execute(
+            "create table silver.news_items as select 'i1' as item_id, 'Theft' as title,"
+            " 'short' as summary, timestamp '2026-10-01' as published_at,"
+            " timestamp '2026-10-01' as observed_at, true as relevant, 'body text' as body"
+        )
+    [found] = cli.items(db)
+    assert set(found) == dataset.FIELDS and found["relevant"] is True
