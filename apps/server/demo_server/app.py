@@ -468,6 +468,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(403, "only a linked parent can ask")
         return {"request_id": request_id}
 
+    @app.get("/api/console/reassurance")
+    def reassurance_counts(_: Console) -> dict[str, dict[str, int]]:
+        return hub.reassurance_counts()
+
     @app.get("/api/latency")
     def latency(_: Console) -> list[dict[str, object]]:
         # Check-ins are counted, never shown: no names, states or places reach the console.

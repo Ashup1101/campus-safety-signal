@@ -177,3 +177,36 @@ def test_arrived_home_ends_sharing_once_on_an_event_night(store: Store) -> None:
     assert mom.of("sharing")[-1]["state"] == "off"
     assert asyncio.run(scenario("late_night", "on")).of("arrived_home") == []  # not an event night
     assert asyncio.run(scenario("event_night", "off")).of("arrived_home") == []  # not sharing
+
+
+def test_the_console_sees_outcome_counts_only(store: Store) -> None:  # noqa: F811
+    async def scenario() -> dict[str, dict[str, int]]:
+        hub = hub_for(store)
+        mom = FakePeer()
+        await hub.join(account(store, "parent_mom"), mom)
+        await hub.request_band(account(store, "parent_mom"), "student_sam")  # phone offline
+        hub.ok_timeout = 0.01
+        await hub.ask_ok(account(store, "parent_mom"), "student_sam")
+        await asyncio.sleep(0.03)
+        return hub.reassurance_counts()
+
+    assert asyncio.run(scenario()) == {
+        "check_ins": {"unreachable": 1},
+        "are_you_ok": {"no_answer": 1},
+        "arrived_home": {"sent": 0},
+    }
+
+
+def test_reassurance_counts_are_console_only(tmp_path: Path) -> None:
+    client = TestClient(
+        create_app(
+            Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+        )
+    )
+
+    def get(who: str) -> Any:
+        token = client.post("/api/login", json={"account_id": who}).json()["token"]
+        return client.get("/api/console/reassurance", headers={"Authorization": f"Bearer {token}"})
+
+    assert get("parent_mom").status_code == 403
+    assert get("console").json()["check_ins"] == {}

@@ -1,7 +1,7 @@
 // Console page helpers (web only). Node runs the TypeScript file directly. Made-up numbers.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cadenceWords, errorWords, mapNight, monthlyTotals, trendZones, zoneLevels } from "./console.ts";
+import { cadenceWords, errorWords, mapNight, monthlyTotals, outcomeWords, trendZones, zoneLevels } from "./console.ts";
 
 const forecast = (tonight) => ({
   tonight: { night: tonight, zones: [] },
@@ -47,4 +47,9 @@ test("trend zones are busiest first", () => {
     { week: "w2", zonecode: "B", calls: 2, calls_last_year: 0 },
   ];
   assert.deepEqual(trendZones(rows), ["A", "B"]);
+});
+
+test("family check-in outcomes read as counts in words", () => {
+  assert.equal(outcomeWords({ answered: 3, unreachable: 1 }), "3 answered, 1 phone not reached");
+  assert.equal(outcomeWords({}), "none yet");
 });
