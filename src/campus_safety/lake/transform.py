@@ -89,6 +89,7 @@ PUBLISHED = (
     ("gold", "calibration_bpd_cfs_check"),
     ("gold", "console_cross_check"),
     ("gold", "archive_coverage"),
+    ("gold", "console_weekly_trends"),
 )
 
 

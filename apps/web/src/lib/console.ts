@@ -187,3 +187,17 @@ export function saveRealOnly(value: boolean): void {
     // a private window: the choice lasts for this page only
   }
 }
+
+export interface TrendWeek {
+  week: string;
+  zonecode: string;
+  calls: number;
+  calls_last_year: number;
+}
+
+/** Zones ordered by calls in the shown weeks, busiest first. */
+export function trendZones(rows: TrendWeek[]): string[] {
+  const totals = new Map<string, number>();
+  for (const r of rows) totals.set(r.zonecode, (totals.get(r.zonecode) ?? 0) + r.calls);
+  return [...totals.entries()].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([z]) => z);
+}

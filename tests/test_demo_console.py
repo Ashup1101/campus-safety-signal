@@ -42,6 +42,10 @@ def client_for(tmp_path: Path, with_gaps: bool = True) -> TestClient:
                 " AS z(zonecode, geometry)"
             )
             con.execute(
+                "CREATE TABLE gold.console_weekly_trends AS SELECT DATE '2026-10-12' AS week,"
+                " 'LB101' AS zonecode, 40 AS calls, 35 AS calls_last_year"
+            )
+            con.execute(
                 "CREATE TABLE gold.archive_coverage AS SELECT * FROM (VALUES"
                 " (2017, 3, 1, 1, 1), (2025, 1, 1, 0, 0))"
                 " AS t(year, listed, parsed, failed, not_fetched)"
@@ -180,3 +184,12 @@ def test_zone_shapes_cover_the_forecast_zones_only(tmp_path: Path) -> None:
     assert body["type"] == "FeatureCollection"
     assert [f["properties"]["zonecode"] for f in body["features"]] == ["LB101"]
     assert body["features"][0]["geometry"]["type"] == "Polygon"
+
+
+def test_weekly_trends_are_console_only_counts(tmp_path: Path) -> None:
+    client = client_for(tmp_path)
+    url = "/api/console/trends"
+    assert client.get(url, headers=login(client, "student_sam")).status_code == 403
+    assert client.get(url, headers=login(client, "console")).json() == [
+        {"week": "2026-10-12", "zonecode": "LB101", "calls": 40, "calls_last_year": 35}
+    ]

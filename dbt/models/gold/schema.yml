@@ -72,6 +72,15 @@ models:
         data_tests: [unique, not_null]
       - name: listed
         data_tests: [not_null]
+  - name: console_weekly_trends
+    description: BPD calls per week and zone vs the same week a year earlier (sensitive natures excluded).
+    columns:
+      - name: week
+        data_tests: [not_null]
+      - name: zonecode
+        data_tests: [not_null]
+      - name: calls
+        data_tests: [not_null]
   - name: console_cross_check
     description: IU log entries vs BPD calls per month, zone and shared category (calls are not crimes).
     columns:
