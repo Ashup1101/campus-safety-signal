@@ -141,6 +141,19 @@ create table if not exists consents (
     withdrawn_at text,
     primary key (account_id, kind)
 );
+create table if not exists subscriptions (
+    account_id text not null references accounts (id),
+    kind text not null,
+    state text not null check (state in ('pending_confirm', 'active', 'unsubscribed')),
+    primary key (account_id, kind)
+);
+create table if not exists sub_tokens (
+    hash text primary key,
+    account_id text not null references accounts (id),
+    kind text not null,
+    purpose text not null check (purpose in ('confirm', 'unsubscribe')),
+    created_at text not null
+);
 create table if not exists device_keys (
     account_id text primary key references accounts (id),
     key_id text not null,
@@ -321,6 +334,38 @@ class Store:
                     "insert or replace into consents values (?, ?, ?, null, null)",
                     (account_id, kind, version),
                 )
+
+    @_locked
+    def set_subscription(self, account_id: str, kind: str, state: str) -> None:
+        with self._db:
+            self._db.execute(
+                "insert or replace into subscriptions values (?, ?, ?)", (account_id, kind, state)
+            )
+
+    @_locked
+    def subscription(self, account_id: str, kind: str) -> str | None:
+        row = self._db.execute(
+            "select state from subscriptions where account_id = ? and kind = ?", (account_id, kind)
+        ).fetchone()
+        return str(row[0]) if row else None
+
+    @_locked
+    def add_sub_token(
+        self, token_hash: str, account_id: str, kind: str, purpose: str, now: datetime
+    ) -> None:
+        with self._db:
+            self._db.execute(
+                "insert into sub_tokens values (?, ?, ?, ?, ?)",
+                (token_hash, account_id, kind, purpose, now.isoformat()),
+            )
+
+    @_locked
+    def sub_token(self, token_hash: str, purpose: str) -> dict[str, str] | None:
+        row = self._db.execute(
+            "select account_id, kind from sub_tokens where hash = ? and purpose = ?",
+            (token_hash, purpose),
+        ).fetchone()
+        return {"account_id": str(row[0]), "kind": str(row[1])} if row else None
 
     @_locked
     def ensure_key(self, student_id: str, now: datetime) -> None:
@@ -836,6 +881,8 @@ class Store:
                 "ask_usage",
                 "device_keys",
                 "consents",
+                "subscriptions",
+                "sub_tokens",
                 "note_reports",
                 "notes",
                 "bans",

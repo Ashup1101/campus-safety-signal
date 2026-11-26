@@ -18,9 +18,10 @@ import duckdb
 
 from campus_safety import events
 from campus_safety.alerts import briefings, digests
+from campus_safety.alerts.rules import Draft
 from campus_safety.events import Event
 from campus_safety.patterns.categories import category
-from demo_server import consents
+from demo_server import subscriptions
 from demo_server.mailbox import MailboxChannel
 from demo_server.store import Store, Zone
 
@@ -49,6 +50,15 @@ class Scheduler:
         self.store, self.channel, self.warehouse = store, channel, warehouse
         self.names, self.calendar, self.now = names, calendar, now
         self.notes_expiry_hours = 24  # configs/notes.yaml expiry_hours (set by the app)
+
+    def _unsubscribable(self, account_id: str, kind: str, draft: Draft) -> Draft:
+        """Self-created accounts get a one-click unsubscribe link in every message."""
+        account = self.store.account(account_id)
+        if account is None or not account.self_service:
+            return draft
+        return Draft(
+            draft.title, subscriptions.with_unsubscribe(self.store, account_id, kind, draft.body)
+        )
 
     def _family(self) -> list[str]:
         return [a.id for a in self.store.accounts() if a.role in ("student", "parent")]
@@ -79,9 +89,10 @@ class Scheduler:
             if not opens <= now < closes:
                 continue
             draft = briefings.briefing(event, self._busy(), self._tonight())
-            for account_id in consents.recipients(self.store, self._family(), "briefings"):
+            for account_id in subscriptions.recipients(self.store, self._family(), "briefings"):
                 key = f"briefing:{event.event_id}:{account_id}"
-                sent += self.channel.deliver(account_id, draft, "briefing", key)
+                mine = self._unsubscribable(account_id, "briefings", draft)
+                sent += self.channel.deliver(account_id, mine, "briefing", key)
         return sent
 
     def _items(self, zone: Zone, start: datetime, end: datetime) -> list[digests.Item]:
@@ -110,7 +121,7 @@ class Scheduler:
         if now.weekday() == 0:
             periods.append(("weekly", end - timedelta(days=7)))
         sent = 0
-        for account_id in consents.recipients(self.store, self._family(), "digests"):
+        for account_id in subscriptions.recipients(self.store, self._family(), "digests"):
             for zone in self.store.zones(account_id):
                 for period, start in periods:
                     key = f"digest:{period}:{end.date()}:{account_id}:{zone.name}"
@@ -120,7 +131,8 @@ class Scheduler:
                         period, zone.name, start, end, self._items(zone, start, end)
                     )
                     if draft:
-                        sent += self.channel.deliver(account_id, draft, "digest", key)
+                        mine = self._unsubscribable(account_id, "digests", draft)
+                        sent += self.channel.deliver(account_id, mine, "digest", key)
         return sent
 
     def upcoming(self) -> dict[str, object]:
