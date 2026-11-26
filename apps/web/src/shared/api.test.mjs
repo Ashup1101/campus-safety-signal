@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac } from "node:crypto";
-import { activeWindows, BAND_WORDS, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { activeWindows, BAND_WORDS, bandResultText, okResultText, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -183,4 +183,18 @@ test("heads-up windows add Tonight during late night when a forecast covers toda
   assert.deepEqual(activeWindows(["late_night", "event_night"], withTonight), ["late_night", "event_night", "tonight"]);
   assert.deepEqual(activeWindows(["late_night"], without), ["late_night"]);
   assert.deepEqual(activeWindows([], withTonight), []);
+});
+
+test("parent check-in words never say away without a verified answer", () => {
+  const now = Date.parse("2026-11-26T23:05:00Z");
+  assert.equal(
+    bandResultText("Sam", { state: "answered", band: "nearby", answered_at: "2026-11-26T23:00:00Z" }, now),
+    "Sam is near home or on campus (5 min ago).",
+  );
+  for (const state of ["unverified", "declined", "unreachable"]) {
+    assert.doesNotMatch(bandResultText("Sam", { state, band: "away" }, now), /away/);
+  }
+  assert.equal(bandResultText("Sam", { state: "unreachable" }), "Couldn't reach Sam's phone.");
+  assert.equal(okResultText("Sam", "no_answer"), "No answer yet from Sam.");
+  assert.equal(okResultText("Sam", "call_me"), "Sam asked you to call.");
 });

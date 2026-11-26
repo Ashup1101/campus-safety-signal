@@ -5,8 +5,9 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, ThreadCard } from "../components/AlertCard";
 import { AreaCheck } from "../components/AreaCheck";
+import { CheckInCard, type Reassure } from "../components/CheckInCard";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
-import { api, useSocket, type Session } from "../client";
+import { api, apiSend, useSocket, type Session } from "../client";
 import {
   checkInText,
   clockTime,
@@ -56,6 +57,14 @@ export function ParentHome({
   const [mail, setMail] = useState<MailboxMessage[]>([]);
   const [clock, setClock] = useState<Clock | null>(null);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
+  const [reassure, setReassure] = useState<Record<string, Reassure>>({});
+  const patch = (id: string, change: Partial<Reassure>) =>
+    setReassure((all) => ({ ...all, [id]: { ...all[id], ...change } }));
+  const ask = (id: string, kind: "check-in" | "are-you-ok") => {
+    patch(id, kind === "check-in" ? { band: { state: "pending" } } : { ok: "pending" });
+    const failed = () => patch(id, kind === "check-in" ? { band: { state: "unreachable" } } : { ok: undefined });
+    apiSend(`/api/${kind}/${id}`, token, "POST").then((r) => r.ok || failed(), failed);
+  };
   const now = Date.now();
 
   useEffect(() => {
@@ -111,6 +120,18 @@ export function ParentHome({
       case "clock":
         setClock(message.clock);
         break;
+      case "band_result":
+        patch(message.student_id, {
+          band: { state: message.state, band: message.band, answered_at: message.answered_at },
+        });
+        break;
+      case "ok_result":
+        patch(message.student_id, { ok: message.state });
+        break;
+      case "arrived_home":
+        patch(message.student_id, { arrivedAt: message.at });
+        setNotice(`${message.student_name} arrived home.`);
+        break;
     }
   });
 
@@ -163,6 +184,13 @@ export function ParentHome({
               <Text className="mt-2 text-xs text-muted-foreground dark:text-muted-foreground-dark">
                 {s.name} chooses when to share and can pause anytime. You see it only while this screen is open; it is never saved.
               </Text>
+              <CheckInCard
+                name={s.name}
+                state={reassure[s.id] ?? {}}
+                muted={muted}
+                onCheckIn={() => ask(s.id, "check-in")}
+                onAreYouOk={() => ask(s.id, "are-you-ok")}
+              />
             </View>
           ))
         )}
