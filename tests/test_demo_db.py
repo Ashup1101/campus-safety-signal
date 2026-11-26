@@ -4,6 +4,7 @@ from pathlib import Path
 import psycopg
 import pytest
 
+from demo_server import migrate
 from demo_server.db import (
     Database,
     IntegrityError,
@@ -71,3 +72,27 @@ def test_upsert_rejects_odd_names() -> None:
 def test_postgres_url_detection() -> None:
     assert is_postgres_url("postgresql://u@h/db") and is_postgres_url("postgres://u@h/db")
     assert not is_postgres_url(None) and not is_postgres_url("data/demo/demo.sqlite3")
+
+
+def _tables(url: str) -> set[str]:
+    with psycopg.connect(url) as conn:
+        rows = conn.execute(
+            "select tablename from pg_tables where schemaname = 'public'"
+        ).fetchall()
+    return {r[0] for r in rows}
+
+
+def test_migrations_create_the_family_schema_once(pg_url: str) -> None:
+    assert migrate.migrate(pg_url) == list(range(1, migrate.newest_version() + 1))
+    tables = _tables(pg_url)
+    assert len(tables - {"schema_migrations"}) == 20 and "schema_migrations" in tables
+    assert migrate.migrate(pg_url) == []  # second run is a no-op
+    with psycopg.connect(pg_url) as conn:
+        assert migrate.current_version(conn) == migrate.newest_version()
+
+
+def test_migration_numbers_must_not_skip(tmp_path: Path) -> None:
+    (tmp_path / "0001_a.sql").write_text("select 1;")
+    (tmp_path / "0003_c.sql").write_text("select 1;")
+    with pytest.raises(ValueError, match="without gaps"):
+        migrate.migration_files(tmp_path)
