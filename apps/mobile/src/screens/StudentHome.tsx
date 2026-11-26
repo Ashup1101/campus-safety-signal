@@ -8,6 +8,7 @@ import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, CheckInControls, ThreadCard } from "../components/AlertCard";
 import { CheckingInBadge } from "../components/CheckingInBadge";
 import { AreaCheck } from "../components/AreaCheck";
+import { CommunityNotes } from "../components/CommunityNotes";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
@@ -84,6 +85,7 @@ export function StudentHome({
   const [points, setPoints] = useState<IncidentPoints | null>(null);
   const [mail, setMail] = useState<MailboxMessage[]>([]);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
+  const [notesVersion, setNotesVersion] = useState<Record<string, number>>({});
   const [selected, setSelected] = useState<SegmentFeature | null>(null);
   const [note, setNote] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
@@ -164,6 +166,9 @@ export function StudentHome({
         break;
       case "clock":
         setClock(message.clock);
+        break;
+      case "notes_changed":
+        setNotesVersion((v) => ({ ...v, [message.thread_id]: (v[message.thread_id] ?? 0) + 1 }));
         break;
     }
   });
@@ -389,6 +394,12 @@ export function StudentHome({
                   onSend={(state, place) => send({ type: "check_in", thread_id: thread.id, state, place })}
                 />
               )}
+              <CommunityNotes
+                token={token}
+                threadId={thread.id}
+                version={(notesVersion[thread.id] ?? 0) + (notesVersion["*"] ?? 0)}
+                muted={dark ? "#c9bba9" : "#5c4f4a"}
+              />
             </ThreadCard>
           ))
         )}

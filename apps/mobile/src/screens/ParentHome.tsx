@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { ActivityMap } from "../components/ActivityMap";
 import { AlertBanner, ThreadCard } from "../components/AlertCard";
 import { AreaCheck } from "../components/AreaCheck";
+import { CommunityNotes } from "../components/CommunityNotes";
 import { CheckInCard, type Reassure } from "../components/CheckInCard";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { api, apiSend, useSocket, type Session } from "../client";
@@ -57,6 +58,7 @@ export function ParentHome({
   const [mail, setMail] = useState<MailboxMessage[]>([]);
   const [clock, setClock] = useState<Clock | null>(null);
   const [chosen, setChosen] = useState<TimeWindow | null>(null);
+  const [notesVersion, setNotesVersion] = useState<Record<string, number>>({});
   const [reassure, setReassure] = useState<Record<string, Reassure>>({});
   const patch = (id: string, change: Partial<Reassure>) =>
     setReassure((all) => ({ ...all, [id]: { ...all[id], ...change } }));
@@ -119,6 +121,9 @@ export function ParentHome({
         break;
       case "clock":
         setClock(message.clock);
+        break;
+      case "notes_changed":
+        setNotesVersion((v) => ({ ...v, [message.thread_id]: (v[message.thread_id] ?? 0) + 1 }));
         break;
       case "band_result":
         patch(message.student_id, {
@@ -225,6 +230,12 @@ export function ParentHome({
                     {c.student_name}: {checkInText(c)}
                   </Text>
                 ))}
+              <CommunityNotes
+                token={token}
+                threadId={thread.id}
+                version={(notesVersion[thread.id] ?? 0) + (notesVersion["*"] ?? 0)}
+                muted={dark ? "#c9bba9" : "#5c4f4a"}
+              />
             </ThreadCard>
           ))
         )}
