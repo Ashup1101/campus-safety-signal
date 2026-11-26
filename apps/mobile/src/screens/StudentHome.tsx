@@ -14,6 +14,7 @@ import { api, useSocket, type Session } from "../client";
 import { homeArea, reassurance, signingKey } from "../home";
 import { AreYouOk } from "../components/AreYouOk";
 import { answerBand } from "../signing";
+import { notifyAreYouOk, onAreYouOkAnswer, registerAreYouOk } from "../notifications";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
   activeWindows,
@@ -140,7 +141,7 @@ export function StudentHome({
             return;
           }
           setOkRequest(request);
-          notify(`${request.from} is asking: are you OK?`, "Open the app to answer.");
+          notifyAreYouOk(request.from, request.request_id);
         });
         break;
       }
@@ -166,6 +167,15 @@ export function StudentHome({
         break;
     }
   });
+
+  // Notification buttons answer "Are you OK?" without opening the app.
+  useEffect(() => {
+    registerAreYouOk();
+    return onAreYouOkAnswer((requestId, answer) => {
+      send({ type: "ok_answer", request_id: requestId, answer });
+      setOkRequest((current) => (current?.request_id === requestId ? null : current));
+    });
+  }, [send]);
 
   const changeSharing = useCallback(
     (state: Sharing, home = false) => {
