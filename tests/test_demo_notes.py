@@ -221,3 +221,30 @@ def test_moderators_hide_unhide_and_ban_by_note(api: tuple[Any, TestClient]) -> 
     assert store.notes_of("t1") == []  # a ban removes the person's notes
     again = post(client, "student_sam", {"tag": "Road closed", **KIRKWOOD_400})
     assert again.status_code == 403
+
+
+def test_the_kill_switch_hides_everything_and_blocks_posting(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    app.state.store.add_alert("a1", alert("Normal"), datetime.now(UTC), "t1")
+    console = auth(client, "console")
+    for who in ("student_sam", "student_alex"):
+        post(client, who, {"tag": "Road closed", **KIRKWOOD_400})
+    assert client.get("/api/console/notes/switch", headers=console).json() == {"enabled": True}
+    off = client.post("/api/console/notes/switch", headers=console, json={"enabled": False})
+    assert off.json() == {"enabled": False}
+    reader = auth(client, "parent_mom")
+    assert client.get("/api/threads/t1/notes", headers=reader).json()["notes"] == []
+    assert (
+        post(client, "student_sam", {"tag": "Road closed", **KIRKWOOD_400}, "put").status_code
+        == 403
+    )
+    client.post("/api/console/notes/switch", headers=console, json={"enabled": True})
+    assert len(client.get("/api/threads/t1/notes", headers=reader).json()["notes"]) == 1
+    assert (
+        client.post(
+            "/api/console/notes/switch",
+            headers=auth(client, "student_sam"),
+            json={"enabled": False},
+        ).status_code
+        == 403
+    )
