@@ -23,6 +23,8 @@ redteam = "campus_safety.security.cli:main"
 geo = "campus_safety.geo.cli:main"
 t3 = "campus_safety.t3.cli:main"
 t1 = "campus_safety.t1.cli:main"
+t2 = "campus_safety.t2.cli:main"
+t4 = "campus_safety.t4.cli:main"
 
 [dependency-groups]
 agents = [
