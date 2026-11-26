@@ -23,8 +23,9 @@ def corroborated(
     for tag, posted in by_tag.items():
         people = {n["account_id"] for n in posted}
         if len(people) >= need:
-            texts = [str(n["text"]) for n in posted if n.get("text")]
-            shown.append({"tag": tag, "people": len(people), "texts": texts})
+            texts = [{"id": n["id"], "text": str(n["text"])} for n in posted if n.get("text")]
+            ids = sorted(n["id"] for n in posted)  # for reporting; never who posted
+            shown.append({"tag": tag, "people": len(people), "texts": texts, "ids": ids})
     return sorted(shown, key=lambda s: (-s["people"], s["tag"]))
 
 

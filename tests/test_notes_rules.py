@@ -8,7 +8,7 @@ CFG = config.load()
 def note(
     account: str, tag: str, text: str | None = None, state: str = "pending"
 ) -> dict[str, object]:
-    return {"account_id": account, "tag": tag, "text": text, "state": state}
+    return {"id": ord(account[0]), "account_id": account, "tag": tag, "text": text, "state": state}
 
 
 def test_a_tag_shows_once_two_people_agree() -> None:
@@ -16,7 +16,12 @@ def test_a_tag_shows_once_two_people_agree() -> None:
     assert rules.corroborated(one, event_night=False, cfg=CFG) == []
     two = [*one, note("b", "Road closed"), note("c", "Crowd gathering", "big crowd")]
     assert rules.corroborated(two, event_night=False, cfg=CFG) == [
-        {"tag": "Road closed", "people": 2, "texts": ["Dunn closed"]}
+        {
+            "tag": "Road closed",
+            "people": 2,
+            "texts": [{"id": 97, "text": "Dunn closed"}],
+            "ids": [97, 98],
+        }
     ]
 
 

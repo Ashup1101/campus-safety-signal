@@ -517,7 +517,7 @@ export function okResultText(name: string, state: OkState): string {
 // Community notes (v9): only confirmed tags, never who posted; the reader's own note in any state.
 export interface ThreadNotes {
   label: string;
-  notes: { tag: string; people: number; texts: string[]; by: string }[];
+  notes: { tag: string; people: number; texts: { id: number; text: string }[]; ids: number[]; by: string }[];
   mine: { tag: string; text: string | null; state: "held" | "pending" | "visible" | "hidden" } | null;
   enabled: boolean;
 }
