@@ -11,18 +11,20 @@ import { AreaCheck } from "../components/AreaCheck";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
-import { reassurance, signingKey } from "../home";
+import { homeArea, reassurance, signingKey } from "../home";
 import { AreYouOk } from "../components/AreYouOk";
 import { answerBand } from "../signing";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
   hasTonight,
   levelFor,
+  reachedHomeOnEventNight,
   tonightMethod,
   threadsOf,
   tonightOf,
   toneOf,
   type Alert,
+  type Area,
   type CheckIn,
   type Clock,
   type IncidentPoints,
@@ -174,6 +176,18 @@ export function StudentHome({
   );
 
   // The location loop reads the newest state through a ref, so it never restarts.
+  // Home area and the student's "Arrived home" switch, read from this phone's secure store.
+  const mine = useRef<{ home: Area | null; arrivedHome: boolean; sent: boolean }>({
+    home: null,
+    arrivedHome: false,
+    sent: false,
+  });
+  useEffect(() => {
+    Promise.all([homeArea.get(), reassurance.get()]).then(([home, settings]) => {
+      mine.current = { ...mine.current, home, arrivedHome: settings.arrivedHome };
+    });
+  }, []);
+
   const latest = useRef({ sharing, untilHome, viewers, segments, clock });
   useEffect(() => {
     latest.current = { sharing, untilHome, viewers, segments, clock };
@@ -198,7 +212,18 @@ export function StudentHome({
           const point = { lat: coords.latitude, lon: coords.longitude };
           here.current = point;
           const now = latest.current;
-          if (now.sharing === "on" && now.untilHome && distance(point, HOME) <= HOME_RADIUS_M) {
+          const own = mine.current;
+          if (
+            now.sharing === "on" &&
+            own.arrivedHome &&
+            !own.sent &&
+            reachedHomeOnEventNight(point, own.home, now.clock?.windows ?? [])
+          ) {
+            own.sent = true; // the server also sends it once per night
+            send({ type: "arrived_home" });
+            setSharing("off");
+            setNote("You're home. Sharing ended and your family was told you arrived.");
+          } else if (now.sharing === "on" && now.untilHome && distance(point, HOME) <= HOME_RADIUS_M) {
             changeSharing("off");
             setNote("You're home. Sharing turned off.");
           } else if (now.sharing === "on" && now.viewers.length > 0) {
