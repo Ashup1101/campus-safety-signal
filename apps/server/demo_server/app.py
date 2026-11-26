@@ -31,6 +31,7 @@ from demo_server import (
     notes_api,
     points,
     subscriptions,
+    surveys,
     tonight_model,
 )
 from demo_server.area import area_for
@@ -186,6 +187,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     console_api.register(app, console, settings.warehouse, settings.gaps, store, settings.lake_uri)
     consents.register(app, current, store, hub.consent_withdrawn)
     subscriptions.register(app, store)
+    surveys.register(app, current, store)
     notes_api.register(
         app,
         current,

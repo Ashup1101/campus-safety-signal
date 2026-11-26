@@ -154,6 +154,15 @@ create table if not exists sub_tokens (
     purpose text not null check (purpose in ('confirm', 'unsubscribe')),
     created_at text not null
 );
+create table if not exists survey_answers (
+    account_id text not null references accounts (id),
+    prompt text not null,
+    q1 integer,
+    q2 integer,
+    q3 integer,
+    answered_at text not null,
+    primary key (account_id, prompt)
+);
 create table if not exists device_keys (
     account_id text primary key references accounts (id),
     key_id text not null,
@@ -366,6 +375,38 @@ class Store:
             (token_hash, purpose),
         ).fetchone()
         return {"account_id": str(row[0]), "kind": str(row[1])} if row else None
+
+    @_locked
+    def survey_prompts(self, account_id: str) -> set[str]:
+        rows = self._db.execute(
+            "select prompt from survey_answers where account_id = ?", (account_id,)
+        ).fetchall()
+        return {str(r[0]) for r in rows}
+
+    @_locked
+    def add_survey_answer(
+        self, account_id: str, prompt: str, answers: list[int] | None, now: datetime
+    ) -> None:
+        q1, q2, q3 = answers if answers else (None, None, None)
+        with self._db:
+            self._db.execute(
+                "insert into survey_answers values (?, ?, ?, ?, ?, ?)",
+                (account_id, prompt, q1, q2, q3, now.isoformat()),
+            )
+
+    @_locked
+    def survey_rows(self) -> list[tuple[Any, ...]]:
+        """(prompt, q1, q2, q3) for every answer; skipped prompts have no numbers."""
+        return self._db.execute("select prompt, q1, q2, q3 from survey_answers").fetchall()
+
+    @_locked
+    def threads_delivered_to(self, account_id: str) -> list[str]:
+        rows = self._db.execute(
+            "select distinct a.thread_id from deliveries d join alerts a on a.id = d.alert_id"
+            " where d.account_id = ?",
+            (account_id,),
+        ).fetchall()
+        return [str(r[0]) for r in rows]
 
     @_locked
     def ensure_key(self, student_id: str, now: datetime) -> None:
@@ -883,6 +924,7 @@ class Store:
                 "consents",
                 "subscriptions",
                 "sub_tokens",
+                "survey_answers",
                 "note_reports",
                 "notes",
                 "bans",
