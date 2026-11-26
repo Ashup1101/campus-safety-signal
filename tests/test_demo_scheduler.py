@@ -5,6 +5,7 @@ from pathlib import Path
 
 import duckdb
 import pytest
+from demo_target import store_at
 
 from campus_safety.events import Event
 from demo_server.mailbox import MailboxChannel
@@ -19,7 +20,7 @@ HALLOWEEN = Event(
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     for parent, student, label in LINKS:

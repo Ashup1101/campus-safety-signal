@@ -4,6 +4,8 @@ alerts. Made-up alerts only."""
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
+from demo_target import store_at
+
 from campus_safety.official.alerts import OfficialAlert
 from demo_server import metrics
 from demo_server.seed import ACCOUNTS
@@ -34,7 +36,7 @@ def official(text: str = "Made-up alert.") -> OfficialAlert:
 
 
 def test_metrics_for_a_period(tmp_path: Path) -> None:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     now = datetime.now(UTC)
@@ -62,7 +64,7 @@ def test_metrics_for_a_period(tmp_path: Path) -> None:
 
 
 def test_metrics_with_no_alerts(tmp_path: Path) -> None:
-    found = metrics.alert_metrics(Store(tmp_path / "demo.sqlite3"), datetime.now(UTC), days=7)
+    found = metrics.alert_metrics(Store(store_at(tmp_path)), datetime.now(UTC), days=7)
     assert found["alerts"] == 0
     assert found["latency"]["web"] == {"median_s": None, "p95_s": None, "deliveries": 0}
     assert found["corrections_per_100"] is None and found["duplicates_per_100"] is None

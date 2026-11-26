@@ -4,6 +4,7 @@ import sqlite3
 from pathlib import Path
 
 import pytest
+from demo_target import store_at
 
 from demo_server.store import Account, Store
 
@@ -26,7 +27,7 @@ def test_an_older_database_upgrades_and_keeps_its_accounts(tmp_path: Path) -> No
 
 
 def test_one_account_per_email(tmp_path: Path) -> None:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     store.add_account(Account("a", "parent", "A", False, email="same@example.test"))
     with pytest.raises(sqlite3.IntegrityError):
         store.add_account(Account("b", "student", "B", False, email="same@example.test"))

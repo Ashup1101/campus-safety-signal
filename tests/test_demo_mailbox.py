@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 
 import pytest
+from demo_target import store_at
 
 from campus_safety.alerts.rules import Draft
 from demo_server.mailbox import MailboxChannel
@@ -13,7 +14,7 @@ from demo_server.store import Store
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     return store

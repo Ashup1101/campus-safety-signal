@@ -1,8 +1,8 @@
 """Delete account: everything the account owns goes, in one step. Made-up accounts."""
 
-import sqlite3
 from pathlib import Path
 
+from demo_target import rows, store_at, tables
 from test_demo_links import app_and_client, signed_in
 
 ZONE = {"name": "Dorm", "lat": 39.17, "lon": -86.52, "radius_m": 300}
@@ -29,11 +29,10 @@ def test_delete_removes_every_row_the_account_owns(tmp_path: Path) -> None:
     pat_id = store.account_by_email("pat@example.test").id
     assert store.subscription(pat_id, "digests") == "pending_confirm"
     assert client.delete("/api/me", headers=pat).status_code == 204
-    with sqlite3.connect(tmp_path / "d" / "demo.sqlite3") as db:
-        tables = [r[0] for r in db.execute("select name from sqlite_master where type = 'table'")]
-        for table in tables:
-            for row in db.execute(f"select * from {table}"):  # noqa: S608 (table names from sqlite)
-                assert pat_id not in row and "pat@example.test" not in row, table
+    target = store_at(tmp_path / "d")
+    for table in tables(target):
+        for row in rows(target, table):
+            assert pat_id not in row and "pat@example.test" not in row, table
     assert client.get("/api/mailbox", headers=pat).status_code == 401  # signed out
     assert store.students_of(pat_id) == []
     again = client.post(

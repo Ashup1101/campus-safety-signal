@@ -1,10 +1,10 @@
 """Community notes on the demo server. Made-up accounts, incidents and words."""
 
-import sqlite3
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
+from demo_target import columns, store_at, tables
 
 from demo_server.seed import ACCOUNTS
 from demo_server.store import Store
@@ -14,18 +14,17 @@ NOW = datetime(2026, 11, 26, 23, 0, tzinfo=UTC)
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     return store
 
 
 def test_notes_tables_hold_no_location(store: Store, tmp_path: Path) -> None:
-    db = sqlite3.connect(tmp_path / "demo.sqlite3")
     for table in ("notes", "note_reports", "bans", "settings"):
-        columns = {row[1] for row in db.execute(f"pragma table_info({table})")}
-        assert columns, table
-        assert not columns & {"lat", "lon", "latitude", "longitude", "location", "distance_m"}
+        found = columns(store_at(tmp_path), table)
+        assert found, table
+        assert not found & {"lat", "lon", "latitude", "longitude", "location", "distance_m"}
 
 
 def test_one_note_per_person_per_incident(store: Store) -> None:
@@ -250,7 +249,7 @@ def test_the_kill_switch_hides_everything_and_blocks_posting(api: tuple[Any, Tes
     )
 
 
-def test_notes_vanish_a_day_after_the_incident_closes(store: Store) -> None:
+def test_notes_vanish_a_day_after_the_incident_closes(store: Store, tmp_path: Path) -> None:
     opened = NOW - timedelta(days=3)
     store.add_alert("a1", alert("Severe"), opened, "closed")
     store.add_alert("a2", alert("Normal"), opened + timedelta(hours=1), "closed")
@@ -262,10 +261,7 @@ def test_notes_vanish_a_day_after_the_incident_closes(store: Store) -> None:
     # A day after the all-clear; a day after the grey card went quiet (6 h without an update).
     assert store.expire_notes(NOW, hours=24) == 2
     assert [store.notes_of(t) != [] for t in ("closed", "open", "grey")] == [False, True, False]
-    db = sqlite3.connect(store.path)
-    assert [
-        r[0] for r in db.execute("select name from sqlite_master where name like '%history%'")
-    ] == []
+    assert [t for t in tables(store_at(tmp_path)) if "history" in t] == []
 
 
 def test_the_composer_gets_the_tag_lists(api: tuple[Any, TestClient]) -> None:

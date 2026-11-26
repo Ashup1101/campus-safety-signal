@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from demo_target import store_at
 from fastapi.testclient import TestClient
 
 from demo_server.app import create_app
@@ -72,7 +73,7 @@ PAT = Account("pat", "parent", "Pat", True, "pat@example.test", self_service=Tru
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in (KIM, PAT):
         store.add_account(account)
     store.link("pat", "kim", "Mom")

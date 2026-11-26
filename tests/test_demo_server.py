@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from demo_target import store_at
 from fastapi.testclient import TestClient
 
 from campus_safety.official.alerts import OfficialAlert
@@ -58,7 +59,7 @@ class FakePeer:
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in [*ACCOUNTS, REAL]:
         store.add_account(account)
     for parent, student, label in LINKS:
@@ -226,6 +227,7 @@ def login(client: TestClient, account_id: str) -> str:
     return token
 
 
+@pytest.mark.sqlite_only  # reads the SQLite file's bytes
 def test_api_flow_drill_acks_and_no_location_on_disk(
     client: TestClient, tmp_path: Path, caplog: pytest.LogCaptureFixture
 ) -> None:

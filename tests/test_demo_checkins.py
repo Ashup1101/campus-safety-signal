@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from demo_target import store_at
 
 from campus_safety.official.alerts import OfficialAlert
 from demo_server.hub import Clock, Hub
@@ -39,7 +40,7 @@ class Peer:
 
 @pytest.fixture
 def store(tmp_path: Path) -> Store:
-    store = Store(tmp_path / "demo.sqlite3")
+    store = Store(store_at(tmp_path))
     for account in ACCOUNTS:
         store.add_account(account)
     for parent, student, label in LINKS:
