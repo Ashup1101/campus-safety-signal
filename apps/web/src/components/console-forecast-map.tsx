@@ -90,9 +90,13 @@ export function ConsoleForecastMap({
         created.on("click", "forecast-fill", (e) => {
           const text = String(e.features?.[0]?.properties?.text ?? "");
           popup?.remove();
+          // MapLibre popups are white in both themes: dark text keeps the words readable.
+          const body = document.createElement("p");
+          body.textContent = text;
+          body.style.color = "#1c1416";
           popup = new maplibre.Popup({ closeButton: true, maxWidth: "260px" })
             .setLngLat(e.lngLat)
-            .setText(text)
+            .setDOMContent(body)
             .addTo(created);
         });
         created.on("mouseenter", "forecast-fill", () => (created.getCanvas().style.cursor = "pointer"));

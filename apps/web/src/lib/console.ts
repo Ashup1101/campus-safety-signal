@@ -98,3 +98,92 @@ export function errorWords(kind: string | null): string | null {
   if (kind.startsWith("http_")) return `the site answered with error ${kind.slice(5)}`;
   return "the newest copy has a problem";
 }
+
+export interface GapRow {
+  gap_id: string;
+  source: string;
+  span_start: string | null;
+  span_end: string | null;
+  span_days: number | null;
+  real_days_covered: number | null;
+  real_incidents: number | null;
+  reason: string;
+  synthetic_rows?: number;
+  synthetic_seeds?: number;
+  planted_anomalies?: number;
+}
+
+export interface CrossCheck {
+  note: string;
+  rows: {
+    month: string;
+    zonecode: string;
+    category: string;
+    iu_count: number;
+    bpd_count: number;
+  }[];
+  calibration: {
+    period_year: number;
+    period_month: number;
+    reported_calls: number;
+    feed_calls: number;
+    pct_difference: number | null;
+  }[];
+}
+
+export interface ArchiveYear {
+  year: number;
+  listed: number;
+  parsed: number;
+  failed: number;
+  not_fetched: number;
+}
+
+/** Cross-check rows summed over zones: one row per month and category, newest months first. */
+export function monthlyTotals(rows: CrossCheck["rows"], months = 12) {
+  const byKey = new Map<
+    string,
+    { month: string; category: string; iu: number; bpd: number }
+  >();
+  for (const r of rows) {
+    const key = `${r.month}|${r.category}`;
+    const hit = byKey.get(key) ?? {
+      month: r.month,
+      category: r.category,
+      iu: 0,
+      bpd: 0,
+    };
+    hit.iu += r.iu_count;
+    hit.bpd += r.bpd_count;
+    byKey.set(key, hit);
+  }
+  const recent = [...new Set(rows.map((r) => r.month))]
+    .sort()
+    .reverse()
+    .slice(0, months);
+  return [...byKey.values()]
+    .filter((t) => recent.includes(t.month))
+    .sort(
+      (a, b) =>
+        b.month.localeCompare(a.month) || a.category.localeCompare(b.category),
+    );
+}
+
+export const REAL_ONLY_KEY = "console.realOnly";
+
+/** The remembered real-only choice (default on); storage may be blocked, so never throw. */
+export function readRealOnly(): boolean {
+  try {
+    return window.localStorage.getItem(REAL_ONLY_KEY) !== "false";
+  } catch {
+    return true;
+  }
+}
+
+export function saveRealOnly(value: boolean): void {
+  try {
+    window.localStorage.setItem(REAL_ONLY_KEY, String(value));
+  } catch {
+    // a private window: the choice lasts for this page only
+  }
+}

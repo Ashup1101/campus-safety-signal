@@ -62,7 +62,7 @@ export function ConsoleAlertMetrics({ token }: { token: string }) {
               </dt>
               <dd className="tabular-nums">
                 Typical {seconds(found.latency[client].median_s)}; slowest 5% {seconds(found.latency[client].p95_s)}{" "}
-                ({found.latency[client].deliveries} deliveries)
+                ({found.latency[client].deliveries} {found.latency[client].deliveries === 1 ? "delivery" : "deliveries"})
               </dd>
             </div>
           ))}
