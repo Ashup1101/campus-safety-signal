@@ -140,3 +140,45 @@ def test_settings_pick_the_backend_and_hide_the_url(
     settings = Settings(data_dir=tmp_path)
     assert settings.db == "postgresql://svc:secret@db.example.test/postgres"
     assert "secret" not in repr(settings)
+
+
+def test_cli_migrate_dry_run_then_migrate_then_check(
+    pg_url: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("DEMO_DATABASE_URL", pg_url)
+    assert migrate.main(["check"]) == 1  # empty database: version 0
+    assert migrate.main(["migrate", "--dry-run"]) == 0
+    assert "create table accounts" in capsys.readouterr().out
+    assert _tables(pg_url) == set()
+    assert migrate.main(["migrate"]) == 0
+    assert migrate.main(["migrate"]) == 0  # idempotent
+    with psycopg.connect(pg_url, autocommit=True) as conn:
+        conn.execute("insert into settings values ('k', 'a-private-value')")
+    assert migrate.main(["check"]) == 0
+    out = capsys.readouterr().out
+    assert "check: ok" in out and "public policies: 0" in out
+    assert "a-private-value" not in out and "host=" not in out and "postgresql" not in out
+
+
+def test_cli_check_fails_on_an_open_table_or_a_policy(
+    pg_url: str, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("DEMO_DATABASE_URL", pg_url)
+    migrate.migrate(pg_url)
+    with psycopg.connect(pg_url, autocommit=True) as conn:
+        conn.execute("alter table notes disable row level security")
+        conn.execute("create policy everyone on bans for select using (true)")
+    assert migrate.main(["check"]) == 1
+    out = capsys.readouterr().out
+    assert "without row-level security: notes" in out and "public policies: 1" in out
+
+
+def test_cli_needs_a_postgres_url_and_hides_connection_errors(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert migrate.main(["check"]) == 1
+    monkeypatch.setenv("DEMO_DATABASE_URL", "postgresql://svc:secret@127.0.0.1:1/postgres")
+    assert migrate.main(["check"]) == 1
+    assert migrate.main(["migrate"]) == 1
+    out = capsys.readouterr().out
+    assert "secret" not in out and "connected: no" in out
