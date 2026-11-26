@@ -1,0 +1,31 @@
+# Community notes (Sprint 9): every rule the owner set, with the defaults from the roadmap. Change a
+# value here to tune it with IU; the server reads this file at start.
+threshold: 2                  # distinct nearby students before a tag shows
+event_night_threshold: 3      # on event nights (configs/events.yaml)
+text_limit: 140               # characters of optional text
+nearby_m: 500                 # the phone must be this close to the area when posting (not saved)
+expiry_hours: 24              # notes are deleted this long after the incident closes
+report_threshold: 3           # distinct reports that hide a note pending review
+tags:
+  - Police on scene
+  - Avoid the block
+  - Crowd gathering
+  - Road closed
+  - Police still on scene
+  - Area reopened
+  - Quiet now
+safety_tags:                  # the only tags allowed while an official alert is live
+  - Police on scene
+  - Avoid the block
+  - Road closed
+after_all_clear_tags:         # "it's fine" tags: blocked until IU's all-clear (never contradict IU)
+  - Area reopened
+  - Quiet now
+alarming_words:               # text with these is held for review instead of showing
+  - shooter
+  - shooting
+  - bomb
+  - gun
+  - knife
+  - hostage
+  - explosion
