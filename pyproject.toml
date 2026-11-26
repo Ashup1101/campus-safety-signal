@@ -32,6 +32,8 @@ agents = [
 ]
 demo = [
     "fastapi>=0.143.3",
+    "psycopg-pool>=3.2",
+    "psycopg[binary]>=3.2",
     "uvicorn>=0.54.0",
     "websockets>=17.3",
 ]
@@ -43,6 +45,7 @@ dev = [
     "httpx>=0.28.1",
     "moto[s3,sns,sqs]>=5.2.4",
     "mypy",
+    "pgserver>=0.1.4",
     "pip-audit",
     "pre-commit",
     "pytest",
