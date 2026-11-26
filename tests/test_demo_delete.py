@@ -18,7 +18,16 @@ def test_delete_removes_every_row_the_account_owns(tmp_path: Path) -> None:
     ).json()
     client.post(f"/api/invites/{invite['id']}/accept", headers=kim)
     client.post("/api/zones", headers=pat, json=ZONE)
+    # Pilot tables (Sprint 11): a consent, the subscription and its confirm token, a survey.
+    assert (
+        client.post("/api/consents/digests", headers=pat, json={"granted": True}).status_code == 200
+    )
+    assert (
+        client.post("/api/surveys/signup", headers=pat, json={"answers": [4, 4, 4]}).status_code
+        == 201
+    )
     pat_id = store.account_by_email("pat@example.test").id
+    assert store.subscription(pat_id, "digests") == "pending_confirm"
     assert client.delete("/api/me", headers=pat).status_code == 204
     with sqlite3.connect(tmp_path / "d" / "demo.sqlite3") as db:
         tables = [r[0] for r in db.execute("select name from sqlite_master where type = 'table'")]
