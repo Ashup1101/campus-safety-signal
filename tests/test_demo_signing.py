@@ -80,3 +80,26 @@ def test_signatures_verify_and_replays_are_refused() -> None:
     # After the window a request id is forgotten (memory stays small); its answer is stale anyway.
     assert check.check(secret, "r3", "inside", at, signing.sign(secret, "r3", "inside", at), now)
     assert "r1" not in check.seen(now + timedelta(minutes=3))
+
+
+def test_a_second_parent_keeps_the_key_and_a_phone_can_ask_again(tmp_path: Path) -> None:
+    import asyncio
+
+    from test_demo_server import FakePeer, hub_for
+
+    store, _ = app_for(tmp_path)
+    first = store.device_key("student_sam")
+    store.link("parent_dad", "student_sam", "Dad")  # an extra parent: the phone's key stays
+    assert store.device_key("student_sam") == first
+
+    async def ask() -> FakePeer:
+        hub = hub_for(store)
+        phone = FakePeer()
+        sam = store.account("student_sam")
+        assert sam is not None
+        await hub.join(sam, phone)
+        await hub.message(sam, {"type": "key_request"})
+        return phone
+
+    [resent] = asyncio.run(ask()).of("signing")
+    assert first is not None and (resent["key_id"], resent["secret"]) == first

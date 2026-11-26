@@ -197,6 +197,8 @@ class Hub:
             await self._ok_answer(account, data)
         elif kind == "arrived_home":
             await self._arrived_home(account)
+        elif kind == "key_request":
+            await self._resend_key(account)
 
     def reassurance_counts(self) -> dict[str, dict[str, int]]:
         """Outcomes since the server started: counts only, never who, where or a band."""
@@ -368,6 +370,19 @@ class Hub:
         self._location[student.id] = point
         await self._to_parents(student.id, {"type": "location", "student_id": student.id, **point})
 
+    async def _resend_key(self, student: Account) -> None:
+        """A phone without its signing key (new device, reinstall, lost hello) asks again; the key
+        goes only to the student's own authenticated sockets."""
+        key = self.store.device_key(student.id)
+        if key:
+            message = {
+                "type": "signing",
+                "key_id": key[0],
+                "secret": key[1],
+                "label": signing.LABEL,
+            }
+            await self._send(student.id, message)
+
     async def _arrived_home(self, student: Account) -> None:
         """On an event night, a sharing student's phone reached its home area (the phone decides,
         with the student's switch on): sharing ends and linked parents hear "Arrived home" once."""
@@ -442,7 +457,15 @@ class Hub:
 
     async def notes_changed(self, thread_id: str) -> None:
         """Every open screen refetches the thread's notes (the message carries no note)."""
-        peers = [peer for peers in self._peers.values() for peer in peers]
+        info = self.store.thread_info(thread_id) if thread_id != "*" else None
+        test_only = bool(info and info["test_only"])
+        peers = [
+            peer
+            for account_id, peers in self._peers.items()
+            if not test_only
+            or (self._accounts.get(account_id) and self._accounts[account_id].is_test)
+            for peer in peers
+        ]
         message = {"type": "notes_changed", "thread_id": thread_id}
         await asyncio.gather(*(self._safe(p, message) for p in peers))
 

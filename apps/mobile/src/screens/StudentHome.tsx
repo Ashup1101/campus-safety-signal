@@ -131,6 +131,10 @@ export function StudentHome({
         setCheckIns(message.check_ins ?? []);
         setClock(message.clock);
         if (message.signing) signingKey.set(message.signing);
+        else signingKey.get().then((key) => key || reply({ type: "key_request" }));
+        break;
+      case "signing":
+        signingKey.set({ key_id: message.key_id, secret: message.secret });
         break;
       case "band_request":
         answerBand(message.request_id).then(reply);
@@ -237,7 +241,7 @@ export function StudentHome({
           ) {
             own.sent = true; // the server also sends it once per night
             send({ type: "arrived_home" });
-            setSharing("off");
+            changeSharing("off"); // tells the server too, even if it already counted this arrival
             setNote("You're home. Sharing ended and your family was told you arrived.");
           } else if (now.sharing === "on" && now.untilHome && distance(point, HOME) <= HOME_RADIUS_M) {
             changeSharing("off");

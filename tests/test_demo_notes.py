@@ -272,3 +272,12 @@ def test_the_composer_gets_the_tag_lists(api: tuple[Any, TestClient]) -> None:
     _, client = api
     found = client.get("/api/notes/config", headers=auth(client, "student_sam")).json()
     assert "Police on scene" in found["safety_tags"] and found["text_limit"] == 140
+
+
+def test_no_notes_on_an_incident_that_went_quiet_long_ago(api: tuple[Any, TestClient]) -> None:
+    app, client = api
+    quiet = datetime.now(UTC) - timedelta(hours=40)  # no all-clear, 6 h + 24 h ago
+    app.state.store.add_alert("a1", alert("Severe"), quiet, "t1")
+    assert (
+        post(client, "student_sam", {"tag": "Police on scene", **KIRKWOOD_400}).status_code == 404
+    )

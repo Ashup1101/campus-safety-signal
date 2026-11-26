@@ -275,7 +275,14 @@ class Store:
             self._db.execute(
                 "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
             )
-        self.provision_key(student_id, datetime.now(UTC))
+        self.ensure_key(student_id, datetime.now(UTC))
+
+    @_locked
+    def ensure_key(self, student_id: str, now: datetime) -> None:
+        """A key for a newly linked student. A second parent linking keeps the phone's key; a
+        relink after the last unlink gets a fresh one (unlink drops it)."""
+        if self.device_key(student_id) is None:
+            self.provision_key(student_id, now)
 
     @_locked
     def thread_info(self, thread_id: str) -> dict[str, Any] | None:
@@ -744,18 +751,24 @@ class Store:
                     "insert or replace into links values (?, ?, ?)", (row[0], student.id, label)
                 )
         if accept:
-            self.provision_key(student.id, now)
+            self.ensure_key(student.id, now)
         return str(row[0])
 
     @_locked
     def unlink(self, parent_id: str, student_id: str) -> bool:
         with self._db:
-            return bool(
+            removed = bool(
                 self._db.execute(
                     "delete from links where parent_id = ? and student_id = ?",
                     (parent_id, student_id),
                 ).rowcount
             )
+            left = self._db.execute(
+                "select count(*) from links where student_id = ?", (student_id,)
+            ).fetchone()[0]
+            if not left:  # nobody can ask any more: the next link gets a fresh key
+                self._db.execute("delete from device_keys where account_id = ?", (student_id,))
+        return removed
 
     @_locked
     def delete_account(self, account: "Account") -> None:

@@ -167,6 +167,7 @@ export type ServerMessage =
   | { type: "ok_result"; request_id: string; student_id: string; state: OkState }
   | { type: "arrived_home"; student_id: string; student_name: string; at: string }
   | { type: "notes_changed"; thread_id: string }
+  | { type: "signing"; key_id: string; secret: string; label: string }
   | {
       type: "band_result";
       request_id: string;
@@ -185,7 +186,8 @@ export type ClientMessage =
   | { type: "band_answer"; request_id: string; band: Band; answered_at: string; signature: string }
   | { type: "band_answer"; request_id: string; declined: true }
   | { type: "ok_answer"; request_id: string; answer: "ok" | "call_me" | "off" }
-  | { type: "arrived_home" };
+  | { type: "arrived_home" }
+  | { type: "key_request" };
 
 // Red is for live official alerts only; an official "Normal" status is an all-clear.
 export function toneOf(alert: Alert): Tone {

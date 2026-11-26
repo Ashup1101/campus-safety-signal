@@ -9,6 +9,7 @@ from typing import Annotated, Any
 
 from fastapi import Depends, FastAPI, HTTPException, Response
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from campus_safety.geo.place import distance_to_lines
 from campus_safety.notes import filter as text_filter
@@ -63,11 +64,9 @@ def register(
 
     def thread_for(thread_id: str, who: Account, now: datetime) -> dict[str, Any]:
         info = store.thread_info(thread_id)
-        expired = (
-            info
-            and info["closed_at"]
-            and now - info["closed_at"] > timedelta(hours=cfg.expiry_hours)
-        )
+        # Closed by IU's all-clear, or gone quiet (THREAD_GAP): the same rule as expire_notes.
+        closed = info and (info["closed_at"] or info["last_at"] + THREAD_GAP)
+        expired = closed and now - closed > timedelta(hours=cfg.expiry_hours)
         if info is None or expired or (info["test_only"] and not who.is_test):
             raise HTTPException(404, "no such incident")
         return info
@@ -111,7 +110,8 @@ def register(
 
     @app.post("/api/threads/{thread_id}/note", status_code=201)
     async def post_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
-        saved = save(thread_id, body, student)
+        # The filter may load Presidio: never on the event loop that relays alerts.
+        saved = await run_in_threadpool(save, thread_id, body, student)
         await changed(thread_id)
         return saved
 
@@ -119,7 +119,7 @@ def register(
     async def edit_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
         if not any(n["account_id"] == student.id for n in store.notes_of(thread_id)):
             raise HTTPException(404, "no note to edit")
-        saved = save(thread_id, body, student)
+        saved = await run_in_threadpool(save, thread_id, body, student)
         await changed(thread_id)
         return saved
 
