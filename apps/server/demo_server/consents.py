@@ -8,6 +8,7 @@ from typing import Annotated, Any
 from fastapi import Depends, FastAPI, HTTPException
 from pydantic import BaseModel
 
+from demo_server import subscriptions
 from demo_server.store import Account, Store
 
 VERSION = (
@@ -80,4 +81,6 @@ def register(
         store.set_consent(who.id, kind, body.granted, VERSION, datetime.now(UTC))
         if not body.granted:
             await withdrawn(who, kind)
+        elif kind in subscriptions.KINDS:
+            subscriptions.start(store, who, kind)  # double opt-in: a confirm link comes first
         return next(c for c in view(who.id) if c["kind"] == kind)
