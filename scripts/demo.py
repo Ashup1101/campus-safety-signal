@@ -106,7 +106,7 @@ def start() -> int:
             )
         (RUN / f"{name}.pid").write_text(str(process.pid))
         print(f"{name}: started (log: data/demo/run/{name}.log)")
-    print("Parent view: http://localhost:3100/parent   Console: http://localhost:3100/console")
+    print("IUPD console: http://localhost:3100/console   Students and parents: the app")
     return 0
 
 
