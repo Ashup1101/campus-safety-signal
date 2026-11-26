@@ -4,6 +4,7 @@ import { Pressable, ScrollView, Text, TextInput, View, useColorScheme } from "re
 import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiSend, type Session } from "../client";
 import { Ask, Resources } from "../components/AskAndResources";
+import { HomeAndCheckIns } from "../components/HomeAndCheckIns";
 import { ZonesEditor } from "../components/ZonesEditor";
 import tokens from "../shared/tokens.json";
 
@@ -177,6 +178,11 @@ export function Settings({
             ))
           )}
         </Section>
+        {!parent && (
+          <Section title="Home and check-ins">
+            <HomeAndCheckIns />
+          </Section>
+        )}
         <Section title="Ask about past incidents">
           <Ask token={token} />
         </Section>
