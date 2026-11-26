@@ -3,7 +3,7 @@ all-clear) to an alert thread; the phone's location is checked in memory and nev
 read only. Text is filtered server side and never logged; logs carry outcomes only."""
 
 import logging
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from datetime import UTC, datetime, timedelta
 from typing import Annotated, Any
 
@@ -19,6 +19,8 @@ from demo_server.store import Account, Store
 from demo_server.threads import THREAD_GAP
 
 log = logging.getLogger(__name__)
+LABEL = "Community notes (unverified)"
+PSEUDONYM = "IU student nearby"
 names_detector: text_filter.Names | None = None  # Presidio on first use; tests set a fake
 
 
@@ -42,7 +44,11 @@ def register(
     store: Store,
     geojson: dict[str, Any],
     cfg: NotesConfig,
+    event_night: Callable[[], bool],
+    changed: Callable[[str], Awaitable[None]],
 ) -> None:
+    """event_night: whether the demo clock is on an event night (3 people instead of 2).
+    changed(thread_id): tells every open screen to fetch that thread's notes again."""
     Me = Annotated[Account, Depends(me)]
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     lines = {
@@ -52,14 +58,14 @@ def register(
         for f in geojson["features"]
     }
 
-    def thread_for(thread_id: str, student: Account, now: datetime) -> dict[str, Any]:
+    def thread_for(thread_id: str, who: Account, now: datetime) -> dict[str, Any]:
         info = store.thread_info(thread_id)
         expired = (
             info
             and info["closed_at"]
             and now - info["closed_at"] > timedelta(hours=cfg.expiry_hours)
         )
-        if info is None or expired or (info["test_only"] and not student.is_test):
+        if info is None or expired or (info["test_only"] and not who.is_test):
             raise HTTPException(404, "no such incident")
         return info
 
@@ -101,20 +107,40 @@ def register(
         return {"id": note_id, "state": state}
 
     @app.post("/api/threads/{thread_id}/note", status_code=201)
-    def post_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
-        return save(thread_id, body, student)
+    async def post_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
+        saved = save(thread_id, body, student)
+        await changed(thread_id)
+        return saved
 
     @app.put("/api/threads/{thread_id}/note")
-    def edit_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
+    async def edit_note(thread_id: str, body: NoteBody, student: Me) -> dict[str, Any]:
         if not any(n["account_id"] == student.id for n in store.notes_of(thread_id)):
             raise HTTPException(404, "no note to edit")
-        return save(thread_id, body, student)
+        saved = save(thread_id, body, student)
+        await changed(thread_id)
+        return saved
 
     @app.delete("/api/threads/{thread_id}/note", status_code=204)
-    def withdraw_note(thread_id: str, student: Me) -> Response:
+    async def withdraw_note(thread_id: str, student: Me) -> Response:
         mine = [n for n in store.notes_of(thread_id) if n["account_id"] == student.id]
         if not mine:
             raise HTTPException(404, "no note to withdraw")
         store.delete_note(int(mine[0]["id"]))
         log.info("note withdrawn")
+        await changed(thread_id)
         return Response(status_code=204)
+
+    @app.get("/api/threads/{thread_id}/notes")
+    def read_notes(thread_id: str, who: Me) -> dict[str, Any]:
+        """Confirmed notes only, with no account named; the reader's own note (any state)."""
+        thread_for(thread_id, who, datetime.now(UTC))
+        notes = store.notes_of(thread_id)
+        enabled = store.setting("notes_enabled", "on") == "on"
+        shown = rules.corroborated(notes, event_night=event_night(), cfg=cfg) if enabled else []
+        mine = next((n for n in notes if n["account_id"] == who.id), None)
+        return {
+            "label": LABEL,
+            "notes": [{**s, "by": PSEUDONYM} for s in shown],
+            "mine": {k: mine[k] for k in ("tag", "text", "state")} if mine else None,
+            "enabled": enabled,
+        }

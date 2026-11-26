@@ -166,6 +166,7 @@ export type ServerMessage =
   | { type: "ok_request"; request_id: string; from: string }
   | { type: "ok_result"; request_id: string; student_id: string; state: OkState }
   | { type: "arrived_home"; student_id: string; student_name: string; at: string }
+  | { type: "notes_changed"; thread_id: string }
   | {
       type: "band_result";
       request_id: string;
@@ -511,4 +512,12 @@ export function okResultText(name: string, state: OkState): string {
     case "no_answer":
       return `No answer yet from ${name}.`;
   }
+}
+
+// Community notes (v9): only confirmed tags, never who posted; the reader's own note in any state.
+export interface ThreadNotes {
+  label: string;
+  notes: { tag: string; people: number; texts: string[]; by: string }[];
+  mine: { tag: string; text: string | null; state: "held" | "pending" | "visible" | "hidden" } | null;
+  enabled: boolean;
 }

@@ -440,6 +440,12 @@ class Hub:
             for peers in self._peers.values():
                 peers.discard(peer)
 
+    async def notes_changed(self, thread_id: str) -> None:
+        """Every open screen refetches the thread's notes (the message carries no note)."""
+        peers = [peer for peers in self._peers.values() for peer in peers]
+        message = {"type": "notes_changed", "thread_id": thread_id}
+        await asyncio.gather(*(self._safe(p, message) for p in peers))
+
     async def set_clock(self, preset: str) -> dict[str, Any]:
         self.clock.set(preset)
         state = self.clock.state()
