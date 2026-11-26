@@ -8,13 +8,14 @@ import sqlite3
 import threading
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import datetime, timedelta
+from datetime import UTC, datetime, timedelta
 from functools import wraps
 from pathlib import Path
 from typing import Any, Literal
 
 from campus_safety.official.alerts import OfficialAlert
 from campus_safety.official.descriptors import strip_descriptors
+from demo_server import signing
 
 Role = Literal["student", "parent", "console"]
 INVITE_LIFETIME = timedelta(days=7)
@@ -106,6 +107,13 @@ create table if not exists ask_usage (
     day text not null,
     count integer not null,
     primary key (account_id, day)
+);
+create table if not exists device_keys (
+    account_id text primary key references accounts (id),
+    key_id text not null,
+    secret text not null,
+    created_at text not null,
+    delivered integer not null default 0
 );
 create table if not exists sent_keys (
     key text primary key,
@@ -239,6 +247,39 @@ class Store:
             self._db.execute(
                 "insert or replace into links values (?, ?, ?)", (parent_id, student_id, label)
             )
+        self.provision_key(student_id, datetime.now(UTC))
+
+    @_locked
+    def provision_key(self, student_id: str, now: datetime) -> tuple[str, str]:
+        """A fresh demo signing key for the student's device (a relink rotates it)."""
+        key_id, secret = signing.new_key()
+        with self._db:
+            self._db.execute(
+                "insert or replace into device_keys values (?, ?, ?, ?, 0)",
+                (student_id, key_id, secret, now.isoformat()),
+            )
+        return key_id, secret
+
+    @_locked
+    def device_key(self, student_id: str) -> tuple[str, str] | None:
+        row = self._db.execute(
+            "select key_id, secret from device_keys where account_id = ?", (student_id,)
+        ).fetchone()
+        return (str(row[0]), str(row[1])) if row else None
+
+    @_locked
+    def take_undelivered_key(self, student_id: str) -> tuple[str, str] | None:
+        """The key, once: later calls return None until the next rotation."""
+        with self._db:
+            row = self._db.execute(
+                "select key_id, secret from device_keys where account_id = ? and delivered = 0",
+                (student_id,),
+            ).fetchone()
+            if row:
+                self._db.execute(
+                    "update device_keys set delivered = 1 where account_id = ?", (student_id,)
+                )
+        return (str(row[0]), str(row[1])) if row else None
 
     @_locked
     def add_zone(self, account_id: str, zone: Zone) -> None:
@@ -526,6 +567,8 @@ class Store:
                 self._db.execute(
                     "insert or replace into links values (?, ?, ?)", (row[0], student.id, label)
                 )
+        if accept:
+            self.provision_key(student.id, now)
         return str(row[0])
 
     @_locked
@@ -551,7 +594,14 @@ class Store:
                 "delete from invites where parent_id = ? or student_email = ?",
                 (account.id, account.email),
             )
-            for table in ("zones", "mailbox", "magic_tokens", "deliveries", "ask_usage"):
+            for table in (
+                "zones",
+                "mailbox",
+                "magic_tokens",
+                "deliveries",
+                "ask_usage",
+                "device_keys",
+            ):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
             self._db.execute("delete from sent_keys where instr(key, ?) > 0", (account.id,))
             self._db.execute("delete from accounts where id = ?", (account.id,))

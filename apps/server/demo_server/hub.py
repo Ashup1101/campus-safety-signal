@@ -22,6 +22,7 @@ from typing import Any, Protocol
 from campus_safety import events
 from campus_safety.alerts.rules import Draft
 from campus_safety.official.alerts import OfficialAlert
+from demo_server import signing
 from demo_server.area import area_for
 from demo_server.mailbox import MailboxChannel
 from demo_server.store import Account, Store
@@ -137,6 +138,9 @@ class Hub:
             message["viewers"] = self.viewers(account.id)
             message["sharing"] = self.sharing(account.id)
             message["check_ins"] = self._check_ins_of({account.id})
+            key = self.store.take_undelivered_key(account.id)
+            if key:  # once per key, over the student's own authenticated socket
+                message["signing"] = {"key_id": key[0], "secret": key[1], "label": signing.LABEL}
         elif account.role == "parent":
             students = self.store.students_of(account.id)
             message["students"] = [self._student(s) for s in students]
