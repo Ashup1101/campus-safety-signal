@@ -2,7 +2,8 @@
 // runner loads the TypeScript file directly (type stripping, Node 24). Made-up alerts and streets.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BAND_WORDS, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { createHmac } from "node:crypto";
+import { BAND_WORDS, hmacSha256Hex, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -155,4 +156,15 @@ test("band: inside the home radius, nearby within twice it or on campus, else aw
   assert.equal(bandOf(north(401), home), "away");
   assert.equal(bandOf({ lat: 39.1702, lon: -86.5164 }, home), "nearby"); // on campus
   assert.equal(BAND_WORDS.away, "away from home and campus");
+});
+
+test("HMAC-SHA256 matches Node's crypto, including the band signature the server checks", () => {
+  const secret = "0f".repeat(32);
+  for (const message of ["", "abc", "r1|nearby|2026-11-26T23:00:00+00:00", "x".repeat(200)]) {
+    const expected = createHmac("sha256", Buffer.from(secret, "hex")).update(message).digest("hex");
+    assert.equal(hmacSha256Hex(secret, message), expected);
+  }
+  const at = "2026-11-26T23:00:00+00:00";
+  const expected = createHmac("sha256", Buffer.from(secret, "hex")).update(`r1|inside|${at}`).digest("hex");
+  assert.equal(signBand(secret, "r1", "inside", at), expected);
 });

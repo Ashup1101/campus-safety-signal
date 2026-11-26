@@ -11,6 +11,8 @@ import { AreaCheck } from "../components/AreaCheck";
 import { Inbox, type MailboxMessage } from "../components/Inbox";
 import { Scoreboard } from "../components/Scoreboard";
 import { api, useSocket, type Session } from "../client";
+import { signingKey } from "../home";
+import { answerBand } from "../signing";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
   hasTonight,
@@ -120,6 +122,10 @@ export function StudentHome({
         setSharing(message.sharing ?? "off");
         setCheckIns(message.check_ins ?? []);
         setClock(message.clock);
+        if (message.signing) signingKey.set(message.signing);
+        break;
+      case "band_request":
+        answerBand(message.request_id).then(reply);
         break;
       case "check_in": {
         const latest = message.check_in;
