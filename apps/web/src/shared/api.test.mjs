@@ -3,7 +3,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createHmac } from "node:crypto";
-import { activeWindows, BAND_WORDS, bandResultText, okResultText, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
+import { activeWindows, allowedTags, BAND_WORDS, bandResultText, okResultText, hmacSha256Hex, reachedHomeOnEventNight, signBand, THREAD_GAP_MS, areaSketch, bandOf, metersBetween, areaStreets, canOpenConsole, checkInText, daysLabel, hasTonight, pointText, threadsOf, tonightMethod } from "./api.ts";
 
 const NOW = Date.parse("2026-11-01T06:00:00Z");
 const at = (minutesAgo) => new Date(NOW - minutesAgo * 60_000).toISOString();
@@ -197,4 +197,11 @@ test("parent check-in words never say away without a verified answer", () => {
   assert.equal(bandResultText("Sam", { state: "unreachable" }), "Couldn't reach Sam's phone.");
   assert.equal(okResultText("Sam", "no_answer"), "No answer yet from Sam.");
   assert.equal(okResultText("Sam", "call_me"), "Sam asked you to call.");
+});
+
+test("note tags follow IU: safety tags while live, reopened only after the all-clear", () => {
+  const settings = { tags: ["Police on scene", "Crowd gathering", "Area reopened"], safety_tags: ["Police on scene"], after_all_clear_tags: ["Area reopened"], text_limit: 140 };
+  assert.deepEqual(allowedTags(settings, true, false), ["Police on scene"]);
+  assert.deepEqual(allowedTags(settings, false, false), ["Police on scene", "Crowd gathering"]);
+  assert.deepEqual(allowedTags(settings, false, true), settings.tags);
 });

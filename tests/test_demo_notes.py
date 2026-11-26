@@ -266,3 +266,9 @@ def test_notes_vanish_a_day_after_the_incident_closes(store: Store) -> None:
     assert [
         r[0] for r in db.execute("select name from sqlite_master where name like '%history%'")
     ] == []
+
+
+def test_the_composer_gets_the_tag_lists(api: tuple[Any, TestClient]) -> None:
+    _, client = api
+    found = client.get("/api/notes/config", headers=auth(client, "student_sam")).json()
+    assert "Police on scene" in found["safety_tags"] and found["text_limit"] == 140
