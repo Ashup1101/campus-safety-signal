@@ -18,6 +18,7 @@ import { AreYouOk } from "../components/AreYouOk";
 import { ConsentSheet } from "../components/ConsentSheet";
 import { consentsApi, type ConsentKind, type ConsentState } from "../consents";
 import { answerBand } from "../signing";
+import { BackgroundSession } from "../components/BackgroundSession";
 import { pressed, ui } from "../components/ui";
 import { notifyAreYouOk, onAreYouOkAnswer, registerAreYouOk } from "../notifications";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
@@ -418,6 +419,12 @@ export function StudentHome({
             )}
           </View>
         </View>
+        <BackgroundSession
+          token={token}
+          features={segments?.features ?? []}
+          windows={activeWindows(clock?.windows ?? [], segments)}
+          color={primary}
+        />
         <Text accessibilityRole="header" className={ui.section}>
           Alerts
         </Text>
