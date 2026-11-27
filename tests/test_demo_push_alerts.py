@@ -1,6 +1,7 @@
 """Official alerts and follow-ups by push (fake sender): same words, after the socket relay."""
 
 import asyncio
+import time
 from datetime import UTC, datetime
 from pathlib import Path
 
@@ -92,3 +93,39 @@ def test_without_a_push_channel_nothing_is_pushed(store: Store) -> None:
     hub = Hub(store, Clock(), {})
     asyncio.run(hub.publish(alert(test_only=True)))
     assert store.push_counts()["sent"] == 0
+
+
+@pytest.mark.parametrize(("mode", "pushed"), [("off", 0), ("expo", 4)])
+def test_push_mode_decides_whether_a_drill_is_pushed(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, mode: str, pushed: int
+) -> None:
+    from fastapi.testclient import TestClient
+
+    from demo_server import push
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    fake = FakePushSender()
+    monkeypatch.setattr(push, "ExpoPushSender", lambda token=None: fake)
+    settings = Settings(
+        data_dir=tmp_path / "d",
+        warehouse=tmp_path / "n.duckdb",
+        tiles=tmp_path / "t",
+        push_mode=mode,
+    )
+    app = create_app(settings)
+    store = app.state.store
+    for account in ACCOUNTS:
+        if account.role != "console":
+            store.add_device(phone(account.id.replace("_", "")), account.id, "ios", NOW)
+    with TestClient(app) as client:
+        token = client.post("/api/login", json={"account_id": "console"}).json()["token"]
+        headers = {"Authorization": f"Bearer {token}"}
+        assert (
+            client.post("/api/drill", headers=headers, json={"action": "drill"}).status_code == 200
+        )
+        for _ in range(50):  # the drill source relays in the background
+            if len(fake.sent) >= pushed:
+                break
+            time.sleep(0.05)
+    assert len(fake.sent) == pushed
