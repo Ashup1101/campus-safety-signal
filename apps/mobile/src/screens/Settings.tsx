@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiSend, type Session } from "../client";
 import { Ask, Resources } from "../components/AskAndResources";
 import { HomeAndCheckIns } from "../components/HomeAndCheckIns";
+import { LocationPermission } from "../components/LocationPermission";
 import { PhoneAlerts } from "../components/PhoneAlerts";
 import { YourChoices } from "../components/YourChoices";
 import { ZonesEditor } from "../components/ZonesEditor";
@@ -185,6 +186,11 @@ export function Settings({
             ))
           )}
         </Section>
+        {!parent && (
+          <Section title="Location">
+            <LocationPermission />
+          </Section>
+        )}
         {!parent && (
           <Section title="Home and check-ins">
             <HomeAndCheckIns />
