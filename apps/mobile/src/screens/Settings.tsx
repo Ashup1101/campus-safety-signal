@@ -27,11 +27,16 @@ const RELATIONSHIPS = [
   { value: "guardian", label: "Guardian" },
 ];
 
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
+// iOS-style grouped list: the section name sits above its card; the delete section is outlined.
+function Section({ title, children, danger }: { title: string; children: React.ReactNode; danger?: boolean }) {
   return (
-    <View className="mt-4 rounded-xl bg-card p-4 dark:bg-card-dark">
-      <Text className="mb-2 font-semibold text-foreground dark:text-foreground-dark">{title}</Text>
-      {children}
+    <View className="mt-6">
+      <Text accessibilityRole="header" className="mb-2 px-1 text-[13px] font-semibold text-muted-foreground dark:text-muted-foreground-dark">
+        {title}
+      </Text>
+      <View className={`rounded-2xl bg-card p-4 dark:bg-card-dark ${danger ? "border border-primary dark:border-primary-dark" : ""}`}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -200,7 +205,7 @@ export function Settings({
         <Section title="Watch zones">
           <ZonesEditor token={token} zoneColor={tokens.zone[dark ? "dark" : "light"]} />
         </Section>
-        <Section title="Delete my account">
+        <Section title="Delete my account" danger>
           {confirming ? (
             <>
               <Text className="mb-3 text-sm text-foreground dark:text-foreground-dark">
