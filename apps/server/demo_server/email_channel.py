@@ -5,6 +5,7 @@ tries; failures keep only the error kind. Credentials and bodies are never logge
 
 import logging
 import os
+import re
 import smtplib
 import ssl
 from collections.abc import Callable
@@ -19,6 +20,8 @@ from demo_server.store import Store
 
 log = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
+UNSUBSCRIBE = re.compile(r"Stop these messages: (\S+)")
+WITH_UNSUBSCRIBE = {"digest", "briefing"}
 Sender = Callable[[EmailMessage], None]
 
 
@@ -85,7 +88,9 @@ class EmailChannel(MailboxChannel):
         fresh = super().deliver(account_id, draft, kind, key, thread_id)  # the in-app copy
         account = self.store.account(account_id)
         if fresh and account is not None and account.email:
-            row = (key, account_id, kind, account.email, draft.title, draft.body, None)
+            found = UNSUBSCRIBE.search(draft.body) if kind in WITH_UNSUBSCRIBE else None
+            stop = found.group(1) if found else None
+            row = (key, account_id, kind, account.email, draft.title, draft.body, stop)
             self.store.outbox_add(row, self._now())
             self.flush()
         return fresh
@@ -101,6 +106,9 @@ class EmailChannel(MailboxChannel):
         )
         if self.settings.reply_to:
             message["Reply-To"] = self.settings.reply_to
+        if row.get("unsubscribe_url"):  # one-click unsubscribe (RFC 8058) for digests and briefings
+            message["List-Unsubscribe"] = f"<{row['unsubscribe_url']}>"
+            message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
         message.set_content(str(row["body"]))
         return message
 

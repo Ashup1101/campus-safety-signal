@@ -83,3 +83,8 @@ def register(app: FastAPI, store: Store) -> None:
     @app.get("/api/subscriptions/unsubscribe/{token}")
     def unsubscribe(token: str) -> dict[str, Any]:
         return use("unsubscribe", token)
+
+    @app.post("/api/subscriptions/unsubscribe/{token}")
+    def unsubscribe_one_click(token: str) -> dict[str, Any]:
+        """Mail apps' one-click unsubscribe (List-Unsubscribe-Post): same single-purpose token."""
+        return use("unsubscribe", token)

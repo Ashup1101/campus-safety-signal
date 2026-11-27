@@ -93,3 +93,28 @@ def test_briefings_and_digests_go_by_email_with_their_unsubscribe_link(tmp_path:
 
     channel.deliver(pat.id, Draft("Your morning digest", "Nothing new."), "digest", "d1")
     assert subjects()[-1] == "Your morning digest"
+
+
+def test_digest_and_briefing_emails_carry_one_click_unsubscribe(tmp_path: Path) -> None:
+    from campus_safety.alerts.rules import Draft
+    from demo_server import subscriptions
+
+    app, client = client_for(tmp_path, "smtp")
+    store = app.state.store
+    pat = Account("parent_pat", "parent", "Pat", False, "pat@example.test", True)
+    store.add_account(pat)
+    store.set_subscription(pat.id, "digests", "active")
+    body = subscriptions.with_unsubscribe(store, pat.id, "digests", "Nothing new.", "http://x.test")
+    app.state.scheduler_channel.deliver(pat.id, Draft("Your digest", body), "digest", "d1")
+    app.state.scheduler_channel.deliver(pat.id, Draft("Notice", "No link."), "account", "a1")
+    digest, notice = SENT[-2], SENT[-1]
+    url = digest["List-Unsubscribe"].strip("<>")
+    assert url.startswith("http://x.test/api/subscriptions/unsubscribe/")
+    assert digest["List-Unsubscribe-Post"] == "List-Unsubscribe=One-Click"
+    assert notice["List-Unsubscribe"] is None
+    token = url.rsplit("/", 1)[1]
+    assert client.post(f"/api/subscriptions/unsubscribe/{token}").json() == {
+        "state": "unsubscribed"
+    }
+    assert store.subscription(pat.id, "digests") == "unsubscribed"
+    assert client.post("/api/subscriptions/unsubscribe/not-a-token").status_code == 404
