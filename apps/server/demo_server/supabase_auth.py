@@ -153,3 +153,53 @@ def retry_deletions(store: Any, project_url: str, service_key: str) -> int:
         else:
             store.auth_deletion_done(user_id)
     return len(store.auth_deletions())
+
+
+# The owner's setup checklist: setting names only, never values.
+SIGN_IN = ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY")
+EMAIL = ("SMTP_HOST", "SMTP_PORT", "SMTP_USERNAME", "SMTP_PASSWORD", "EMAIL_FROM")
+OPTIONAL = ("SUPABASE_JWT_SECRET", "EMAIL_REPLY_TO", "EMAIL_DAILY_CAP", "DEMO_DATABASE_URL")
+NAMES = ("AUTH_MODE", "EMAIL_MODE", *SIGN_IN, *EMAIL, *OPTIONAL)
+
+
+def check(
+    env: dict[str, str], fetch: Callable[[str], dict[str, Any]] = fetch_jwks
+) -> tuple[bool, list[str]]:
+    """Which settings are present (names only) and whether the signing keys can be read."""
+    auth_mode = env.get("AUTH_MODE") or "demo"
+    email_mode = env.get("EMAIL_MODE") or "mailbox"
+    needed = (SIGN_IN if auth_mode == "supabase" else ()) + (EMAIL if email_mode == "smtp" else ())
+    lines = [f"sign-in: {auth_mode}", f"email: {email_mode}"]
+    missing = [name for name in needed if not env.get(name)]
+    for name in (*needed, *OPTIONAL):
+        lines.append(
+            f"{name}: {'set' if env.get(name) else 'missing' if name in needed else 'not set'}"
+        )
+    ok = not missing
+    if auth_mode == "supabase" and env.get("SUPABASE_URL"):
+        url = Verifier(env["SUPABASE_URL"]).jwks_url
+        try:
+            keys = fetch(url).get("keys", [])
+        except Exception as exc:
+            lines.append(f"signing keys: unreachable ({type(exc).__name__})")
+            ok = False
+        else:
+            lines.append(f"signing keys: {len(keys)} found")
+            ok = ok and (bool(keys) or bool(env.get("SUPABASE_JWT_SECRET")))
+    lines.append("auth-check: ok" if ok else "auth-check: FAILED")
+    return ok, lines
+
+
+def main() -> int:
+    import os
+
+    from campus_safety.env import load_keys
+
+    load_keys(names=NAMES)  # from .env when not already set; values are never printed
+    ok, lines = check({name: os.environ.get(name, "") for name in NAMES})
+    print("\n".join(lines))
+    return 0 if ok else 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

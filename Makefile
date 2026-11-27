@@ -1,4 +1,4 @@
-.PHONY: install lint format typecheck test audit check backup schedule unschedule db-migrate db-check \
+.PHONY: install lint format typecheck test audit check backup schedule unschedule db-migrate db-check auth-check \
 	infra-check infra-plan infra-apply lambda-package cloud-off cloud-on transform demo-seed demo-drill demo-all-clear demo-replay \
 	demo-assets demo demo-stop demo-record demo-walk demo-walk-home apps-check
 
@@ -128,6 +128,11 @@ db-migrate:
 
 db-check:
 	$(DEMO).migrate check
+
+# Sign-in and email setup (AUTH_MODE, EMAIL_MODE, SUPABASE_*, SMTP_*, EMAIL_* in .env): which
+# settings are present (names only, never values) and whether Supabase's signing keys are reachable.
+auth-check:
+	$(DEMO).supabase_auth
 
 demo-drill:
 	$(DEMO) drill
