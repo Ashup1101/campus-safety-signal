@@ -1,4 +1,5 @@
 import "./global.css";
+import "./src/background"; // defines the background session task before iOS can wake the app
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
