@@ -109,3 +109,35 @@ def test_an_unreachable_key_endpoint_refuses_without_crashing() -> None:
 
     with pytest.raises(SessionError, match="unknown_key"):
         Verifier(PROJECT, fetch=down).verify(_token())
+
+
+def test_auth_check_names_settings_without_values() -> None:
+    from demo_server.supabase_auth import check
+
+    env = {
+        "AUTH_MODE": "supabase",
+        "EMAIL_MODE": "smtp",
+        "SUPABASE_URL": PROJECT,
+        "SUPABASE_SERVICE_ROLE_KEY": "value-that-must-not-print",
+        "SMTP_HOST": "smtp.example.test",
+    }
+    ok, lines = check(env, fetch=Keys(JWK))
+    text = "\n".join(lines)
+    assert not ok and "auth-check: FAILED" in text
+    assert "SMTP_PASSWORD: missing" in text and "SUPABASE_SERVICE_ROLE_KEY: set" in text
+    assert "signing keys: 1 found" in text
+    assert "value-that-must-not-print" not in text and "smtp.example.test" not in text
+
+
+def test_auth_check_passes_in_demo_modes_and_reports_unreachable_keys() -> None:
+    from demo_server.supabase_auth import check
+
+    assert check({})[0] is True
+
+    def down(url: str) -> dict[str, Any]:
+        raise OSError("offline")
+
+    ok, lines = check(
+        {"AUTH_MODE": "supabase", "SUPABASE_URL": PROJECT, "SUPABASE_SERVICE_ROLE_KEY": "x"}, down
+    )
+    assert not ok and "signing keys: unreachable (OSError)" in lines
