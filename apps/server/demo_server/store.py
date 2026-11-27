@@ -825,6 +825,79 @@ class Store:
         return int(cursor.rowcount)
 
     @_locked
+    def devices_for(self, account_ids: list[str]) -> list[tuple[str, str]]:
+        """(account id, token) for every phone of these accounts."""
+        if not account_ids:
+            return []
+        marks = ", ".join("?" for _ in account_ids)
+        rows = self._db.execute(
+            f"select account_id, token from devices where account_id in ({marks})"  # noqa: S608
+            " order by account_id, token",
+            tuple(account_ids),
+        )
+        return [(str(a), str(t)) for a, t in rows]
+
+    @_locked
+    def push_logged(self, key: str, token: str) -> bool:
+        row = self._db.execute(
+            "select 1 from push_log where key = ? and token = ?", (key, token)
+        ).fetchone()
+        return row is not None
+
+    @_locked
+    def push_log_add(
+        self,
+        key: str,
+        token: str,
+        account_id: str,
+        ticket_id: str | None,
+        error_kind: str | None,
+        now: datetime,
+    ) -> None:
+        columns = ("key", "token", "account_id", "ticket_id", "status", "error_kind", "created_at")
+        status = "error" if error_kind else "sent"
+        with self._db:
+            self._db.execute(
+                insert_ignore_sql("push_log", columns),
+                (key, token, account_id, ticket_id, status, error_kind, now.isoformat()),
+            )
+
+    @_locked
+    def push_pending(self) -> list[tuple[str, str]]:
+        """(ticket id, token) for pushes Expo accepted whose receipt is not read yet."""
+        rows = self._db.execute(
+            "select ticket_id, token from push_log where status = 'sent' and ticket_id is not null"
+        )
+        return [(str(t), str(k)) for t, k in rows]
+
+    @_locked
+    def push_receipt(self, ticket_id: str, error_kind: str | None) -> None:
+        with self._db:
+            self._db.execute(
+                "update push_log set status = ?, error_kind = ? where ticket_id = ?",
+                ("error" if error_kind else "ok", error_kind, ticket_id),
+            )
+
+    @_locked
+    def push_counts(self) -> dict[str, Any]:
+        by_status = dict(
+            self._db.execute("select status, count(*) from push_log group by status").fetchall()
+        )
+        errors = dict(
+            self._db.execute(
+                "select error_kind, count(*) from push_log where status = 'error'"
+                " group by error_kind"
+            ).fetchall()
+        )
+        return {
+            "devices": self.device_count(),
+            "sent": int(by_status.get("sent", 0)) + int(by_status.get("ok", 0)),
+            "delivered": int(by_status.get("ok", 0)),
+            "waiting_for_receipt": int(by_status.get("sent", 0)),
+            "failed": {str(k): int(v) for k, v in errors.items()},
+        }
+
+    @_locked
     def device_count(self) -> int:
         return int(self._db.execute("select count(*) from devices").fetchone()[0])
 

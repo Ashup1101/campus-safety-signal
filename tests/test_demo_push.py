@@ -85,3 +85,66 @@ def test_receipts_map_ids_to_ok_or_error_kind() -> None:
 def test_categories_ride_along_for_are_you_ok() -> None:
     message = PushMessage("t", "Mom is asking: are you OK?", "Answer here.", {}, "are_you_ok")
     assert message.payload()["categoryId"] == "are_you_ok"
+
+
+def _store(tmp_path: Any) -> Any:
+    from datetime import UTC, datetime
+
+    from demo_target import store_at
+
+    from demo_server.seed import ACCOUNTS
+    from demo_server.store import Store
+
+    store = Store(store_at(tmp_path))
+    for account in ACCOUNTS:
+        store.add_account(account)
+    now = datetime(2026, 11, 27, tzinfo=UTC)
+    store.add_device(TOKENS[0], "student_sam", "ios", now)
+    store.add_device(TOKENS[1], "parent_mom", "ios", now)
+    store.add_device(TOKENS[2], "parent_mom", "ios", now)
+    return store
+
+
+def _channel(store: Any, sender: Any) -> Any:
+    from datetime import UTC, datetime
+
+    from demo_server.push import PushChannel
+
+    return PushChannel(store, sender, lambda: datetime(2026, 11, 27, tzinfo=UTC))
+
+
+def test_one_push_per_key_and_phone_and_dead_phones_removed(tmp_path: Any) -> None:
+    from demo_server.push import FakePushSender
+
+    store = _store(tmp_path)
+    fake = FakePushSender(errors={TOKENS[2]: "DeviceNotRegistered"})
+    channel = _channel(store, fake)
+    assert channel.deliver("alert:a1", ["student_sam", "parent_mom"], "T", "B") == 2
+    assert channel.deliver("alert:a1", ["student_sam", "parent_mom"], "T", "B") == 0  # repeat key
+    assert store.devices_of("parent_mom") == [TOKENS[1]]  # the dead phone is gone
+    counts = store.push_counts()
+    assert counts["sent"] == 2 and counts["failed"] == {"DeviceNotRegistered": 1}
+    assert counts["devices"] == 2
+
+
+def test_receipts_mark_delivered_or_failed_and_remove_dead_phones(tmp_path: Any) -> None:
+    from demo_server.push import FakePushSender
+
+    store = _store(tmp_path)
+    fake = FakePushSender()
+    channel = _channel(store, fake)
+    channel.deliver("alert:a2", ["student_sam", "parent_mom"], "T", "B")
+    fake.receipt_errors = {"ticket-1": "DeviceNotRegistered"}
+    assert channel.check_receipts() == 3
+    counts = store.push_counts()
+    assert counts["delivered"] == 2 and counts["waiting_for_receipt"] == 0
+    assert counts["failed"] == {"DeviceNotRegistered": 1}
+    assert store.devices_of("parent_mom") == [TOKENS[2]]  # ticket-1 went to Mom's first phone
+    assert channel.check_receipts() == 0
+
+
+def test_the_push_log_never_holds_message_text(tmp_path: Any) -> None:
+    from demo_target import columns, store_at
+
+    _store(tmp_path)
+    assert not {"title", "body", "text", "message"} & columns(store_at(tmp_path), "push_log")
