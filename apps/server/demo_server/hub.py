@@ -419,6 +419,13 @@ class Hub:
             }
             await self._send(student.id, message)
 
+    async def to_parents(self, student_id: str, message: dict[str, Any]) -> None:
+        """Socket message to every linked parent's open apps (background sessions, v15)."""
+        await self._to_parents(student_id, message)
+
+    def segment_name(self, segment_id: str) -> str | None:
+        return self._segments.get(segment_id)
+
     async def _arrived_home(self, student: Account) -> None:
         """On an event night, a sharing student's phone reached its home area (the phone decides,
         with the student's switch on): sharing ends and linked parents hear "Arrived home" once."""
