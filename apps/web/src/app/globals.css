@@ -109,3 +109,43 @@ body {
   color: var(--card-foreground);
   box-shadow: 0 8px 24px rgb(0 0 0 / 0.12);
 }
+
+/* Console tables and type scale (v15 design pass). In the base layer, so a component's own
+   utility classes still win. Numbers line up in tabular figures; headers are quiet and small. */
+@layer base {
+  table {
+    width: 100%;
+    border-collapse: collapse;
+  }
+  th {
+    text-align: left;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: var(--muted-foreground);
+  }
+  th,
+  td {
+    padding: 0.4rem 0.75rem 0.4rem 0;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+  td {
+    font-variant-numeric: tabular-nums;
+  }
+  h1 {
+    font-size: 1.5rem;
+    line-height: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
+  h2 {
+    font-size: 1.125rem;
+    line-height: 1.75rem;
+    font-weight: 600;
+  }
+  h3 {
+    font-size: 1rem;
+    line-height: 1.5rem;
+    font-weight: 600;
+  }
+}
