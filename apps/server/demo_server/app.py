@@ -42,6 +42,7 @@ from demo_server.scheduler import Scheduler
 from demo_server.seed import Settings, seed
 from demo_server.sources import DrillSource, ReplaySource, load_replays
 from demo_server.store import Account, Store, Zone
+from demo_server.supabase_auth import Session, SessionError, Verifier
 
 # The web app runs on 3100 (3000 is often taken by other local projects).
 ORIGINS = ["http://localhost:3100", "http://127.0.0.1:3100"]
@@ -63,6 +64,11 @@ class Signup(BaseModel):
 
 class Signin(BaseModel):
     email: str
+
+
+class RoleChoice(BaseModel):
+    role: Literal["student", "parent"]
+    display_name: Annotated[str, Field(min_length=1, max_length=40)]
 
 
 EMAIL = re.compile(r"^[^@\s]{1,64}@[^@\s]+\.[^@\s]{2,}$")
@@ -166,16 +172,65 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.store = store
     app.mount("/tiles", StaticFiles(directory=settings.tiles, check_dir=False), name="tiles")
 
+    supabase = settings.auth_mode == "supabase"
+    verifier = Verifier(settings.supabase_url, settings.supabase_jwt_secret) if supabase else None
+
+    def session_for(token: str | None) -> Session | None:
+        if verifier is None or not token:
+            return None
+        try:
+            return verifier.verify(token)
+        except SessionError:
+            return None
+
+    def account_of(session: Session) -> Account | None:
+        """The account for a verified Supabase session; it remembers the Auth user on first use,
+        and a different Auth user with the same email is refused."""
+        account = store.account_by_email(session.email)
+        if account is None:
+            return None
+        known = store.auth_user(account.id)
+        if known is None:
+            store.set_auth_user(account.id, session.user_id)
+        elif known != session.user_id:
+            return None
+        return account
+
     def account_for(token: str | None) -> Account | None:
+        if supabase:
+            session = session_for(token)
+            return account_of(session) if session else None
         account_id = tokens.get(token or "")
         return store.account(account_id) if account_id else None
 
-    def current(authorization: Annotated[str | None, Header()] = None) -> Account:
+    def bearer(authorization: str | None) -> str | None:
         scheme, _, token = (authorization or "").partition(" ")
-        account = account_for(token) if scheme.lower() == "bearer" else None
+        return token if scheme.lower() == "bearer" else None
+
+    def current(authorization: Annotated[str | None, Header()] = None) -> Account:
+        token = bearer(authorization)
+        if supabase:
+            session = session_for(token)
+            if session is None:
+                raise HTTPException(401, "log in first")
+            account = account_of(session)
+            if account is None and store.account_by_email(session.email) is None:
+                raise HTTPException(409, "choose a role first")
+        else:
+            account = account_for(token)
         if account is None:
             raise HTTPException(401, "log in first")
         return account
+
+    def verified(authorization: Annotated[str | None, Header()] = None) -> Session:
+        session = session_for(bearer(authorization))
+        if session is None:
+            raise HTTPException(401, "log in first")
+        return session
+
+    def demo_only() -> None:
+        if supabase:
+            raise HTTPException(403, "sign in with the link Supabase emails you")
 
     def console(account: Annotated[Account, Depends(current)]) -> Account:
         if account.role != "console":
@@ -227,7 +282,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         )
         return True
 
-    @app.post("/api/signup", status_code=202)
+    @app.post("/api/signup", status_code=202, dependencies=[Depends(demo_only)])
     def signup(body: Signup) -> dict[str, str]:
         email, name = body.email.strip().lower(), body.display_name.strip()
         if not EMAIL.match(email) or len(email) > 254 or not 1 <= len(name) <= 40:
@@ -241,7 +296,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         send_link(account)
         return {"status": "sent"}
 
-    @app.post("/api/signin", status_code=202)
+    @app.post("/api/signin", status_code=202, dependencies=[Depends(demo_only)])
     def signin(body: Signin) -> dict[str, str]:
         # The same answer whether or not the address has an account (no account lookup by email).
         account = store.account_by_email(body.email)
@@ -249,7 +304,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(429, "too many sign-in links; try again in an hour")
         return {"status": "sent"}
 
-    @app.get("/api/magic/{token}")
+    @app.get("/api/magic/{token}", dependencies=[Depends(demo_only)])
     def magic(token: str) -> dict[str, Any]:
         account_id = auth.redeem(store, token, datetime.now(UTC))
         account = store.account(account_id) if account_id else None
@@ -261,6 +316,39 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             "token": bearer,
             "account": {"id": account.id, "role": account.role, "name": account.display_name},
         }
+
+    @app.get("/api/session")
+    def session_state(authorization: Annotated[str | None, Header()] = None) -> dict[str, Any]:
+        """Supabase mode: after the email link, "choose_role" until POST /api/me/role, then the
+        account. Demo mode: the account for a demo token."""
+        token = bearer(authorization)
+        session = session_for(token)
+        account = account_of(session) if session else account_for(token)
+        if account is not None:
+            return {
+                "state": "active",
+                "account": {"id": account.id, "role": account.role, "name": account.display_name},
+            }
+        if session is not None and store.account_by_email(session.email) is None:
+            return {"state": "choose_role"}
+        raise HTTPException(401, "log in first")
+
+    @app.post("/api/me/role", status_code=201)
+    def choose_role(
+        body: RoleChoice, session: Annotated[Session, Depends(verified)]
+    ) -> dict[str, Any]:
+        """Once, after the first sign-in: student or parent. The console role is never chosen."""
+        if store.account_by_email(session.email) is not None:
+            raise HTTPException(409, "the role is already set")
+        name = body.display_name.strip()
+        if not name:
+            raise HTTPException(400, "add a name (1 to 40 characters)")
+        account = Account(
+            f"{body.role}_{secrets.token_hex(4)}", body.role, name, False, session.email, True
+        )
+        store.add_account(account)
+        store.set_auth_user(account.id, session.user_id)
+        return {"id": account.id, "role": account.role, "name": account.display_name}
 
     @app.post("/api/invites", status_code=201)
     def invite(body: Invite, me: Me) -> dict[str, object]:
@@ -331,11 +419,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(429, f"up to {ask.DAILY} questions a day; try again tomorrow")
         return ask.answer(settings.rag_index, body.question, today)
 
-    @app.get("/api/accounts")
+    @app.get("/api/accounts", dependencies=[Depends(demo_only)])
     def accounts() -> list[dict[str, str]]:
         return [{"id": a.id, "role": a.role, "name": a.display_name} for a in store.accounts()]
 
-    @app.post("/api/login")
+    @app.post("/api/login", dependencies=[Depends(demo_only)])
     def login(body: Login) -> dict[str, Any]:
         account = store.account(body.account_id)
         if account is None or not account.is_test:

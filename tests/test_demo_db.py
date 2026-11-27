@@ -214,3 +214,13 @@ def test_postgres_never_prepares_statements_for_the_transaction_pooler(pg_url: s
     with db:
         assert db.execute("select count(*) from pg_prepared_statements").fetchone() == (0,)
     db.close()
+
+
+def test_migration_0003_adds_the_auth_user_column(pg_url: str) -> None:
+    migrate.migrate(pg_url)
+    with psycopg.connect(pg_url) as conn:
+        found = conn.execute(
+            "select column_name from information_schema.columns"
+            " where table_name = 'accounts' and column_name = 'auth_user_id'"
+        ).fetchall()
+    assert found == [("auth_user_id",)]

@@ -48,6 +48,13 @@ class Settings:
         default_factory=lambda: os.environ.get("DEMO_DATABASE_URL") or None, repr=False
     )
 
+    # Sign-in: "demo" (own links to the in-app mailbox) or "supabase" (Supabase Auth magic links).
+    auth_mode: str = field(default_factory=lambda: os.environ.get("AUTH_MODE", "demo") or "demo")
+    supabase_url: str = field(default_factory=lambda: os.environ.get("SUPABASE_URL", ""))
+    supabase_jwt_secret: str | None = field(
+        default_factory=lambda: os.environ.get("SUPABASE_JWT_SECRET") or None, repr=False
+    )
+
     @property
     def db(self) -> Path | str:
         return self.database_url or self.data_dir / "demo.sqlite3"

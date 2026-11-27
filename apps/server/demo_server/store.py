@@ -286,6 +286,12 @@ class Store:
                 "create unique index if not exists accounts_email on accounts (email)"
                 " where email is not null"
             )
+            if "auth_user_id" not in columns:  # v13: Supabase Auth user, once known
+                self._db.execute("alter table accounts add column auth_user_id text")
+            self._db.execute(
+                "create unique index if not exists accounts_auth_user on accounts (auth_user_id)"
+                " where auth_user_id is not null"
+            )
 
     def _add_invite_relationship(self) -> None:
         """Invites from before relationships: add the column; old invites show the parent's name."""
@@ -665,6 +671,20 @@ class Store:
             " order by role, display_name"
         ).fetchall()
         return [Account(r[0], r[1], r[2], bool(r[3]), r[4], bool(r[5])) for r in rows]
+
+    @_locked
+    def auth_user(self, account_id: str) -> str | None:
+        row = self._db.execute(
+            "select auth_user_id from accounts where id = ?", (account_id,)
+        ).fetchone()
+        return str(row[0]) if row and row[0] else None
+
+    @_locked
+    def set_auth_user(self, account_id: str, user_id: str) -> None:
+        with self._db:
+            self._db.execute(
+                "update accounts set auth_user_id = ? where id = ?", (user_id, account_id)
+            )
 
     @_locked
     def account_by_email(self, email: str) -> Account | None:
