@@ -20,6 +20,12 @@ PAT = Account("parent_pat", "parent", "Pat", False, "pat@example.test", True)
 KIM = Account("student_kim", "student", "Kim", False, "kim@example.test", True)
 
 
+def plain(message: EmailMessage) -> str:
+    part = message.get_body(("plain",))
+    assert part is not None
+    return str(part.get_content())
+
+
 class FakeProvider:
     def __init__(self, failures: int = 0) -> None:
         self.sent: list[EmailMessage] = []
@@ -53,7 +59,7 @@ def test_one_email_per_key_and_the_mailbox_keeps_a_copy(store: Store) -> None:
     assert len(provider.sent) == 1 and len(store.mailbox(PAT.id)) == 1
     message = provider.sent[0]
     assert message["To"] == "pat@example.test" and message["Subject"] == "Hello"
-    assert message["From"] == SETTINGS.sender and "Body text" in message.get_content()
+    assert message["From"] == SETTINGS.sender and "Body text" in plain(message)
     assert store.outbox_counts() == {"sent": 1}
 
 

@@ -20,6 +20,12 @@ from demo_server.store import Account, Store
 SENT: list[EmailMessage] = []
 
 
+def plain(message: EmailMessage) -> str:
+    part = message.get_body(("plain",))
+    assert part is not None
+    return str(part.get_content())
+
+
 @pytest.fixture(autouse=True)
 def fake_provider(monkeypatch: pytest.MonkeyPatch) -> None:
     SENT.clear()
@@ -55,7 +61,7 @@ def test_smtp_mode_emails_sign_in_confirm_and_account_notices(tmp_path: Path) ->
     app, client = client_for(tmp_path, "smtp")
     pat = sign_up(client, "pat@example.test", "parent")
     assert subjects() == ["Your sign-in link"]
-    assert "/magic/" in SENT[0].get_content() and SENT[0]["To"] == "pat@example.test"
+    assert "/magic/" in plain(SENT[0]) and SENT[0]["To"] == "pat@example.test"
     client.post("/api/consents/digests", headers=pat, json={"granted": True})
     assert subjects()[-1] == "Confirm your morning digests"
     kim = sign_up(client, "kim@example.test", "student")
@@ -88,7 +94,7 @@ def test_briefings_and_digests_go_by_email_with_their_unsubscribe_link(tmp_path:
     found = Scheduler(store, channel, tmp_path / "none.duckdb", {}, [halloween], lambda: now)
     found.tick()
     assert subjects() == ["Before Halloween weekend (Fri Oct 30 and Sat Oct 31)"]
-    assert "Stop these messages: " in SENT[0].get_content()
+    assert "Stop these messages: " in plain(SENT[0])
     from campus_safety.alerts.rules import Draft
 
     channel.deliver(pat.id, Draft("Your morning digest", "Nothing new."), "digest", "d1")
