@@ -33,6 +33,7 @@ from demo_server import (
     points,
     push,
     push_api,
+    sessions,
     subscriptions,
     supabase_auth,
     surveys,
@@ -297,6 +298,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     subscriptions.register(app, store)
     surveys.register(app, current, store)
     push_api.register(app, current, store)
+    app.state.sessions = sessions.register(app, current, store, hub)
     notes_api.register(
         app,
         current,
