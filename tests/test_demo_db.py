@@ -87,7 +87,7 @@ def _tables(url: str) -> set[str]:
 def test_migrations_create_the_family_schema_once(pg_url: str) -> None:
     assert migrate.migrate(pg_url) == list(range(1, migrate.newest_version() + 1))
     tables = _tables(pg_url)
-    assert len(tables - {"schema_migrations"}) == 20 and "schema_migrations" in tables
+    assert len(tables - {"schema_migrations"}) == 21 and "schema_migrations" in tables
     assert migrate.migrate(pg_url) == []  # second run is a no-op
     with psycopg.connect(pg_url) as conn:
         assert migrate.current_version(conn) == migrate.newest_version()
