@@ -156,6 +156,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     scheduler = Scheduler(store, channel, settings.warehouse, names, events.load(), hub.clock.now)
     scheduler.notes_expiry_hours = notes_config.load().expiry_hours
+    scheduler.push = hub.push
     drills = DrillSource()
     replays = ReplaySource(load_replays(settings.manual))
     sources: list[OfficialAlertSource] = [drills, replays]

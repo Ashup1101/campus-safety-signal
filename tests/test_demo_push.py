@@ -148,3 +148,29 @@ def test_the_push_log_never_holds_message_text(tmp_path: Any) -> None:
 
     _store(tmp_path)
     assert not {"title", "body", "text", "message"} & columns(store_at(tmp_path), "push_log")
+
+
+def test_the_scheduler_reads_receipts_every_15_minutes(tmp_path: Any) -> None:
+    from datetime import datetime, timedelta
+
+    from demo_server.mailbox import MailboxChannel
+    from demo_server.push import FakePushSender
+    from demo_server.scheduler import Scheduler
+
+    store = _store(tmp_path)
+    channel = _channel(store, FakePushSender())
+    channel.deliver("alert:a3", ["student_sam"], "T", "B")
+    clock = [datetime(2026, 11, 27, 6, 0)]
+    scheduler = Scheduler(
+        store, MailboxChannel(store), tmp_path / "none.duckdb", {}, [], lambda: clock[0]
+    )
+    scheduler.push = channel
+    scheduler.tick()
+    assert store.push_counts()["delivered"] == 1
+    channel.deliver("alert:a4", ["student_sam"], "T", "B")
+    clock[0] += timedelta(minutes=5)
+    scheduler.tick()
+    assert store.push_counts()["waiting_for_receipt"] == 1  # too soon
+    clock[0] += timedelta(minutes=11)
+    scheduler.tick()
+    assert store.push_counts()["waiting_for_receipt"] == 0
