@@ -750,6 +750,18 @@ class Store:
         return int(row[0])
 
     @_locked
+    def email_confirmed(self, account_id: str) -> bool:
+        """The address proved it is theirs: a Supabase sign-in, a used sign-in link, or a confirmed
+        subscription."""
+        row = self._db.execute(
+            "select (select count(*) from accounts where id = ? and auth_user_id is not null)"
+            " + (select count(*) from magic_tokens where account_id = ? and used_at is not null)"
+            " + (select count(*) from subscriptions where account_id = ? and state = 'active')",
+            (account_id, account_id, account_id),
+        ).fetchone()
+        return int(row[0]) > 0
+
+    @_locked
     def outbox_counts(self) -> dict[str, int]:
         rows = self._db.execute("select status, count(*) from outbox group by status").fetchall()
         return {str(status): int(n) for status, n in rows}
