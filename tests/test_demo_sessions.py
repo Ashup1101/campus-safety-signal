@@ -107,3 +107,25 @@ def test_a_real_student_must_say_yes_first(tmp_path: Path) -> None:
     assert post(client, kim, kind="started").status_code == 403
     client.post("/api/consents/background_location", headers=kim, json={"granted": True})
     assert post(client, kim, kind="started").status_code == 202
+
+
+def test_parents_with_push_hear_events_by_push_once(client: TestClient) -> None:
+    from datetime import UTC, datetime
+
+    from demo_server.push import FakePushSender, PushChannel
+
+    hub, store = client.app.state.hub, client.app.state.store  # type: ignore[attr-defined]
+    fake = FakePushSender()
+    hub.push = PushChannel(store, fake, lambda: datetime.now(UTC))
+    store.add_device("ExponentPushToken[momphoneaaaaaaaa]", "parent_mom", "ios", datetime.now(UTC))
+    store.add_device("ExponentPushToken[samphoneaaaaaaaa]", "student_sam", "ios", datetime.now(UTC))
+    sam = auth(client, "student_sam")
+    post(client, sam, kind="started")
+    segment = street(client)
+    post(client, sam, kind="heads_up", segment_id=segment)
+    post(client, sam, kind="heads_up", segment_id=segment)
+    post(client, sam, kind="arrived_home")
+    assert [m.to for m in fake.sent] == ["ExponentPushToken[momphoneaaaaaaaa]"] * 2
+    assert [m.title for m in fake.sent] == ["Heads-up: Sam", "Sam arrived home"]
+    assert all("39." not in m.body and "-86." not in m.body for m in fake.sent)
+    assert fake.sent[0].data == {"student_id": "student_sam"}

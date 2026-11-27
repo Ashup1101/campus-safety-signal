@@ -3,6 +3,7 @@ checks its own location and sends only events: started, ended (with the reason),
 id) and arrived_home. Coordinates are refused outright; nothing is stored; the console sees counts
 only."""
 
+import asyncio
 from collections import Counter
 from datetime import UTC, datetime
 from typing import Annotated, Any, Literal
@@ -79,6 +80,20 @@ def register(app: FastAPI, me: Any, store: Store, hub: Any) -> Sessions:
         done.add(tag)
         sessions.counts[body.kind] += 1
         await hub.to_parents(who.id, message)
+        if hub.push is not None:  # parents whose app is closed: by push, street name only
+            if body.kind == "arrived_home":
+                title, words = f"{who.display_name} arrived home", "Share until I'm home has ended."
+            else:
+                title = f"Heads-up: {who.display_name}"
+                words = f"{who.display_name} is on {message['segment_name']}, which is busier now."
+            await asyncio.to_thread(
+                hub.push.deliver,
+                f"push:session:{body.session_id}:{tag}",
+                list(store.parents_of(who.id)),
+                title,
+                words,
+                {"student_id": who.id},
+            )
         return {"status": "ok"}
 
     return sessions
