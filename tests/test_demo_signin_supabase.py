@@ -195,3 +195,18 @@ def test_console_health_names_supabase_and_email_without_secrets(
     assert body["sign_in"] == "Supabase" and body["email"] == "email provider"
     text = found.text
     assert "smtp-password-for-test" not in text and "supabase.test" not in text
+
+
+def test_the_websocket_refuses_a_bad_or_unknown_session(tmp_path: Path) -> None:
+    from starlette.websockets import WebSocketDisconnect
+
+    _, client = supabase_client(tmp_path)
+    expired = session_token("pat@example.test", exp=1)
+    no_account = session_token("nobody@example.test")
+    for token in (expired, no_account, "nonsense"):
+        with (
+            pytest.raises(WebSocketDisconnect) as closed,
+            client.websocket_connect(f"/ws?token={token}"),
+        ):
+            pass
+        assert closed.value.code == 4401
