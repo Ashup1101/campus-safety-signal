@@ -101,3 +101,14 @@ export async function stopSession(): Promise<void> {
 export async function sessionRunning(): Promise<boolean> {
   return (await SecureStore.getItemAsync(STATE)) !== null;
 }
+
+/** Supabase renews the sign-in about hourly: a running session keeps using the newest token. */
+export async function updateSessionToken(token: string): Promise<void> {
+  if (await sessionRunning()) await SecureStore.setItemAsync(TOKEN, token);
+}
+
+/** Sign-out: the session ends and its token leaves the keychain. */
+export async function forgetSession(): Promise<void> {
+  await stopSession();
+  await SecureStore.deleteItemAsync(TOKEN);
+}

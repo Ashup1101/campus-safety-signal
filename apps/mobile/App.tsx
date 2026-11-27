@@ -1,5 +1,5 @@
 import "./global.css";
-import "./src/background"; // defines the background session task before iOS can wake the app
+import { forgetSession, updateSessionToken } from "./src/background"; // also defines the task
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
@@ -45,10 +45,18 @@ export default function App() {
     return onAreYouOkAnswer(() => {});
   }, []);
   // Supabase renews the sign-in about hourly; a sign-out elsewhere ends the session here too.
-  useEffect(() => onNewToken((token) => setSession((s) => (s && token ? { ...s, token } : null))), []);
+  useEffect(
+    () =>
+      onNewToken((token) => {
+        if (token) void updateSessionToken(token);
+        setSession((s) => (s && token ? { ...s, token } : null));
+      }),
+    [],
+  );
   const leave = () => {
     // Signing out stops alerts to this phone for this account (the consent itself stays).
     if (session) void turnOffPush(session.token, false);
+    void forgetSession();
     setSession(null);
     void signOut();
   };
