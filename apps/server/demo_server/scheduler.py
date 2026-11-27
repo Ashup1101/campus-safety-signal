@@ -13,6 +13,7 @@ import math
 from collections.abc import Awaitable, Callable, Sequence
 from datetime import UTC, datetime, time, timedelta
 from pathlib import Path
+from typing import Any
 
 import duckdb
 
@@ -26,6 +27,7 @@ from demo_server.mailbox import MailboxChannel
 from demo_server.store import Store, Zone
 
 log = logging.getLogger(__name__)
+RECEIPTS_EVERY = timedelta(minutes=15)  # Expo keeps receipts for a day; 15 minutes is plenty
 BRIEFING_AT, DIGEST_AT = time(15), time(7)
 ALERT_TIERS = {"high", "medium"}
 M_PER_DEG_LAT = 111_320.0
@@ -48,6 +50,8 @@ class Scheduler:
         now: Callable[[], datetime],
     ) -> None:
         self.store, self.channel, self.warehouse = store, channel, warehouse
+        self.push: Any = None  # PushChannel when PUSH_MODE=expo
+        self._receipts_at = datetime.min
         self.names, self.calendar, self.now = names, calendar, now
         self.notes_expiry_hours = 24  # configs/notes.yaml expiry_hours (set by the app)
 
@@ -159,6 +163,9 @@ class Scheduler:
         sent = self._briefings(now) + self._digests(now)
         if sent:
             log.info("scheduler: %d new mailbox messages", sent)
+        if self.push is not None and self.now() - self._receipts_at >= RECEIPTS_EVERY:
+            self._receipts_at = self.now()
+            self.push.check_receipts()  # dead phones are removed; counts feed the console
         flush = getattr(self.channel, "flush", None)  # real email: retry what the provider refused
         if flush is not None:
             flush()
