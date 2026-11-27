@@ -10,18 +10,22 @@ import smtplib
 import ssl
 from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
 from campus_safety.alerts.rules import Draft
+from demo_server import subscriptions
 from demo_server.mailbox import MailboxChannel
-from demo_server.store import Store
+from demo_server.store import Account, Store
 
 log = logging.getLogger(__name__)
 MAX_ATTEMPTS = 3
 UNSUBSCRIBE = re.compile(r"Stop these messages: (\S+)")
 WITH_UNSUBSCRIBE = {"digest", "briefing"}
+SUBSCRIPTION = {"digest": "digests", "briefing": "briefings"}
+BEFORE_CONFIRMED = ("signin:", "confirm:")  # the only emails an unproven address may get
+DAY = timedelta(days=1)
 Sender = Callable[[EmailMessage], None]
 
 
@@ -81,19 +85,38 @@ class EmailChannel(MailboxChannel):
         self.settings = settings
         self._send = sender or smtp_sender(settings)
         self._now = now
+        self.skipped: dict[str, int] = {}
 
     def deliver(
         self, account_id: str, draft: Draft, kind: str, key: str, thread_id: str | None = None
     ) -> bool:
         fresh = super().deliver(account_id, draft, kind, key, thread_id)  # the in-app copy
         account = self.store.account(account_id)
-        if fresh and account is not None and account.email:
+        if fresh and account is not None and account.email and self._may_send(account, kind, key):
             found = UNSUBSCRIBE.search(draft.body) if kind in WITH_UNSUBSCRIBE else None
             stop = found.group(1) if found else None
             row = (key, account_id, kind, account.email, draft.title, draft.body, stop)
             self.store.outbox_add(row, self._now())
             self.flush()
         return fresh
+
+    def _may_send(self, account: Account, kind: str, key: str) -> bool:
+        """Sending rules; a skipped email still has its in-app copy. Logs the rule, never who."""
+        rule = None
+        if not key.startswith(BEFORE_CONFIRMED) and not self.store.email_confirmed(account.id):
+            rule = "unconfirmed_address"
+        elif kind in SUBSCRIPTION and not subscriptions.active(
+            self.store, account, SUBSCRIPTION[kind]
+        ):
+            rule = "unsubscribed"
+        elif self.store.outbox_to_since(str(account.email), self._now() - DAY) >= (
+            self.settings.daily_cap
+        ):
+            rule = "daily_cap"
+        if rule:
+            self.skipped[rule] = self.skipped.get(rule, 0) + 1
+            log.info("email skipped: %s", rule)
+        return rule is None
 
     def message(self, row: dict[str, object]) -> EmailMessage:
         message = EmailMessage()
