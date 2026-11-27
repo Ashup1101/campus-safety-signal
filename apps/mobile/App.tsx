@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { onNewToken, signOut } from "./src/auth";
+import { turnOffPush } from "./src/push";
 import type { Session } from "./src/client";
 import { AppFooter } from "./src/components/AppFooter";
 import { Login } from "./src/screens/Login";
@@ -39,6 +40,8 @@ export default function App() {
   // Supabase renews the sign-in about hourly; a sign-out elsewhere ends the session here too.
   useEffect(() => onNewToken((token) => setSession((s) => (s && token ? { ...s, token } : null))), []);
   const leave = () => {
+    // Signing out stops alerts to this phone for this account (the consent itself stays).
+    if (session) void turnOffPush(session.token, false);
     setSession(null);
     void signOut();
   };
