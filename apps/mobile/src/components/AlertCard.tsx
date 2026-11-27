@@ -135,57 +135,69 @@ export function ThreadCard({
     >
       {live && <Stripe dark={dark} />}
       <View className="p-4">
-      <View className="mb-1.5 flex-row items-center">
-        <Icon size={16} color={shown.accent} />
-        <Text className="ml-1.5 text-xs font-semibold" style={{ color: shown.accent }}>
-          {label}
-        </Text>
-        {live && (
-          <View className="ml-2 flex-row items-center" accessibilityLabel="Live">
-            <LiveDot color={shown.accent} />
-            <Text className="ml-1 text-xs" style={{ color: shown.accent }}>
-              Live
+        <View className="mb-1.5 flex-row items-center">
+          <Icon size={16} color={shown.accent} />
+          <Text className="ml-1.5 text-xs font-semibold" style={{ color: shown.accent }}>
+            {label}
+          </Text>
+          {live && (
+            <View
+              className="ml-2 flex-row items-center rounded-full border px-2 py-0.5"
+              style={{ borderColor: shown.accent }}
+              accessibilityLabel="Live"
+            >
+              <LiveDot color={shown.accent} />
+              <Text className="ml-1 text-xs font-semibold" style={{ color: shown.accent }}>
+                Live
+              </Text>
+            </View>
+          )}
+          <Text
+            className="ml-auto text-xs text-muted-foreground dark:text-muted-foreground-dark"
+            style={{ fontVariant: ["tabular-nums"] }}
+          >
+            {clockTime(latest.received_at)}
+          </Text>
+        </View>
+        <Text className="text-[17px] font-medium leading-6 text-foreground dark:text-foreground-dark">{latest.text}</Text>
+        <View className="mt-2 flex-row flex-wrap items-center">
+          <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
+            Sent {clockTime(latest.official_at)} · received {clockTime(latest.received_at)}
+          </Text>
+          {latest.link && (
+            <Pressable
+              onPress={() => Linking.openURL(latest.link ?? "")}
+              accessibilityRole="link"
+              accessibilityLabel="Open the official source"
+              hitSlop={12}
+              className="ml-2 flex-row items-center"
+              style={({ pressed }) => ({ opacity: pressed ? 0.5 : 1 })}
+            >
+              <ExternalLink size={12} color={shown.accent} />
+              <Text className="ml-1 text-xs" style={{ color: shown.accent }}>
+                Source
+              </Text>
+            </Pressable>
+          )}
+        </View>
+        <AreaSketch features={features} area={thread.area} accent={shown.accent} faint={dark ? "#c9bba9" : "#5c4f4a"} />
+        {children}
+        {earlier.length > 0 && (
+          <View className="mt-3 border-t pt-2" style={{ borderColor: shown.accent + "40" }}>
+            <Text className="mb-1 text-xs font-semibold text-muted-foreground dark:text-muted-foreground-dark">
+              Earlier updates
             </Text>
+            {earlier.map((alert) => (
+              <Text
+                key={alert.id}
+                className="mb-1 text-xs leading-4 text-muted-foreground dark:text-muted-foreground-dark"
+                style={{ fontVariant: ["tabular-nums"] }}
+              >
+                {clockTime(alert.received_at)} · {alert.text}
+              </Text>
+            ))}
           </View>
         )}
-        <Text className="ml-auto text-xs text-muted-foreground dark:text-muted-foreground-dark">
-          {clockTime(latest.received_at)}
-        </Text>
-      </View>
-      <Text className="text-base font-medium leading-6 text-foreground dark:text-foreground-dark">{latest.text}</Text>
-      <View className="mt-2 flex-row flex-wrap items-center">
-        <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
-          Sent {clockTime(latest.official_at)} · received {clockTime(latest.received_at)}
-        </Text>
-        {latest.link && (
-          <Pressable
-            onPress={() => Linking.openURL(latest.link ?? "")}
-            accessibilityRole="link"
-            accessibilityLabel="Open the official source"
-            hitSlop={12}
-            className="ml-2 flex-row items-center"
-          >
-            <ExternalLink size={12} color={shown.accent} />
-            <Text className="ml-1 text-xs" style={{ color: shown.accent }}>
-              Source
-            </Text>
-          </Pressable>
-        )}
-      </View>
-      <AreaSketch features={features} area={thread.area} accent={shown.accent} faint={dark ? "#c9bba9" : "#5c4f4a"} />
-      {children}
-      {earlier.length > 0 && (
-        <View className="mt-3 border-t pt-2" style={{ borderColor: shown.accent + "40" }}>
-          <Text className="mb-1 text-xs font-semibold text-muted-foreground dark:text-muted-foreground-dark">
-            Earlier updates
-          </Text>
-          {earlier.map((alert) => (
-            <Text key={alert.id} className="mb-1 text-xs leading-4 text-muted-foreground dark:text-muted-foreground-dark">
-              {clockTime(alert.received_at)} · {alert.text}
-            </Text>
-          ))}
-        </View>
-      )}
       </View>
     </View>
   );
