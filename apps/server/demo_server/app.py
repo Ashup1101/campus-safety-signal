@@ -71,6 +71,11 @@ class Signin(BaseModel):
     email: str
 
 
+class OkAnswer(BaseModel):
+    token: Annotated[str, Field(min_length=10, max_length=100)]
+    answer: Literal["ok", "call_me"]
+
+
 class RoleChoice(BaseModel):
     role: Literal["student", "parent"]
     display_name: Annotated[str, Field(min_length=1, max_length=40)]
@@ -598,6 +603,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/api/coverage")
     def data_coverage(_: Me) -> dict[str, Any]:
         return coverage(settings.warehouse, settings.gaps)
+
+    @app.post("/api/ok/{request_id}", status_code=204)
+    async def answer_ok(request_id: str, body: OkAnswer) -> None:
+        """ "Are you OK?" answered from the notification while the app is closed; the answer token
+        in the push is the only key (single use, 10 minutes)."""
+        if not await hub.answer_ok_by_token(request_id, body.token, body.answer):
+            raise HTTPException(404, "this question was answered already or has expired")
 
     @app.post("/api/drill")
     def drill(body: Drill, _: Console) -> dict[str, str]:
