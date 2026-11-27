@@ -18,6 +18,7 @@ import { AreYouOk } from "../components/AreYouOk";
 import { ConsentSheet } from "../components/ConsentSheet";
 import { consentsApi, type ConsentKind, type ConsentState } from "../consents";
 import { answerBand } from "../signing";
+import { pressed, ui } from "../components/ui";
 import { notifyAreYouOk, onAreYouOkAnswer, registerAreYouOk } from "../notifications";
 import { HOME, HOME_RADIUS_M, distance, highSegmentHere, type LatLon } from "../geo";
 import {
@@ -318,7 +319,7 @@ export function StudentHome({
       <View className="flex-row items-center px-4 pb-2 pt-1">
         <Shield size={22} color={primary} />
         <View className="ml-2 flex-1">
-          <Text className="text-lg font-semibold text-foreground dark:text-foreground-dark">
+          <Text className={ui.title}>
             Hi {session.account.name}
           </Text>
           <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
@@ -361,7 +362,7 @@ export function StudentHome({
           </Text>
         )}
         {selected && (
-          <Pressable onPress={() => setSelected(null)} className="mt-3 rounded-xl bg-card p-4 dark:bg-card-dark">
+          <Pressable onPress={() => setSelected(null)} className={ui.card} style={pressed}>
             <Text className="font-semibold text-foreground dark:text-foreground-dark">
               {selected.properties.name}
             </Text>
@@ -381,7 +382,7 @@ export function StudentHome({
         )}
         <AreaCheck token={session.token} window={window} />
         <Inbox messages={mail} muted={muted} />
-        <View className="mt-3 rounded-xl bg-card p-4 dark:bg-card-dark">
+        <View className={ui.card}>
           <Text className="font-semibold text-foreground dark:text-foreground-dark">Location sharing</Text>
           <Text className="mb-3 mt-1 text-sm text-muted-foreground dark:text-muted-foreground-dark">
             {sharing === "on"
@@ -417,7 +418,9 @@ export function StudentHome({
             )}
           </View>
         </View>
-        <Text className="mb-2 mt-5 font-semibold text-foreground dark:text-foreground-dark">Alerts</Text>
+        <Text accessibilityRole="header" className={ui.section}>
+          Alerts
+        </Text>
         {alerts.length === 0 ? (
           <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
             No alerts. Official IU alerts appear here the moment they are sent.
