@@ -5,6 +5,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { api, apiSend, type Session } from "../client";
 import { Ask, Resources } from "../components/AskAndResources";
 import { HomeAndCheckIns } from "../components/HomeAndCheckIns";
+import { PhoneAlerts } from "../components/PhoneAlerts";
 import { YourChoices } from "../components/YourChoices";
 import { ZonesEditor } from "../components/ZonesEditor";
 import tokens from "../shared/tokens.json";
@@ -184,6 +185,9 @@ export function Settings({
             <HomeAndCheckIns />
           </Section>
         )}
+        <Section title="Alerts on this phone">
+          <PhoneAlerts token={token} />
+        </Section>
         <Section title="Your choices">
           <YourChoices token={token} role={parent ? "parent" : "student"} />
         </Section>
