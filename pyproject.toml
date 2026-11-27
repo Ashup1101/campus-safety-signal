@@ -34,6 +34,7 @@ demo = [
     "fastapi>=0.143.3",
     "psycopg-pool>=3.2",
     "psycopg[binary]>=3.2",
+    "pyjwt[crypto]>=2.10",
     "uvicorn>=0.54.0",
     "websockets>=17.3",
 ]
