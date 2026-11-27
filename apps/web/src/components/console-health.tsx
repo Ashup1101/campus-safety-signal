@@ -1,7 +1,7 @@
 "use client";
 
 import { CircleAlert, CircleCheck, CircleDashed, Clock, Database } from "lucide-react";
-import { cadenceWords, errorWords, type DatabaseInfo, type SourceHealth } from "@/lib/console";
+import { cadenceWords, errorWords, type DatabaseInfo, type PushCounts, type SourceHealth } from "@/lib/console";
 
 const STATES = {
   fresh: { word: "Fresh", Icon: CircleCheck },
@@ -17,6 +17,14 @@ function mailWords(counts: Record<string, number>): string {
   return parts.length ? ` (${parts.join(", ")})` : "";
 }
 
+function pushWords(p: PushCounts): string {
+  const failed = Object.entries(p.failed)
+    .map(([kind, n]) => `${n} ${kind}`)
+    .join(", ");
+  const phones = `${p.devices} ${p.devices === 1 ? "phone" : "phones"}`;
+  return `${phones}; ${p.sent} sent, ${p.delivered} delivered, ${p.waiting_for_receipt} waiting${failed ? `; failed: ${failed}` : ""}`;
+}
+
 function when(at: string | null): string {
   return at ? new Date(at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "never";
 }
@@ -26,9 +34,11 @@ function when(at: string | null): string {
 export function ConsoleHealth({
   sources,
   database = null,
+  pushes = null,
 }: {
   sources: SourceHealth[] | null;
   database?: DatabaseInfo | null;
+  pushes?: PushCounts | null;
 }) {
   if (!sources) return <p className="text-sm text-muted-foreground">Loading source health…</p>;
   return (
@@ -47,6 +57,12 @@ export function ConsoleHealth({
             {database.email}
             {mailWords(database.emails)}
           </dd>
+          {pushes && (
+            <>
+              <dt className="font-medium">Push:</dt>
+              <dd>{pushWords(pushes)}</dd>
+            </>
+          )}
           {database.auth_deletions_waiting > 0 && (
             <>
               <dt className="font-medium">Waiting:</dt>

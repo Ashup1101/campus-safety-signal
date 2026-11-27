@@ -75,6 +75,14 @@ export interface DatabaseInfo {
   auth_deletions_waiting: number;
 }
 
+export interface PushCounts {
+  devices: number;
+  sent: number;
+  delivered: number;
+  waiting_for_receipt: number;
+  failed: Record<string, number>;
+}
+
 export interface SourceHealth {
   source: string;
   label: string;
