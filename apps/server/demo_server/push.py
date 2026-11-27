@@ -147,3 +147,56 @@ class FakePushSender:
 
     def receipts(self, ticket_ids: Sequence[str]) -> dict[str, str | None]:
         return {t: self.receipt_errors.get(t) for t in ticket_ids}
+
+
+class PushChannel:
+    """Sends one push per (key, phone): repeats of a key are skipped. Dead phones are removed."""
+
+    def __init__(self, store: Any, sender: PushSender, now: Callable[[], Any]) -> None:
+        self.store, self.sender, self._now = store, sender, now
+
+    def deliver(
+        self,
+        key: str,
+        account_ids: list[str],
+        title: str,
+        body: str,
+        data: dict[str, Any] | None = None,
+        category: str | None = None,
+    ) -> int:
+        targets = [
+            (account_id, token)
+            for account_id, token in self.store.devices_for(sorted(set(account_ids)))
+            if not self.store.push_logged(key, token)
+        ]
+        if not targets:
+            return 0
+        owner = dict((token, account_id) for account_id, token in targets)
+        batch = [PushMessage(token, title, body, data or {}, category) for _, token in targets]
+        sent = 0
+        for ticket in self.sender.send(batch):
+            self.store.push_log_add(
+                key,
+                ticket.token,
+                owner[ticket.token],
+                ticket.ticket_id,
+                ticket.error_kind,
+                self._now(),
+            )
+            if ticket.error_kind == GONE:
+                self.store.remove_device(ticket.token)
+            sent += ticket.error_kind is None
+        return sent
+
+    def check_receipts(self) -> int:
+        """Reads waiting receipts; returns how many were read."""
+        pending = self.store.push_pending()
+        if not pending:
+            return 0
+        token_of = dict(pending)
+        found = self.sender.receipts(list(token_of))
+        for ticket_id, error_kind in found.items():
+            self.store.push_receipt(ticket_id, error_kind)
+            if error_kind == GONE and ticket_id in token_of:
+                self.store.remove_device(token_of[ticket_id])
+        return len(found)
