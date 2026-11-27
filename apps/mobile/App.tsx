@@ -1,8 +1,9 @@
 import "./global.css";
 import { StatusBar } from "expo-status-bar";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { onNewToken, signOut } from "./src/auth";
 import type { Session } from "./src/client";
 import { AppFooter } from "./src/components/AppFooter";
 import { Login } from "./src/screens/Login";
@@ -35,10 +36,16 @@ function Screens({ session, onLeave }: { session: Session; onLeave: () => void }
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  // Supabase renews the sign-in about hourly; a sign-out elsewhere ends the session here too.
+  useEffect(() => onNewToken((token) => setSession((s) => (s && token ? { ...s, token } : null))), []);
+  const leave = () => {
+    setSession(null);
+    void signOut();
+  };
   return (
     <SafeAreaProvider>
       <StatusBar style="auto" />
-      {session ? <Screens session={session} onLeave={() => setSession(null)} /> : <Login onSession={setSession} />}
+      {session ? <Screens session={session} onLeave={leave} /> : <Login onSession={setSession} />}
       <AppFooter />
     </SafeAreaProvider>
   );
