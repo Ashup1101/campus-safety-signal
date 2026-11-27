@@ -8,14 +8,14 @@ import os
 import re
 import smtplib
 import ssl
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime, timedelta
 from email.message import EmailMessage
 from email.utils import formatdate, make_msgid
 
 from campus_safety.alerts.rules import Draft
-from demo_server import subscriptions
+from demo_server import email_templates, subscriptions
 from demo_server.mailbox import MailboxChannel
 from demo_server.store import Account, Store
 
@@ -118,7 +118,7 @@ class EmailChannel(MailboxChannel):
             log.info("email skipped: %s", rule)
         return rule is None
 
-    def message(self, row: dict[str, object]) -> EmailMessage:
+    def message(self, row: Mapping[str, object]) -> EmailMessage:
         message = EmailMessage()
         message["From"] = self.settings.sender
         message["To"] = str(row["to_address"])
@@ -132,7 +132,10 @@ class EmailChannel(MailboxChannel):
         if row.get("unsubscribe_url"):  # one-click unsubscribe (RFC 8058) for digests and briefings
             message["List-Unsubscribe"] = f"<{row['unsubscribe_url']}>"
             message["List-Unsubscribe-Post"] = "List-Unsubscribe=One-Click"
-        message.set_content(str(row["body"]))
+        message.set_content(email_templates.text(str(row["body"])))
+        message.add_alternative(
+            email_templates.html_copy(str(row["subject"]), str(row["body"])), subtype="html"
+        )
         return message
 
     def flush(self) -> dict[str, int]:
