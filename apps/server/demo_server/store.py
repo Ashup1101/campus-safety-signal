@@ -183,6 +183,20 @@ create table if not exists sent_keys (
     key text primary key,
     sent_at text not null
 );
+create table if not exists outbox (
+    key text primary key,
+    account_id text not null references accounts (id),
+    kind text not null,
+    to_address text not null,
+    subject text not null,
+    body text not null,
+    unsubscribe_url text,
+    status text not null check (status in ('queued', 'sent', 'failed')),
+    attempts integer not null default 0,
+    last_error_kind text,
+    created_at text not null,
+    sent_at text
+);
 create table if not exists activity (
     segment_id text not null,
     time_window text not null,
@@ -686,6 +700,60 @@ class Store:
                 "update accounts set auth_user_id = ? where id = ?", (user_id, account_id)
             )
 
+    # Real email (EMAIL_MODE=smtp): an outbox that survives a restart; bodies cleared once sent.
+    OUTBOX = ("key", "account_id", "kind", "to_address", "subject", "body", "unsubscribe_url")
+
+    @_locked
+    def outbox_add(self, row: tuple[Any, ...], now: datetime) -> bool:
+        """Queue one email (row in OUTBOX order); False when its key is already queued or sent."""
+        columns = (*self.OUTBOX, "status", "created_at")
+        return bool(
+            self._db.execute(
+                insert_ignore_sql("outbox", columns), (*row, "queued", now.isoformat())
+            ).rowcount
+        )
+
+    @_locked
+    def outbox_due(self, max_attempts: int) -> list[dict[str, Any]]:
+        rows = self._db.execute(
+            f"select {', '.join(self.OUTBOX)}, attempts from outbox"  # noqa: S608 (fixed names)
+            " where status = 'queued' and attempts < ? order by created_at, key",
+            (max_attempts,),
+        ).fetchall()
+        return [dict(zip((*self.OUTBOX, "attempts"), r, strict=True)) for r in rows]
+
+    @_locked
+    def outbox_sent(self, key: str, now: datetime) -> None:
+        with self._db:
+            self._db.execute(
+                "update outbox set status = 'sent', sent_at = ?, body = '', attempts = attempts + 1"
+                " where key = ?",
+                (now.isoformat(), key),
+            )
+
+    @_locked
+    def outbox_failed(self, key: str, error_kind: str, max_attempts: int) -> None:
+        with self._db:
+            self._db.execute(
+                "update outbox set attempts = attempts + 1, last_error_kind = ?,"
+                " status = case when attempts + 1 >= ? then 'failed' else 'queued' end"
+                " where key = ?",
+                (error_kind, max_attempts, key),
+            )
+
+    @_locked
+    def outbox_to_since(self, address: str, since: datetime) -> int:
+        row = self._db.execute(
+            "select count(*) from outbox where to_address = ? and created_at >= ?",
+            (address, since.isoformat()),
+        ).fetchone()
+        return int(row[0])
+
+    @_locked
+    def outbox_counts(self) -> dict[str, int]:
+        rows = self._db.execute("select status, count(*) from outbox group by status").fetchall()
+        return {str(status): int(n) for status, n in rows}
+
     @_locked
     def account_by_email(self, email: str) -> Account | None:
         return next((a for a in self.accounts() if a.email == email.strip().lower()), None)
@@ -1001,6 +1069,7 @@ class Store:
                 "note_reports",
                 "notes",
                 "bans",
+                "outbox",
             ):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
             pattern = "%" + re.sub(r"([\\%_])", r"\\\1", account.id) + "%"
