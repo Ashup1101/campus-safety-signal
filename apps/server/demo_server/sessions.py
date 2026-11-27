@@ -33,9 +33,15 @@ class Sessions:
         self.counts: Counter[str] = Counter()
 
 
-def register(app: FastAPI, me: Any, store: Store, hub: Any) -> Sessions:
+def register(app: FastAPI, me: Any, store: Store, hub: Any, console: Any) -> Sessions:
     Me = Annotated[Account, Depends(me)]
+    Console = Annotated[Account, Depends(console)]
     sessions = Sessions()
+
+    @app.get("/api/console/sessions")
+    def counts(_: Console) -> dict[str, Any]:
+        """Sessions running, started, ended by reason, and events relayed: numbers only."""
+        return {"running": len(sessions.owner), **dict(sessions.counts)}
 
     @app.post("/api/sessions/events", status_code=202)
     async def event(body: SessionEvent, who: Me) -> dict[str, str]:
