@@ -57,6 +57,8 @@ class Settings:
     email_mode: str = field(
         default_factory=lambda: os.environ.get("EMAIL_MODE", "mailbox") or "mailbox"
     )
+    # Push to closed apps: "off" (default) or "expo" (Expo's service; EXPO_ACCESS_TOKEN optional).
+    push_mode: str = field(default_factory=lambda: os.environ.get("PUSH_MODE", "off") or "off")
     console_allowlist: Path = ROOT / "configs" / "console_allowlist.yaml"
     supabase_service_key: str | None = field(  # admin API (delete account); a secret
         default_factory=lambda: os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or None, repr=False

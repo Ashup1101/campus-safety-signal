@@ -3,6 +3,7 @@
 import asyncio
 import contextlib
 import json
+import os
 import re
 import secrets
 from collections.abc import AsyncIterator
@@ -30,6 +31,7 @@ from demo_server import (
     console_api,
     notes_api,
     points,
+    push,
     push_api,
     subscriptions,
     supabase_auth,
@@ -138,6 +140,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     seed(store, settings, geojson=geojson)
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     hub = Hub(store, Clock(), names)
+    if settings.push_mode == "expo":  # closed apps hear alerts too; off by default
+        sender = push.ExpoPushSender(os.environ.get("EXPO_ACCESS_TOKEN") or None)
+        hub.push = push.PushChannel(store, sender, lambda: datetime.now(UTC))
     # EMAIL_MODE=smtp: every message also goes out by real email; the mailbox keeps a copy.
     channel = (
         EmailChannel(store, EmailSettings.from_env())
