@@ -129,3 +129,13 @@ def test_parents_with_push_hear_events_by_push_once(client: TestClient) -> None:
     assert [m.title for m in fake.sent] == ["Heads-up: Sam", "Sam arrived home"]
     assert all("39." not in m.body and "-86." not in m.body for m in fake.sent)
     assert fake.sent[0].data == {"student_id": "student_sam"}
+
+
+def test_console_sees_session_counts_only(client: TestClient) -> None:
+    sam = auth(client, "student_sam")
+    post(client, sam, kind="started")
+    post(client, sam, kind="arrived_home")
+    assert client.get("/api/console/sessions", headers=sam).status_code == 403
+    found = client.get("/api/console/sessions", headers=auth(client, "console"))
+    assert found.json() == {"running": 1, "started": 1, "arrived_home": 1}
+    assert "student_sam" not in found.text and "Sam" not in found.text

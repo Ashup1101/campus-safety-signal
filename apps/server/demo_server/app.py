@@ -298,7 +298,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     subscriptions.register(app, store)
     surveys.register(app, current, store)
     push_api.register(app, current, store)
-    app.state.sessions = sessions.register(app, current, store, hub)
+    app.state.sessions = sessions.register(app, current, store, hub, console)
     notes_api.register(
         app,
         current,
