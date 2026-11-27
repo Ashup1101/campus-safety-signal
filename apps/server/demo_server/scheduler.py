@@ -159,6 +159,9 @@ class Scheduler:
         sent = self._briefings(now) + self._digests(now)
         if sent:
             log.info("scheduler: %d new mailbox messages", sent)
+        flush = getattr(self.channel, "flush", None)  # real email: retry what the provider refused
+        if flush is not None:
+            flush()
         expired = self.store.expire_notes(datetime.now(UTC), self.notes_expiry_hours)
         if expired:
             log.info("scheduler: %d community notes expired", expired)

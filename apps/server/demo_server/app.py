@@ -36,6 +36,7 @@ from demo_server import (
 )
 from demo_server.area import area_for
 from demo_server.coverage import coverage
+from demo_server.email_channel import EmailChannel, EmailSettings
 from demo_server.hub import Clock, Hub
 from demo_server.mailbox import MailboxChannel
 from demo_server.scheduler import Scheduler
@@ -135,9 +136,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     seed(store, settings, geojson=geojson)
     names = {f["properties"]["id"]: f["properties"]["name"] for f in geojson["features"]}
     hub = Hub(store, Clock(), names)
-    scheduler = Scheduler(
-        store, MailboxChannel(store), settings.warehouse, names, events.load(), hub.clock.now
+    # EMAIL_MODE=smtp: every message also goes out by real email; the mailbox keeps a copy.
+    channel = (
+        EmailChannel(store, EmailSettings.from_env())
+        if settings.email_mode == "smtp"
+        else MailboxChannel(store)
     )
+    scheduler = Scheduler(store, channel, settings.warehouse, names, events.load(), hub.clock.now)
     scheduler.notes_expiry_hours = notes_config.load().expiry_hours
     drills = DrillSource()
     replays = ReplaySource(load_replays(settings.manual))
@@ -247,7 +252,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     Me = Annotated[Account, Depends(current)]
     Console = Annotated[Account, Depends(console)]
     console_api.register(app, console, settings.warehouse, settings.gaps, store, settings.lake_uri)
-    consents.register(app, current, store, hub.consent_withdrawn)
+    consents.register(app, current, store, hub.consent_withdrawn, channel)
     subscriptions.register(app, store)
     surveys.register(app, current, store)
     notes_api.register(
@@ -284,9 +289,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             f"Open {WEB}/magic/{token} within 15 minutes to sign in. It works once."
             " If you did not ask for this, ignore it."
         )
-        MailboxChannel(store).deliver(
-            account.id, Draft("Your sign-in link", body), "account", token
-        )
+        key = f"signin:{account.id}:{now.isoformat()}"  # never the token itself
+        channel.deliver(account.id, Draft("Your sign-in link", body), "account", key)
         return True
 
     @app.post("/api/signup", status_code=202, dependencies=[Depends(demo_only)])
@@ -393,7 +397,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
                 f"{me.display_name} unlinked", f"{me.display_name} is no longer linked with you."
             )
             key = f"unlink:{parent_id}:{student_id}:{secrets.token_hex(4)}"
-            MailboxChannel(store).deliver(other.id, notice, "account", key)
+            channel.deliver(other.id, notice, "account", key)
 
     @app.get("/api/links")
     def links(me: Me) -> list[dict[str, str]]:

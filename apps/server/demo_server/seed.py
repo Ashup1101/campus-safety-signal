@@ -53,6 +53,10 @@ class Settings:
     # Sign-in: "demo" (own links to the in-app mailbox) or "supabase" (Supabase Auth magic links).
     auth_mode: str = field(default_factory=lambda: os.environ.get("AUTH_MODE", "demo") or "demo")
     supabase_url: str = field(default_factory=lambda: os.environ.get("SUPABASE_URL", ""))
+    # Messages: "mailbox" (the in-app mailbox only) or "smtp" (also real email; SMTP_* settings).
+    email_mode: str = field(
+        default_factory=lambda: os.environ.get("EMAIL_MODE", "mailbox") or "mailbox"
+    )
     console_allowlist: Path = ROOT / "configs" / "console_allowlist.yaml"
     supabase_jwt_secret: str | None = field(
         default_factory=lambda: os.environ.get("SUPABASE_JWT_SECRET") or None, repr=False
