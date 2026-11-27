@@ -69,3 +69,40 @@ def test_the_websocket_accepts_a_verified_session_only(tmp_path: Path) -> None:
     token = pat["Authorization"].removeprefix("Bearer ")
     with client.websocket_connect(f"/ws?token={token}") as ws:
         assert ws is not None
+
+
+def _allow(tmp_path: Path, *emails: str) -> Path:
+    path = tmp_path / "allow.yaml"
+    path.write_text("emails:\n" + "".join(f"  - {e}\n" for e in emails))
+    return path
+
+
+def test_only_allowlisted_emails_get_the_console(tmp_path: Path) -> None:
+    allow = _allow(tmp_path, "Officer@IU-Example.test")
+    _, client = supabase_client(tmp_path, console_allowlist=allow)
+    officer = bearer("officer@iu-example.test")
+    state = client.get("/api/session", headers=officer).json()
+    assert state["state"] == "active" and state["account"]["role"] == "console"
+    assert client.get("/api/console/database", headers=officer).status_code == 200
+    body = {"role": "parent", "display_name": "O"}
+    assert client.post("/api/me/role", headers=officer, json=body).status_code == 409
+    other = bearer("someone@example.test")
+    assert client.get("/api/session", headers=other).json() == {"state": "choose_role"}
+    client.post("/api/me/role", headers=other, json=body)
+    assert client.get("/api/console/database", headers=other).status_code == 403
+
+
+def test_removing_an_address_from_the_list_ends_console_access(tmp_path: Path) -> None:
+    allow = _allow(tmp_path, "officer@iu-example.test")
+    _, client = supabase_client(tmp_path, console_allowlist=allow)
+    officer = bearer("officer@iu-example.test")
+    assert client.get("/api/console/database", headers=officer).status_code == 200
+    allow.write_text("emails: []\n")
+    _, restarted = supabase_client(tmp_path, console_allowlist=allow)
+    assert restarted.get("/api/console/database", headers=officer).status_code == 401
+
+
+def test_the_checked_in_allowlist_is_empty() -> None:
+    from demo_server.seed import ROOT, console_emails
+
+    assert console_emails(ROOT / "configs" / "console_allowlist.yaml") == frozenset()

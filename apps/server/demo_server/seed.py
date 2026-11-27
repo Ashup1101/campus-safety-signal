@@ -7,6 +7,8 @@ from datetime import datetime
 from pathlib import Path
 from typing import Any
 
+import yaml
+
 from campus_safety import events
 from demo_server import activity
 from demo_server.store import Account, Store, Zone
@@ -51,6 +53,7 @@ class Settings:
     # Sign-in: "demo" (own links to the in-app mailbox) or "supabase" (Supabase Auth magic links).
     auth_mode: str = field(default_factory=lambda: os.environ.get("AUTH_MODE", "demo") or "demo")
     supabase_url: str = field(default_factory=lambda: os.environ.get("SUPABASE_URL", ""))
+    console_allowlist: Path = ROOT / "configs" / "console_allowlist.yaml"
     supabase_jwt_secret: str | None = field(
         default_factory=lambda: os.environ.get("SUPABASE_JWT_SECRET") or None, repr=False
     )
@@ -58,6 +61,14 @@ class Settings:
     @property
     def db(self) -> Path | str:
         return self.database_url or self.data_dir / "demo.sqlite3"
+
+
+def console_emails(path: Path) -> frozenset[str]:
+    """Lower-cased addresses allowed to the console (AUTH_MODE=supabase); none without the file."""
+    if not path.is_file():
+        return frozenset()
+    data = yaml.safe_load(path.read_text()) or {}
+    return frozenset(str(e).strip().lower() for e in data.get("emails") or [] if str(e).strip())
 
 
 def seed(

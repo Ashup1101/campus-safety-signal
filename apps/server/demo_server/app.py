@@ -39,7 +39,7 @@ from demo_server.coverage import coverage
 from demo_server.hub import Clock, Hub
 from demo_server.mailbox import MailboxChannel
 from demo_server.scheduler import Scheduler
-from demo_server.seed import Settings, seed
+from demo_server.seed import Settings, console_emails, seed
 from demo_server.sources import DrillSource, ReplaySource, load_replays
 from demo_server.store import Account, Store, Zone
 from demo_server.supabase_auth import Session, SessionError, Verifier
@@ -173,6 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.mount("/tiles", StaticFiles(directory=settings.tiles, check_dir=False), name="tiles")
 
     supabase = settings.auth_mode == "supabase"
+    console_list = console_emails(settings.console_allowlist) if supabase else frozenset()
     verifier = Verifier(settings.supabase_url, settings.supabase_jwt_secret) if supabase else None
 
     def session_for(token: str | None) -> Session | None:
@@ -187,8 +188,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         """The account for a verified Supabase session; it remembers the Auth user on first use,
         and a different Auth user with the same email is refused."""
         account = store.account_by_email(session.email)
-        if account is None:
-            return None
+        allowed = session.email in console_list
+        if account is None and allowed:  # IUPD reviewer: console role, no role choice
+            account = Account(
+                f"console_{secrets.token_hex(4)}", "console", "IUPD console", False, session.email
+            )
+            store.add_account(account)
+        if account is None or (account.role == "console" and not allowed):
+            return None  # removed from the list: no console access any more
         known = store.auth_user(account.id)
         if known is None:
             store.set_auth_user(account.id, session.user_id)
@@ -338,7 +345,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         body: RoleChoice, session: Annotated[Session, Depends(verified)]
     ) -> dict[str, Any]:
         """Once, after the first sign-in: student or parent. The console role is never chosen."""
-        if store.account_by_email(session.email) is not None:
+        if store.account_by_email(session.email) is not None or session.email in console_list:
             raise HTTPException(409, "the role is already set")
         name = body.display_name.strip()
         if not name:
