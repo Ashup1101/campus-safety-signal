@@ -30,6 +30,7 @@ from demo_server import (
     console_api,
     notes_api,
     points,
+    push_api,
     subscriptions,
     supabase_auth,
     surveys,
@@ -284,6 +285,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     consents.register(app, current, store, hub.consent_withdrawn, channel)
     subscriptions.register(app, store)
     surveys.register(app, current, store)
+    push_api.register(app, current, store)
     notes_api.register(
         app,
         current,

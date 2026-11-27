@@ -39,3 +39,17 @@ def test_delete_removes_every_row_the_account_owns(tmp_path: Path) -> None:
         "/api/signup", json={"email": "pat@example.test", "role": "parent", "display_name": "Pat"}
     )
     assert again.status_code == 202  # the same email can start fresh
+
+
+def test_delete_account_removes_its_phones(tmp_path: Path) -> None:
+    app, client = app_and_client(tmp_path)
+    store = app.state.store  # type: ignore[attr-defined]
+    pat = signed_in(client, store, "pat2@example.test", "parent", "Pat")
+    client.post("/api/consents/push", headers=pat, json={"granted": True})
+    client.post(
+        "/api/devices", headers=pat, json={"expo_token": "ExponentPushToken[patphone0123456]"}
+    )
+    pat_id = store.account_by_email("pat2@example.test").id
+    assert store.devices_of(pat_id) != []
+    client.delete("/api/me", headers=pat)
+    assert store.devices_of(pat_id) == [] and store.device_count() == 0
