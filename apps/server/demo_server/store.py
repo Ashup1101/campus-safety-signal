@@ -197,6 +197,11 @@ create table if not exists outbox (
     created_at text not null,
     sent_at text
 );
+create table if not exists auth_deletions (
+    user_id text primary key,
+    attempts integer not null default 0,
+    last_error_kind text
+);
 create table if not exists activity (
     segment_id text not null,
     time_window text not null,
@@ -748,6 +753,25 @@ class Store:
             (address, since.isoformat()),
         ).fetchone()
         return int(row[0])
+
+    @_locked
+    def auth_deletion_failed(self, user_id: str, error_kind: str) -> None:
+        with self._db:
+            self._db.execute(
+                "insert into auth_deletions values (?, 1, ?) on conflict (user_id) do update"
+                " set attempts = auth_deletions.attempts + 1,"
+                " last_error_kind = excluded.last_error_kind",
+                (user_id, error_kind),
+            )
+
+    @_locked
+    def auth_deletions(self) -> list[str]:
+        return [str(r[0]) for r in self._db.execute("select user_id from auth_deletions")]
+
+    @_locked
+    def auth_deletion_done(self, user_id: str) -> None:
+        with self._db:
+            self._db.execute("delete from auth_deletions where user_id = ?", (user_id,))
 
     @_locked
     def email_confirmed(self, account_id: str) -> bool:

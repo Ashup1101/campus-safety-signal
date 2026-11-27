@@ -1,7 +1,9 @@
 """AUTH_MODE=supabase: verified sessions map to accounts by email; a new email chooses a role."""
 
 from pathlib import Path
+from typing import Any
 
+import pytest
 from supabase_fakes import bearer, session_token, supabase_client
 
 
@@ -106,3 +108,76 @@ def test_the_checked_in_allowlist_is_empty() -> None:
     from demo_server.seed import ROOT, console_emails
 
     assert console_emails(ROOT / "configs" / "console_allowlist.yaml") == frozenset()
+
+
+def test_delete_account_also_deletes_the_supabase_auth_user(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from demo_server import supabase_auth
+
+    calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        supabase_auth, "delete_user", lambda url, key, user_id: calls.append((url, user_id))
+    )
+    app, client = supabase_client(tmp_path)
+    pat = bearer("pat@example.test", "user-pat")
+    client.post("/api/me/role", headers=pat, json={"role": "parent", "display_name": "Pat"})
+    assert client.delete("/api/me", headers=pat).status_code == 204
+    assert calls == [("https://example-project.supabase.test", "user-pat")]
+    assert app.state.store.account_by_email("pat@example.test") is None
+    assert app.state.store.auth_deletions() == []
+
+
+def test_a_failed_auth_deletion_is_kept_and_retried(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from demo_server import supabase_auth
+
+    def down(url: str, key: str, user_id: str) -> None:
+        raise RuntimeError("auth admin HTTP 503")
+
+    monkeypatch.setattr(supabase_auth, "delete_user", down)
+    app, client = supabase_client(tmp_path)
+    kim = bearer("kim@example.test", "user-kim")
+    client.post("/api/me/role", headers=kim, json={"role": "student", "display_name": "Kim"})
+    assert client.delete("/api/me", headers=kim).status_code == 204  # the account is gone anyway
+    store = app.state.store
+    assert store.account_by_email("kim@example.test") is None
+    assert store.auth_deletions() == ["user-kim"]
+    assert supabase_auth.retry_deletions(store, "u", "k") == 1  # still down: still pending
+    monkeypatch.setattr(supabase_auth, "delete_user", lambda url, key, user_id: None)
+    assert supabase_auth.retry_deletions(store, "u", "k") == 0
+
+
+def test_delete_user_calls_the_admin_api_and_treats_404_as_done(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import io
+    import urllib.error
+    import urllib.request
+
+    from demo_server import supabase_auth
+
+    seen: list[Any] = []
+
+    class Done(io.BytesIO):
+        def __enter__(self) -> "Done":
+            return self
+
+    def fake_open(request: urllib.request.Request, timeout: float) -> Done:
+        seen.append(request)
+        return Done(b"")
+
+    monkeypatch.setattr(urllib.request, "urlopen", fake_open)
+    key = "service-key-for-test"
+    supabase_auth.delete_user("https://p.supabase.test/", key, "user 1")
+    request = seen[0]
+    assert request.get_method() == "DELETE"
+    assert request.full_url == "https://p.supabase.test/auth/v1/admin/users/user%201"
+    assert request.get_header("Apikey") == key
+
+    def gone(request: urllib.request.Request, timeout: float) -> Done:
+        raise urllib.error.HTTPError(request.full_url, 404, "gone", {}, None)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(urllib.request, "urlopen", gone)
+    supabase_auth.delete_user("https://p.supabase.test", key, "user-1")  # no error

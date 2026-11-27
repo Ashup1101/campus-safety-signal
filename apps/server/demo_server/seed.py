@@ -58,6 +58,9 @@ class Settings:
         default_factory=lambda: os.environ.get("EMAIL_MODE", "mailbox") or "mailbox"
     )
     console_allowlist: Path = ROOT / "configs" / "console_allowlist.yaml"
+    supabase_service_key: str | None = field(  # admin API (delete account); a secret
+        default_factory=lambda: os.environ.get("SUPABASE_SERVICE_ROLE_KEY") or None, repr=False
+    )
     supabase_jwt_secret: str | None = field(
         default_factory=lambda: os.environ.get("SUPABASE_JWT_SECRET") or None, repr=False
     )
