@@ -10,6 +10,7 @@
 
 import asyncio
 import hashlib
+import hmac
 import logging
 import math
 import secrets
@@ -18,6 +19,7 @@ from collections import Counter, defaultdict
 from collections.abc import Sequence
 from dataclasses import dataclass, field
 from datetime import UTC, date, datetime, time, timedelta
+from time import monotonic
 from typing import Any, Protocol
 
 from campus_safety import events
@@ -110,6 +112,8 @@ class Hub:
         self.band_timeout = BAND_TIMEOUT_S
         self.verifier = signing.Verifier()
         self._ok: dict[str, tuple[str, str]] = {}  # "Are you OK?" id -> (parent, student)
+        # Push answers from a closed app: request id -> (token hash, issued at, monotonic s)
+        self._ok_tokens: dict[str, tuple[str, float]] = {}
         self.ok_timeout = OK_TIMEOUT_S
         self._arrived: set[tuple[str, date]] = set()  # (student, night): "Arrived home" sent
         self._band_outcomes: Counter[str] = Counter()  # counts only, for the console
@@ -229,7 +233,33 @@ class Hub:
             student_id, {"type": "ok_request", "request_id": request_id, "from": label}
         )
         self._later(self._ok_expire(request_id))
+        if self.push is not None:  # a closed app: the student answers from the notification
+            answer_token = secrets.token_urlsafe(16)
+            digest = hashlib.sha256(answer_token.encode()).hexdigest()
+            self._ok_tokens[request_id] = (digest, monotonic())
+            await asyncio.to_thread(
+                self.push.deliver,
+                f"push:ok:{request_id}",
+                [student_id],
+                f"{label} is asking: are you OK?",
+                "Answer here. They hear only if you don't answer within 10 minutes.",
+                {"request_id": request_id, "answer_token": answer_token},
+                "are_you_ok",
+            )
         return request_id
+
+    async def answer_ok_by_token(self, request_id: str, answer_token: str, answer: str) -> bool:
+        """The notification's own answer: single use, valid for ok_timeout, no socket needed."""
+        found = self._ok_tokens.get(request_id)
+        entry = self._ok.get(request_id)
+        if found is None or entry is None or answer not in OK_ANSWERS:
+            return False
+        digest = hashlib.sha256(answer_token.encode()).hexdigest()
+        if not hmac.compare_digest(found[0], digest) or monotonic() - found[1] > self.ok_timeout:
+            return False
+        del self._ok_tokens[request_id], self._ok[request_id]
+        await self._ok_result(entry, request_id, answer)
+        return True
 
     async def _ok_expire(self, request_id: str) -> None:
         await asyncio.sleep(self.ok_timeout)
@@ -245,6 +275,7 @@ class Hub:
         if entry is None or entry[1] != student.id or answer not in OK_ANSWERS:
             return
         del self._ok[str(request_id)]
+        self._ok_tokens.pop(str(request_id), None)
         await self._ok_result(entry, str(request_id), str(answer))
 
     async def _ok_result(self, entry: tuple[str, str], request_id: str, state: str) -> None:

@@ -129,3 +129,63 @@ def test_push_mode_decides_whether_a_drill_is_pushed(
                 break
             time.sleep(0.05)
     assert len(fake.sent) == pushed
+
+
+def test_are_you_ok_by_push_answered_with_its_token_once(store: Store) -> None:
+    async def run() -> tuple[list[dict[str, object]], bool, bool, bool]:
+        hub, fake = hub_with_push(store)
+        mom = next(a for a in ACCOUNTS if a.id == "parent_mom")
+        heard: list[dict[str, object]] = []
+
+        class Peer:
+            async def send_json(self, data: dict[str, object]) -> None:
+                heard.append(data)
+
+        await hub.join(mom, Peer())  # type: ignore[arg-type]
+        request_id = await hub.ask_ok(mom, "student_sam")
+        assert request_id is not None
+        push = fake.sent[-1]
+        assert push.to == phone("studentsam") and push.category == "are_you_ok"
+        assert push.title == "Mom is asking: are you OK?"
+        token = str(push.data["answer_token"])
+        wrong = await hub.answer_ok_by_token(request_id, "not-the-token-at-all", "ok")
+        right = await hub.answer_ok_by_token(request_id, token, "ok")
+        again = await hub.answer_ok_by_token(request_id, token, "ok")
+        return heard, wrong, right, again
+
+    heard, wrong, right, again = asyncio.run(run())
+    assert (wrong, right, again) == (False, True, False)
+    assert {"type": "ok_result", "state": "ok"}.items() <= heard[-1].items()
+
+
+def test_an_expired_answer_token_is_refused(store: Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    from demo_server import hub as hub_module  # its monotonic clock is replaced below
+
+    async def run() -> bool:
+        hub, fake = hub_with_push(store)
+        mom = next(a for a in ACCOUNTS if a.id == "parent_mom")
+        request_id = await hub.ask_ok(mom, "student_sam")
+        assert request_id is not None
+        token = str(fake.sent[-1].data["answer_token"])
+        later = time.monotonic() + hub.ok_timeout + 1
+        monkeypatch.setattr(hub_module, "monotonic", lambda: later)
+        return await hub.answer_ok_by_token(request_id, token, "ok")
+
+    assert asyncio.run(run()) is False
+
+
+def test_the_answer_endpoint_refuses_unknown_requests(tmp_path: Path) -> None:
+    from fastapi.testclient import TestClient
+
+    from demo_server.app import create_app
+    from demo_server.seed import Settings
+
+    app = create_app(
+        Settings(data_dir=tmp_path / "d", warehouse=tmp_path / "n.duckdb", tiles=tmp_path / "t")
+    )
+    client = TestClient(app)
+    body = {"token": "x" * 20, "answer": "ok"}
+    assert client.post("/api/ok/nope", json=body).status_code == 404
+    assert (
+        client.post("/api/ok/nope", json={"token": "x" * 20, "answer": "maybe"}).status_code == 422
+    )
