@@ -1,7 +1,9 @@
 import { Shield, UserRound } from "lucide-react-native";
-import { useState } from "react";
+import * as Linking from "expo-linking";
+import { useEffect, useState } from "react";
 import { Pressable, Text, TextInput, View, useColorScheme } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { AUTH_MODE, chooseRole, emailLink, serverState, tokenFromLink } from "../auth";
 import { login, requestLink, signInWithLink, signUp, type Session } from "../client";
 
 // Test accounts on the local demo server, behind the "Demo accounts" button only.
@@ -43,6 +45,69 @@ function Button({ label, onPress, primary }: { label: string; onPress: () => voi
   );
 }
 
+/** AUTH_MODE=supabase: email -> Supabase link in the real inbox -> the link opens the app signed
+ * in; the first time, the person says once whether they are a student or a parent. */
+function EmailSignIn({ onSession }: { onSession: (session: Session) => void }) {
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [token, setToken] = useState<string | null>(null);
+  const [note, setNote] = useState<string | null>(null);
+
+  useEffect(() => {
+    const open = async (url: string | null) => {
+      if (!url || !url.includes("auth-callback")) return;
+      const access = await tokenFromLink(url);
+      if (!access) return setNote("This sign-in link has expired. Ask for a new one.");
+      try {
+        const state = await serverState(access);
+        if (state.state === "active") onSession({ token: access, account: state.account });
+        else setToken(access);
+      } catch (e) {
+        setNote((e as Error).message);
+      }
+    };
+    Linking.getInitialURL().then(open);
+    const listener = Linking.addEventListener("url", ({ url }) => open(url));
+    return () => listener.remove();
+  }, [onSession]);
+
+  if (token) {
+    return (
+      <>
+        <Text className="mb-3 text-lg font-semibold text-foreground dark:text-foreground-dark">One last step</Text>
+        <Field label="Your name" value={name} onChange={setName} />
+        <View className="flex-row gap-2">
+          {(["student", "parent"] as const).map((role) => (
+            <View key={role} className="flex-1">
+              <Button
+                label={role === "student" ? "I'm a student" : "I'm a parent or guardian"}
+                onPress={() => chooseRole(token, role, name).then(onSession, (e: Error) => setNote(e.message))}
+              />
+            </View>
+          ))}
+        </View>
+        {note && <Text className="mb-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
+      </>
+    );
+  }
+  return (
+    <>
+      <Field label="Email" value={email} onChange={setEmail} />
+      <Button
+        primary
+        label="Email me a sign-in link"
+        onPress={() =>
+          emailLink(email).then(
+            (e) => setNote(e ?? "Check your inbox and open the link on this phone."),
+            () => setNote("We could not reach the sign-in service. Try again in a minute."),
+          )
+        }
+      />
+      {note && <Text className="mb-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
+    </>
+  );
+}
+
 export function Login({ onSession }: { onSession: (session: Session) => void }) {
   const dark = useColorScheme() === "dark";
   const primary = dark ? "#e8667a" : "#9b1c31";
@@ -62,7 +127,8 @@ export function Login({ onSession }: { onSession: (session: Session) => void }) 
       <Text className="mb-6 mt-1 text-muted-foreground dark:text-muted-foreground-dark">
         For IU Bloomington students and their families. Not an official IU service.
       </Text>
-      {mode === "signup" && (
+      {AUTH_MODE === "supabase" && <EmailSignIn onSession={onSession} />}
+      {AUTH_MODE === "demo" && mode === "signup" && (
         <>
           <Field label="Your name" value={name} onChange={setName} />
           <Field label="Email" value={email} onChange={setEmail} />
@@ -82,19 +148,20 @@ export function Login({ onSession }: { onSession: (session: Session) => void }) 
           <Button primary label="Create my account" onPress={() => signUp(email, role, name).then((e) => setNote(e ?? sent), offline)} />
         </>
       )}
-      {mode === "signin" && (
+      {AUTH_MODE === "demo" && mode === "signin" && (
         <>
           <Field label="Email" value={email} onChange={setEmail} />
           <Button label="Send me a sign-in link" onPress={() => requestLink(email).then((e) => setNote(e ?? sent), offline)} />
         </>
       )}
-      {mode !== "demo" && (
+      {AUTH_MODE === "demo" && mode !== "demo" && (
         <>
           <Field label="Sign-in link" value={link} onChange={setLink} />
           <Button primary label="Sign in" onPress={() => signInWithLink(link).then(onSession, (e: Error) => setNote(e.message))} />
         </>
       )}
-      {mode === "demo" &&
+      {AUTH_MODE === "demo" &&
+        mode === "demo" &&
         DEMO.map((account) => (
           <Pressable
             key={account.id}
@@ -109,8 +176,8 @@ export function Login({ onSession }: { onSession: (session: Session) => void }) 
             </View>
           </Pressable>
         ))}
-      {note && <Text className="mb-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
-      <View className="mt-2 flex-row flex-wrap gap-4">
+      {AUTH_MODE === "demo" && note && <Text className="mb-3 text-sm text-muted-foreground dark:text-muted-foreground-dark">{note}</Text>}
+      <View className={`mt-2 flex-row flex-wrap gap-4 ${AUTH_MODE === "demo" ? "" : "hidden"}`}>
         {mode !== "signin" && <Text onPress={() => setMode("signin")} className="text-sm underline text-foreground dark:text-foreground-dark">I have an account</Text>}
         {mode !== "signup" && <Text onPress={() => setMode("signup")} className="text-sm underline text-foreground dark:text-foreground-dark">New here? Sign up</Text>}
         {mode !== "demo" && <Text onPress={() => setMode("demo")} className="text-sm underline text-foreground dark:text-foreground-dark">Demo accounts</Text>}
