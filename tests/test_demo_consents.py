@@ -127,3 +127,12 @@ def test_digests_and_briefings_reach_only_people_who_opted_in(store: Store) -> N
     assert consents.recipients(store, ["kim", "pat"], "digests") == []
     store.set_consent("pat", "digests", True, consents.VERSION, datetime.now(UTC))
     assert consents.recipients(store, ["kim", "pat"], "digests") == ["pat"]
+
+
+def test_push_is_its_own_consent(client: TestClient) -> None:
+    sam = auth(client, "student_sam")
+    assert states(client, sam)["push"]["state"] == "not_asked"
+    client.post("/api/consents/push", headers=sam, json={"granted": True})
+    assert states(client, sam)["push"]["state"] == "granted"
+    client.post("/api/consents/push", headers=sam, json={"granted": False})
+    assert states(client, sam)["push"]["state"] == "withdrawn"

@@ -1,7 +1,7 @@
 // The person's consent choices, kept on the server (with version and time).
 import { api, apiSend } from "./client";
 
-export type ConsentKind = "location_precise" | "sharing" | "notes" | "digests" | "briefings";
+export type ConsentKind = "location_precise" | "sharing" | "notes" | "digests" | "briefings" | "push";
 export type ConsentState = "not_asked" | "granted" | "declined" | "withdrawn";
 
 export interface Consent {
@@ -30,6 +30,10 @@ export const CONSENT_TEXT: Record<ConsentKind, { title: string; body: string }> 
   briefings: {
     title: "Get event-night briefings?",
     body: "A heads-up the afternoon before an event night. We send a confirm link first, and every message has a one-click unsubscribe.",
+  },
+  push: {
+    title: "Get alerts on this phone, even when the app is closed?",
+    body: "Official IU alerts, their updates and \"Are you OK?\" arrive as notifications. We keep this phone's notification address only while this is on, and delete it when you turn it off or delete your account.",
   },
 };
 
