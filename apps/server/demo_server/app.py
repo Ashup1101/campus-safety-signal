@@ -174,7 +174,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.add_middleware(GZipMiddleware, minimum_size=2048)  # ~1,300 generated segments
     app.state.hub, app.state.drills, app.state.replays = hub, drills, replays
-    app.state.store = store
+    app.state.store, app.state.scheduler_channel = store, channel
     app.mount("/tiles", StaticFiles(directory=settings.tiles, check_dir=False), name="tiles")
 
     supabase = settings.auth_mode == "supabase"
