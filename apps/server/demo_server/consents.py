@@ -53,6 +53,7 @@ def register(
     me: Any,
     store: Store,
     withdrawn: Callable[[Account, str], Awaitable[None]],
+    channel: Any = None,
 ) -> None:
     """withdrawn(account, kind) stops a running feature at once (e.g. live sharing)."""
     Me = Annotated[Account, Depends(me)]
@@ -82,5 +83,7 @@ def register(
         if not body.granted:
             await withdrawn(who, kind)
         elif kind in subscriptions.KINDS:
-            subscriptions.start(store, who, kind)  # double opt-in: a confirm link comes first
+            subscriptions.start(
+                store, who, kind, channel=channel
+            )  # double opt-in: a confirm link comes first
         return next(c for c in view(who.id) if c["kind"] == kind)

@@ -28,7 +28,7 @@ def _link(store: Store, account_id: str, kind: str, purpose: str, base: str) -> 
     return f"{base}/api/subscriptions/{purpose}/{token}"
 
 
-def start(store: Store, account: Account, kind: str, base: str = BASE) -> None:
+def start(store: Store, account: Account, kind: str, base: str = BASE, channel: Any = None) -> None:
     """Called when a self-created account opts in: pending until the confirm link is used."""
     if not account.self_service or kind not in KINDS:
         return
@@ -40,13 +40,11 @@ def start(store: Store, account: Account, kind: str, base: str = BASE) -> None:
         f"{_link(store, account.id, kind, 'confirm', base)}\n"
         "If this was not you, do nothing: you will get none.",
     )
-    store.deliver_mail(
-        f"confirm:{kind}:{account.id}:{datetime.now(UTC).isoformat()}",
-        account.id,
-        "account",
-        draft.title,
-        draft.body,
-    )
+    key = f"confirm:{kind}:{account.id}:{datetime.now(UTC).isoformat()}"
+    if channel is not None:  # the mailbox, or real email too (EMAIL_MODE=smtp)
+        channel.deliver(account.id, draft, "account", key)
+    else:
+        store.deliver_mail(key, account.id, "account", draft.title, draft.body)
 
 
 def active(store: Store, account: Account, kind: str) -> bool:
