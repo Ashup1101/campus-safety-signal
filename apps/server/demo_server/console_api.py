@@ -77,6 +77,7 @@ def register(
     register_file: Path,
     store: Store,
     lake_uri: str,
+    modes: dict[str, str] | None = None,
 ) -> None:
     Console = Annotated[Any, Depends(console)]
 
@@ -123,8 +124,17 @@ def register(
 
     @app.get("/api/console/database")
     def console_database(_: Console) -> dict[str, Any]:
-        """SQLite on this laptop or Postgres with its schema version (no host or credentials)."""
-        return store.database()
+        """The database, sign-in and email in words, with counts waiting; never hosts,
+        addresses or credentials."""
+        found = modes or {}
+        email = found.get("email_mode", "mailbox")
+        return {
+            **store.database(),
+            "sign_in": "Supabase" if found.get("auth_mode") == "supabase" else "demo links",
+            "email": "email provider" if email == "smtp" else "in-app mailbox",
+            "emails": store.outbox_counts(),
+            "auth_deletions_waiting": len(store.auth_deletions()),
+        }
 
     @app.get("/api/console/forecasts")
     def console_forecasts(_: Console) -> dict[str, Any]:

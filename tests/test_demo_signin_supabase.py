@@ -181,3 +181,17 @@ def test_delete_user_calls_the_admin_api_and_treats_404_as_done(
 
     monkeypatch.setattr(urllib.request, "urlopen", gone)
     supabase_auth.delete_user("https://p.supabase.test", key, "user-1")  # no error
+
+
+def test_console_health_names_supabase_and_email_without_secrets(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    allow = tmp_path / "allow.yaml"
+    allow.write_text("emails: [officer@iu-example.test]\n")
+    monkeypatch.setenv("SMTP_PASSWORD", "smtp-password-for-test")
+    _, client = supabase_client(tmp_path, console_allowlist=allow, email_mode="smtp")
+    found = client.get("/api/console/database", headers=bearer("officer@iu-example.test"))
+    body = found.json()
+    assert body["sign_in"] == "Supabase" and body["email"] == "email provider"
+    text = found.text
+    assert "smtp-password-for-test" not in text and "supabase.test" not in text

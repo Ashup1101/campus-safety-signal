@@ -138,14 +138,12 @@ def test_health_names_the_database_without_its_address(tmp_path: Path) -> None:
     assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
     found = client.get(url, headers=login(client, "console")).json()
     if found["backend"] == "sqlite":
-        assert found == {
-            "backend": "sqlite",
-            "label": "SQLite on this laptop",
-            "schema_version": None,
-        }
+        assert found["label"] == "SQLite on this laptop" and found["schema_version"] is None
     else:  # --demo-db postgres
         assert found["label"] == f"Postgres (schema v{found['schema_version']})"
     assert str(tmp_path) not in str(found) and "host" not in str(found)
+    assert found["sign_in"] == "demo links" and found["email"] == "in-app mailbox"
+    assert found["emails"] == {} and found["auth_deletions_waiting"] == 0
 
 
 def test_forecasts_name_the_method_and_mark_event_nights(tmp_path: Path) -> None:
