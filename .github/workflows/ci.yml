@@ -40,9 +40,9 @@ jobs:
       - name: web (typecheck + lint)
         working-directory: apps/web
         run: npm ci --no-fund --no-audit && npm run typecheck && npm run lint && npm test
-      - name: mobile (typecheck)
+      - name: mobile (typecheck + tests)
         working-directory: apps/mobile
-        run: npm ci --no-fund --no-audit && npm run typecheck
+        run: npm ci --no-fund --no-audit && npm run typecheck && npm test
 
   infra:
     runs-on: ubuntu-24.04
