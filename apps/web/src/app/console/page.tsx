@@ -1,13 +1,16 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ConsoleSignIn } from "@/components/console-sign-in";
 import { ConsoleView } from "@/components/console-view";
+import { onNewToken } from "@/lib/auth";
 import type { Session } from "@/lib/client";
 import { canOpenConsole } from "@/shared/api";
 
 export default function ConsolePage() {
   const [session, setSession] = useState<Session | null>(null);
+  // Supabase renews the sign-in about hourly; a sign-out ends the console session.
+  useEffect(() => onNewToken((token) => setSession((s) => (s && token ? { ...s, token } : null))), []);
   if (!session) return <ConsoleSignIn onSession={setSession} />;
   if (!canOpenConsole(session.account.role)) {
     return (
