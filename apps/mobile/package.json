@@ -32,7 +32,8 @@
     "start": "expo start --go",
     "ios": "expo start --go --ios",
     "typecheck": "tsc --noEmit",
-    "ios-dev-build": "expo run:ios --device"
+    "ios-dev-build": "expo run:ios --device",
+    "test": "node --test src/*.test.mjs"
   },
   "private": true
 }
