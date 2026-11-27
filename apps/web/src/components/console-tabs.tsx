@@ -251,8 +251,9 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
 
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap items-center gap-3">
-        <div role="tablist" aria-label="Console sections" className="flex flex-wrap gap-1 rounded-lg border p-1">
+      {/* The tab bar stays in reach while long tabs scroll (solid background, no blur). */}
+      <div className="sticky top-0 z-10 -mx-1 flex flex-wrap items-center gap-3 bg-background px-1 py-2">
+        <div role="tablist" aria-label="Console sections" className="flex flex-wrap gap-1 rounded-lg border bg-card p-1">
           {TABS.map((name, i) => (
             <button
               key={name}
