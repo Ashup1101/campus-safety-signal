@@ -202,6 +202,22 @@ create table if not exists auth_deletions (
     attempts integer not null default 0,
     last_error_kind text
 );
+create table if not exists devices (
+    token text primary key,
+    account_id text not null references accounts (id),
+    platform text not null check (platform in ('ios')),
+    created_at text not null
+);
+create table if not exists push_log (
+    key text not null,
+    token text not null,
+    account_id text not null references accounts (id),
+    ticket_id text,
+    status text not null check (status in ('sent', 'ok', 'error')),
+    error_kind text,
+    created_at text not null,
+    primary key (key, token)
+);
 create table if not exists activity (
     segment_id text not null,
     time_window text not null,
@@ -773,6 +789,45 @@ class Store:
         with self._db:
             self._db.execute("delete from auth_deletions where user_id = ?", (user_id,))
 
+    # Push (v14): one row per phone token; a token signed in on another account moves there.
+    @_locked
+    def add_device(self, token: str, account_id: str, platform: str, now: datetime) -> None:
+        columns = ("token", "account_id", "platform", "created_at")
+        with self._db:
+            self._db.execute(
+                upsert_sql("devices", columns, ("token",)),
+                (token, account_id, platform, now.isoformat()),
+            )
+
+    @_locked
+    def devices_of(self, account_id: str) -> list[str]:
+        rows = self._db.execute(
+            "select token from devices where account_id = ? order by created_at, token",
+            (account_id,),
+        )
+        return [str(r[0]) for r in rows]
+
+    @_locked
+    def remove_device(self, token: str, account_id: str | None = None) -> bool:
+        with self._db:
+            if account_id is None:
+                cursor = self._db.execute("delete from devices where token = ?", (token,))
+            else:
+                cursor = self._db.execute(
+                    "delete from devices where token = ? and account_id = ?", (token, account_id)
+                )
+        return bool(cursor.rowcount)
+
+    @_locked
+    def remove_devices(self, account_id: str) -> int:
+        with self._db:
+            cursor = self._db.execute("delete from devices where account_id = ?", (account_id,))
+        return int(cursor.rowcount)
+
+    @_locked
+    def device_count(self) -> int:
+        return int(self._db.execute("select count(*) from devices").fetchone()[0])
+
     @_locked
     def email_confirmed(self, account_id: str) -> bool:
         """The address proved it is theirs: a Supabase sign-in, a used sign-in link, or a confirmed
@@ -1106,6 +1161,8 @@ class Store:
                 "notes",
                 "bans",
                 "outbox",
+                "push_log",
+                "devices",
             ):
                 self._db.execute(f"delete from {table} where account_id = ?", (account.id,))  # noqa: S608 (fixed names)
             pattern = "%" + re.sub(r"([\\%_])", r"\\\1", account.id) + "%"

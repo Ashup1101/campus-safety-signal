@@ -81,6 +81,8 @@ def register(
             raise HTTPException(404, "unknown consent")
         store.set_consent(who.id, kind, body.granted, VERSION, datetime.now(UTC))
         if not body.granted:
+            if kind == "push":  # the phone's notification address goes at once
+                store.remove_devices(who.id)
             await withdrawn(who, kind)
         elif kind in subscriptions.KINDS:
             subscriptions.start(
