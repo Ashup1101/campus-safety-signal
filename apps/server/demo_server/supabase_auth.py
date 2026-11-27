@@ -6,6 +6,8 @@ import json
 import logging
 import threading
 import time
+import urllib.error
+import urllib.parse
 import urllib.request
 from collections.abc import Callable
 from dataclasses import dataclass
@@ -117,3 +119,37 @@ class Verifier:
         if not email or claims.get("is_anonymous"):
             raise SessionError("no_email")
         return Session(user_id=str(claims["sub"]), email=email)
+
+
+def delete_user(project_url: str, service_key: str, user_id: str) -> None:
+    """Delete a Supabase Auth user (admin API, service key). Already gone counts as done."""
+    url = f"{project_url.rstrip('/')}/auth/v1/admin/users/{urllib.parse.quote(user_id, safe='')}"
+    request = urllib.request.Request(  # noqa: S310 (https project URL)
+        url,
+        method="DELETE",
+        headers={
+            "apikey": service_key,
+            "Authorization": f"Bearer {service_key}",
+            "User-Agent": "campus-safety-signal-server",
+        },
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=10):  # noqa: S310
+            return
+    except urllib.error.HTTPError as exc:
+        if exc.code == 404:
+            return
+        raise RuntimeError(f"auth admin HTTP {exc.code}") from None
+
+
+def retry_deletions(store: Any, project_url: str, service_key: str) -> int:
+    """Try the Auth users still waiting; returns how many are still pending."""
+    for user_id in store.auth_deletions():
+        try:
+            delete_user(project_url, service_key, user_id)
+        except Exception as exc:
+            store.auth_deletion_failed(user_id, type(exc).__name__)
+            log.warning("auth user not deleted yet (%s)", type(exc).__name__)
+        else:
+            store.auth_deletion_done(user_id)
+    return len(store.auth_deletions())

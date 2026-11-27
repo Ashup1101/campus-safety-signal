@@ -31,6 +31,7 @@ from demo_server import (
     notes_api,
     points,
     subscriptions,
+    supabase_auth,
     surveys,
     tonight_model,
 )
@@ -156,10 +157,22 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         async for alert in source.alerts():
             await hub.publish(alert)
 
+    async def retry_auth_deletions(every: float = 600.0) -> None:
+        while True:
+            await asyncio.to_thread(
+                supabase_auth.retry_deletions,
+                store,
+                settings.supabase_url,
+                settings.supabase_service_key or "",
+            )
+            await asyncio.sleep(every)
+
     @contextlib.asynccontextmanager
     async def lifespan(_: FastAPI) -> AsyncIterator[None]:
         tasks = [asyncio.create_task(relay(source)) for source in sources]
         tasks.append(asyncio.create_task(scheduler.run()))
+        if supabase:
+            tasks.append(asyncio.create_task(retry_auth_deletions()))
         yield
         for task in tasks:
             task.cancel()
@@ -239,6 +252,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         if session is None:
             raise HTTPException(401, "log in first")
         return session
+
+    def remove_auth_user(user_id: str) -> None:
+        try:
+            supabase_auth.delete_user(
+                settings.supabase_url, settings.supabase_service_key or "", user_id
+            )
+        except Exception as exc:
+            store.auth_deletion_failed(user_id, type(exc).__name__)
 
     def demo_only() -> None:
         if supabase:
@@ -417,9 +438,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(
                 403, "the demo's test accounts stay; delete works for your own account"
             )
+        auth_user = store.auth_user(me.id)
         store.delete_account(me)
         for bearer in [t for t, account_id in tokens.items() if account_id == me.id]:
             tokens.pop(bearer)
+        if supabase and auth_user:  # the sign-in identity goes too; retried later if this fails
+            remove_auth_user(auth_user)
 
     @app.post("/api/ask")
     def ask_question(body: Question, me: Me) -> dict[str, Any]:
