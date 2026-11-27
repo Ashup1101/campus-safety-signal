@@ -15,14 +15,20 @@
       "supportsTablet": false,
       "bundleIdentifier": "dev.campussafetysignal.demo",
       "infoPlist": {
-        "NSLocationWhenInUseUsageDescription": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved."
+        "NSLocationWhenInUseUsageDescription": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved.",
+        "NSLocationAlwaysAndWhenInUseUsageDescription": "Only while you have started Share until I'm home or a heads-up session (at most 2 hours): your phone checks where you are to tell your family you arrived home. Your location stays on this phone and is never saved.",
+        "UIBackgroundModes": [
+          "location"
+        ]
       }
     },
     "plugins": [
       [
         "expo-location",
         {
-          "locationWhenInUsePermission": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved."
+          "locationWhenInUsePermission": "Your location stays on your phone. It is shared with your parent only when you turn sharing on, and it is never saved.",
+          "locationAlwaysAndWhenInUsePermission": "Only while you have started Share until I'm home or a heads-up session (at most 2 hours): your phone checks where you are to tell your family you arrived home. Your location stays on this phone and is never saved.",
+          "isIosBackgroundLocationEnabled": true
         }
       ],
       "expo-notifications",
