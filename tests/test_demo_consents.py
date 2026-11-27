@@ -136,3 +136,10 @@ def test_push_is_its_own_consent(client: TestClient) -> None:
     assert states(client, sam)["push"]["state"] == "granted"
     client.post("/api/consents/push", headers=sam, json={"granted": False})
     assert states(client, sam)["push"]["state"] == "withdrawn"
+
+
+def test_background_location_is_its_own_consent(client: TestClient) -> None:
+    sam = auth(client, "student_sam")
+    assert states(client, sam)["background_location"]["state"] == "not_asked"
+    client.post("/api/consents/background_location", headers=sam, json={"granted": True})
+    assert states(client, sam)["background_location"]["state"] == "granted"

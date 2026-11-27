@@ -1,7 +1,7 @@
 // The person's consent choices, kept on the server (with version and time).
 import { api, apiSend } from "./client";
 
-export type ConsentKind = "location_precise" | "sharing" | "notes" | "digests" | "briefings" | "push";
+export type ConsentKind = "location_precise" | "sharing" | "notes" | "digests" | "briefings" | "push" | "background_location";
 export type ConsentState = "not_asked" | "granted" | "declined" | "withdrawn";
 
 export interface Consent {
@@ -30,6 +30,10 @@ export const CONSENT_TEXT: Record<ConsentKind, { title: string; body: string }> 
   briefings: {
     title: "Get event-night briefings?",
     body: "A heads-up the afternoon before an event night. We send a confirm link first, and every message has a one-click unsubscribe.",
+  },
+  background_location: {
+    title: "Keep heads-ups and \"Arrived home\" working when the app is closed?",
+    body: "Only while you have started Share until I'm home or a heads-up session, and never longer than 2 hours. Your location stays on this phone; your family hears only \"arrived home\" or the street name of a heads-up. Never saved.",
   },
   push: {
     title: "Get alerts on this phone, even when the app is closed?",

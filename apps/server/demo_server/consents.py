@@ -14,7 +14,15 @@ from demo_server.store import Account, Store
 VERSION = (
     "2026-11-draft-1"  # the draft privacy policy these consents refer to (legal review pending)
 )
-KINDS = ("location_precise", "sharing", "notes", "digests", "briefings", "push")
+KINDS = (
+    "location_precise",
+    "sharing",
+    "notes",
+    "digests",
+    "briefings",
+    "push",
+    "background_location",
+)
 
 
 class Choice(BaseModel):
