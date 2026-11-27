@@ -10,6 +10,13 @@ const STATES = {
   never: { word: "No copy yet", Icon: CircleDashed },
 } as const;
 
+function mailWords(counts: Record<string, number>): string {
+  const parts = (["sent", "queued", "failed"] as const)
+    .filter((k) => counts[k])
+    .map((k) => `${counts[k]} ${k === "queued" ? "waiting" : k}`);
+  return parts.length ? ` (${parts.join(", ")})` : "";
+}
+
 function when(at: string | null): string {
   return at ? new Date(at).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" }) : "never";
 }
@@ -27,10 +34,26 @@ export function ConsoleHealth({
   return (
     <div className="space-y-3">
       {database && (
-        <p className="inline-flex items-center gap-1.5 text-sm">
-          <Database className="size-4" aria-hidden />
-          <span className="font-medium">Database:</span> {database.label}
-        </p>
+        <dl className="grid gap-1 text-sm sm:grid-cols-[auto_1fr] sm:gap-x-3">
+          <dt className="inline-flex items-center gap-1.5 font-medium">
+            <Database className="size-4" aria-hidden />
+            Database:
+          </dt>
+          <dd>{database.label}</dd>
+          <dt className="font-medium">Sign-in:</dt>
+          <dd>{database.sign_in}</dd>
+          <dt className="font-medium">Email:</dt>
+          <dd>
+            {database.email}
+            {mailWords(database.emails)}
+          </dd>
+          {database.auth_deletions_waiting > 0 && (
+            <>
+              <dt className="font-medium">Waiting:</dt>
+              <dd>{database.auth_deletions_waiting} sign-in identities still to delete (retried)</dd>
+            </>
+          )}
+        </dl>
       )}
       <ul className="divide-y rounded-lg border">
         {sources.map((s) => {

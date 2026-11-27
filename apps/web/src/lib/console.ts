@@ -69,6 +69,10 @@ export interface DatabaseInfo {
   backend: "sqlite" | "postgres";
   label: string;
   schema_version: number | null;
+  sign_in: string;
+  email: string;
+  emails: Record<string, number>;
+  auth_deletions_waiting: number;
 }
 
 export interface SourceHealth {

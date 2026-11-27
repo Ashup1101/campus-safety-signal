@@ -272,7 +272,15 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     Me = Annotated[Account, Depends(current)]
     Console = Annotated[Account, Depends(console)]
-    console_api.register(app, console, settings.warehouse, settings.gaps, store, settings.lake_uri)
+    console_api.register(
+        app,
+        console,
+        settings.warehouse,
+        settings.gaps,
+        store,
+        settings.lake_uri,
+        {"auth_mode": settings.auth_mode, "email_mode": settings.email_mode},
+    )
     consents.register(app, current, store, hub.consent_withdrawn, channel)
     subscriptions.register(app, store)
     surveys.register(app, current, store)
