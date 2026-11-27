@@ -28,7 +28,7 @@ PROCESSES: dict[str, tuple[list[str], Path, dict[str, str]]] = {
         {"PYTHONPATH": "apps/server"},
     ),
     "web": (["npm", "run", "dev"], WEB, {"NEXT_TELEMETRY_DISABLED": "1"}),
-    "mobile": (["npx", "expo", "start", "--ios"], MOBILE, {"EXPO_NO_TELEMETRY": "1"}),
+    "mobile": (["npx", "expo", "start", "--go", "--ios"], MOBILE, {"EXPO_NO_TELEMETRY": "1"}),
 }
 
 # (lat, lon) waypoints. Downtown east along Kirkwood into the 400 block (Grant to Dunn).
