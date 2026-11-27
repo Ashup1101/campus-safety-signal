@@ -1,0 +1,4 @@
+# IUPD console access in AUTH_MODE=supabase: only these email addresses (any case) get the console
+# role when they sign in. Everyone else is a student or a parent. Kept empty in git; the owner adds
+# the reviewers' work addresses locally before the pilot.
+emails: []
