@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Pressable, Text } from "react-native";
 import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
 import { onNewToken, signOut } from "./src/auth";
+import { onAreYouOkAnswer, registerAreYouOk } from "./src/notifications";
 import { turnOffPush } from "./src/push";
 import type { Session } from "./src/client";
 import { AppFooter } from "./src/components/AppFooter";
@@ -37,6 +38,11 @@ function Screens({ session, onLeave }: { session: Session; onLeave: () => void }
 
 export default function App() {
   const [session, setSession] = useState<Session | null>(null);
+  // Pushed "Are you OK?" answers work before sign-in too (the push carries its own answer token).
+  useEffect(() => {
+    registerAreYouOk();
+    return onAreYouOkAnswer(() => {});
+  }, []);
   // Supabase renews the sign-in about hourly; a sign-out elsewhere ends the session here too.
   useEffect(() => onNewToken((token) => setSession((s) => (s && token ? { ...s, token } : null))), []);
   const leave = () => {
