@@ -23,6 +23,7 @@ import {
   type Student,
   type TimeWindow,
 } from "../shared/api";
+import { ui } from "../components/ui";
 import tokens from "../shared/tokens.json";
 
 const CHIPS: Record<TimeWindow, string> = { late_night: "Late nights", event_night: "Event nights", tonight: "Tonight" };
@@ -151,7 +152,7 @@ export function ParentHome({
     <SafeAreaView className="flex-1 bg-background dark:bg-background-dark" edges={["top"]}>
       <View className="flex-row items-center justify-between px-4 py-3">
         <View>
-          <Text className="text-lg font-semibold text-foreground dark:text-foreground-dark">{session.account.name}</Text>
+          <Text className={ui.title}>{session.account.name}</Text>
           <Text className="text-xs text-muted-foreground dark:text-muted-foreground-dark">
             Parent · {connected ? "connected" : "connecting…"} · Not an official IU service
           </Text>
@@ -179,7 +180,7 @@ export function ParentHome({
           </Text>
         ) : (
           students.map((s) => (
-            <View key={s.id} className="mb-3 rounded-xl bg-card p-4 dark:bg-card-dark">
+            <View key={s.id} className={ui.card}>
               <View className="flex-row items-center gap-2">
                 <HeartHandshake size={18} color={muted} />
                 <Text className="font-semibold text-foreground dark:text-foreground-dark">{s.name}</Text>
@@ -217,7 +218,9 @@ export function ParentHome({
             </Pressable>
           ))}
         </View>
-        <Text className="mb-1 mt-4 font-semibold text-foreground dark:text-foreground-dark">Alerts</Text>
+        <Text accessibilityRole="header" className={ui.section}>
+          Alerts
+        </Text>
         {threads.length === 0 ? (
           <Text className="text-sm text-muted-foreground dark:text-muted-foreground-dark">
             No alerts. Official IU alerts appear here the moment they are sent.
