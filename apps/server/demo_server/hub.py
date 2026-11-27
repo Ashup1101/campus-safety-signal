@@ -95,6 +95,7 @@ class Hub:
         self.store = store
         self.clock = clock
         self._segments = segment_names
+        self.push: Any = None  # PushChannel when PUSH_MODE=expo: runs after the socket relay
         self._peers: dict[str, set[Peer]] = defaultdict(set)
         self._accounts: dict[str, Account] = {}
         self._sharing: dict[str, str] = {}
@@ -514,6 +515,12 @@ class Hub:
         peers = [p for a in recipients for p in list(self._peers.get(a, set()))]
         await asyncio.gather(*(self._safe(p, message) for p in peers))
         log.info("%s follow-up sent to %d devices", kind, len(peers))
+        if self.push is not None:  # closed apps: after the socket, never before it
+            key = f"push:{kind}:{incident_id}:{digest}"
+            data = {"thread_id": thread_id}
+            await asyncio.to_thread(
+                self.push.deliver, key, list(recipients), draft.title, draft.body, data
+            )
         return True
 
     async def publish(self, alert: OfficialAlert) -> dict[str, Any]:
@@ -549,4 +556,19 @@ class Hub:
         if closed:
             await self._close_thread(thread_id)
         log.info("%s alert sent to %d devices", alert.kind, len(targets))
+        if self.push is not None:  # closed apps get the same words, right after the socket relay
+            family = [
+                a.id
+                for a in self.store.accounts()
+                if a.role in ("student", "parent") and (a.is_test or not alert.test_only)
+            ]
+            title = "IU all-clear" if closed else "Official IU alert"
+            await asyncio.to_thread(
+                self.push.deliver,
+                f"push:alert:{alert_id}",
+                family,
+                title,
+                alert.text,
+                {"thread_id": thread_id},
+            )
         return body
