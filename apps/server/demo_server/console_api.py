@@ -136,6 +136,11 @@ def register(
             "auth_deletions_waiting": len(store.auth_deletions()),
         }
 
+    @app.get("/api/console/push")
+    def console_push(_: Console) -> dict[str, Any]:
+        """Phones registered and pushes sent, delivered, waiting and failed by kind: counts only."""
+        return store.push_counts()
+
     @app.get("/api/console/forecasts")
     def console_forecasts(_: Console) -> dict[str, Any]:
         rows = _rows(

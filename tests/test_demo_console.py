@@ -253,3 +253,24 @@ def test_every_page_can_show_when_the_data_was_updated(tmp_path: Path) -> None:
     assert client.get("/api/data-updated").json()["updated_at"]  # no sign-in needed: a date only
     empty = client_for(tmp_path / "none", with_gaps=False)
     assert empty.get("/api/data-updated").json() == {"updated_at": None}
+
+
+def test_push_counts_are_console_only_and_numbers_only(tmp_path: Path) -> None:
+    from datetime import UTC, datetime
+
+    client = client_for(tmp_path)
+    url = "/api/console/push"
+    assert client.get(url, headers=login(client, "parent_mom")).status_code == 403
+    store = client.app.state.store  # type: ignore[attr-defined]
+    token = "ExponentPushToken[momphone0123456]"  # noqa: S105 (made up)
+    store.add_device(token, "parent_mom", "ios", datetime.now(UTC))
+    store.push_log_add("k", token, "parent_mom", "t-1", None, datetime.now(UTC))
+    found = client.get(url, headers=login(client, "console"))
+    assert found.json() == {
+        "devices": 1,
+        "sent": 1,
+        "delivered": 0,
+        "waiting_for_receipt": 1,
+        "failed": {},
+    }
+    assert token not in found.text and "parent_mom" not in found.text

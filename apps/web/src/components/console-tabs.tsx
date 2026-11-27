@@ -22,6 +22,7 @@ import {
   type Forecasts,
   type GapRow,
   type DatabaseInfo,
+  type PushCounts,
   type SourceHealth,
   type TrendWeek,
   type ZoneShapes,
@@ -231,6 +232,7 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
   const buttons = useRef<(HTMLButtonElement | null)[]>([]);
   const health = useConsole<SourceHealth[]>(tab === "Health" ? "/api/console/health" : null, token);
   const database = useConsole<DatabaseInfo>(tab === "Health" ? "/api/console/database" : null, token);
+  const pushes = useConsole<PushCounts>(tab === "Health" ? "/api/console/push" : null, token);
 
   const toggle = () => {
     setRealOnly((value) => {
@@ -356,7 +358,7 @@ export function ConsoleTabs({ token, dark, overview }: { token: string; dark: bo
           )}
           {tab === name && name === "Health" && (
             <Panel title="Data health" description="How fresh each public source is (real data only).">
-              <ConsoleHealth sources={health} database={database} />
+              <ConsoleHealth sources={health} database={database} pushes={pushes} />
             </Panel>
           )}
         </div>
