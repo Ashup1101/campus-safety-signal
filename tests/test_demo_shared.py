@@ -79,3 +79,10 @@ def test_cream_and_crimson_text_meets_aa_contrast(theme: str) -> None:
         tokens["alert"]["official"]["light"].lower(),
         tokens["alert"]["official"]["dark"].lower(),
     }
+
+
+def test_the_iphone_app_reaches_the_demo_server_on_ipv4() -> None:
+    """The server binds 127.0.0.1; "localhost" can resolve to ::1 in the Simulator and hang."""
+    client = (ROOT / "apps" / "mobile" / "src" / "client.ts").read_text()
+    assert '"http://127.0.0.1:8100"' in client
+    assert "localhost:8100" not in client
